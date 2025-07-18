@@ -1,6 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "../hooks/useAuth";
 
 export default function LoginSignupPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -11,6 +12,14 @@ export default function LoginSignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const router = useRouter();
+  const { user, login } = useAuth();
+
+  // Check if user is already logged in
+  useEffect(() => {
+    if (user) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,9 +41,12 @@ export default function LoginSignupPage() {
     else {
       setSuccess(mode === 'signup' ? "Signup successful!" : "Login successful!");
       if (mode === 'login') {
-        localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("userId", data.user?.userId || "");
-        setTimeout(() => router.push('/'), 800);
+        login({
+          userId: data.user?.userId || "",
+          email: data.user?.email || "",
+          name: data.user?.name || ""
+        });
+        setTimeout(() => router.push('/dashboard'), 800);
       }
     }
     setLoading(false);

@@ -1,40 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Sidebar from './Sidebar';
 import { 
   RiMenuLine, 
   RiNotification3Line, 
   RiUserLine
 } from 'react-icons/ri';
-import { useRouter } from 'next/navigation';
+import { useAuth } from '../hooks/useAuth';
 
 export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    if (userId) {
-      fetch(`/api/users?id=${userId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.email) setUserEmail(data.email);
-        })
-        .catch(() => setUserEmail(null));
-    }
-  }, []);
+  const { user, logout } = useAuth();
 
   const handleSidebarItemClick = () => {
     setIsMobileMenuOpen(false);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('isLoggedIn');
+    logout();
     setShowProfileMenu(false);
-    router.push('/login-signup');
   };
 
   return (
@@ -57,8 +43,8 @@ export default function Navbar() {
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-md border-2 border-white"></span>
           </button>
           <div className="relative flex items-center gap-2">
-            {userEmail && (
-              <span className="text-sm text-gray-700 font-medium truncate max-w-[120px]" title={userEmail}>{userEmail}</span>
+            {user?.email && (
+              <span className="text-sm text-gray-700 font-medium truncate max-w-[120px]" title={user.email}>{user.email}</span>
             )}
             <button
               className="p-2 rounded-full hover:bg-blue-100 focus:ring-2 focus:ring-blue-400 transition-colors duration-200 group shadow-sm"

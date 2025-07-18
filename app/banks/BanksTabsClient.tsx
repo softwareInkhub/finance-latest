@@ -8,6 +8,7 @@ import { RiBankLine, RiAddLine, RiPriceTag3Line, RiCloseLine, RiEdit2Line, RiDel
 import { Bank } from '../types/aws';
 import { useRouter, usePathname } from 'next/navigation';
 import BanksSidebar from '../components/BanksSidebar';
+import { useAuth } from '../hooks/useAuth';
 
 // Define a type for tabs
 interface Tab {
@@ -29,7 +30,7 @@ export default function BanksTabsClient() {
   const [editBank, setEditBank] = useState<Bank | null>(null);
   const router = useRouter();
   const pathname = usePathname();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchBanks = async () => {
@@ -52,17 +53,7 @@ export default function BanksTabsClient() {
     fetchBanks();
   }, []);
 
-  useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    if (userId) {
-      fetch(`/api/users?id=${userId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.email) setUserEmail(data.email);
-        })
-        .catch(() => setUserEmail(null));
-    }
-  }, []);
+
 
   const handleCreateBank = async (bankName: string, tags: string[]) => {
     const exists = banks.some(
@@ -276,7 +267,7 @@ export default function BanksTabsClient() {
                   </div>
                   <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Banks</h1>
                 </div>
-                {userEmail === "nitesh.inkhub@gmail.com" && (
+                {user?.email === "nitesh.inkhub@gmail.com" && (
                   <button
                     onClick={() => setIsModalOpen(true)}
                     className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 sm:px-5 py-2 rounded-lg shadow hover:scale-[1.02] hover:shadow-lg transition-all font-semibold w-auto"
@@ -321,7 +312,7 @@ export default function BanksTabsClient() {
                       onClick={() => handleBankCardClick(bank)}
                       className="cursor-pointer relative bg-white/70 backdrop-blur-lg p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-lg border border-blue-100 transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl group overflow-hidden"
                     >
-                      {userEmail === "nitesh.inkhub@gmail.com" && (
+                      {user?.email === "nitesh.inkhub@gmail.com" && (
                         <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <button
                             className="p-1 bg-blue-100 hover:bg-blue-200 rounded-full"

@@ -57,9 +57,12 @@ Existing users will see a migration banner that allows them to move their files 
 ## Security Features
 
 - **User Authentication**: Required for all file operations
+- **Automatic Redirect**: Users without valid authentication are redirected to login
+- **Session Management**: Uses localStorage for session persistence
 - **File Access Control**: Users can only access their own files
 - **Input Validation**: Comprehensive validation on all endpoints
 - **Error Handling**: Secure error messages without exposing internals
+- **Admin Controls**: Special admin user with elevated permissions
 
 ## Getting Started
 
