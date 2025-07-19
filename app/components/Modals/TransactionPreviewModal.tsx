@@ -8,6 +8,7 @@ interface TransactionPreviewModalProps {
   transactionId: string | null;
   transactionData: Record<string, string | Tag[] | undefined>[];
   fileName?: string;
+  accountNumber?: string;
 }
 
 interface Tag {
@@ -16,7 +17,7 @@ interface Tag {
   color: string;
 }
 
-const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpen, onClose, transactionId, transactionData, fileName }) => {
+const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpen, onClose, transactionId, transactionData, fileName, accountNumber }) => {
   const [data, setData] = useState<Record<string, string | Tag[] | undefined>[]>([]);
   const [filteredData, setFilteredData] = useState<Record<string, string | Tag[] | undefined>[]>([]);
   const [loading, setLoading] = useState(false);
@@ -148,11 +149,13 @@ const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpe
         id: row.id as string,
         tags: Array.isArray(row.tags) ? (row.tags as Tag[]).map((tag: Tag) => tag.id) : [],
       }));
-      // Get bankName from the first row data
+      // Get bankName and accountNumber from the first row data
       const bankName = (dataWithTagIds[0] as Record<string, unknown>)?.bankName;
       if (!bankName) {
         throw new Error('Bank name not found in transaction data');
       }
+      const accountNumberFromData = (dataWithTagIds[0] as Record<string, unknown>)?.accountNumber;
+      const finalAccountNumber = accountNumber || accountNumberFromData;
       // Prepare bulk update payload
       const bulkUpdates = dataWithTagIds
         .filter(row => typeof row.id === 'string' && row.id)
@@ -160,7 +163,8 @@ const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpe
           transactionId: row.id as string,
           transactionData: row,
           tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
-          bankName
+          bankName,
+          accountNumber: finalAccountNumber
         }));
       const res = await fetch('/api/transaction/bulk-update', {
         method: 'POST',

@@ -162,6 +162,17 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
             <div className="text-xs text-gray-500">Total Debit</div>
             <div className="text-2xl font-bold text-red-700">{superTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
           </div>
+          <div className={`bg-white rounded-lg shadow p-4 flex flex-col items-center ${
+            superTotalCredit > superTotalDebit ? 'border-2 border-emerald-200' : 'border-2 border-amber-200'
+          }`}>
+            <div className="text-xs text-gray-500">Balance (CR-DR)</div>
+            <div className={`text-2xl font-bold ${
+              superTotalCredit > superTotalDebit ? 'text-emerald-700' : 'text-amber-700'
+            }`}>
+              {superTotalCredit - superTotalDebit > 0 ? '+' : ''}
+              {(superTotalCredit - superTotalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
           <div className="bg-white rounded-lg shadow p-4 flex flex-col items-center">
             <div className="text-xs text-gray-500">Total Banks</div>
             <div className="text-2xl font-bold text-yellow-700">{totalBanks}</div>
@@ -195,6 +206,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                 <th className="border px-4 py-2">Total Amount</th>
                 <th className="border px-4 py-2">Credit</th>
                 <th className="border px-4 py-2">Debit</th>
+                <th className="border px-4 py-2">Balance</th>
                 <th className="border px-4 py-2">Tagged</th>
                 <th className="border px-4 py-2">Untagged</th>
               </tr>
@@ -207,6 +219,12 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                   <td className="border px-4 py-2 text-right">{s.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="border px-4 py-2 text-right text-green-700">{s.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   <td className="border px-4 py-2 text-right text-red-700">{s.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td className={`border px-4 py-2 text-right font-semibold ${
+                    s.totalCredit > s.totalDebit ? 'text-emerald-700' : 'text-amber-700'
+                  }`}>
+                    {s.totalCredit - s.totalDebit > 0 ? '+' : ''}
+                    {(s.totalCredit - s.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </td>
                   <td className="border px-4 py-2 text-center text-blue-700">{s.tagged}</td>
                   <td className="border px-4 py-2 text-center text-gray-500">{s.untagged}</td>
                 </tr>
@@ -258,7 +276,11 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                       Transactions: <span className="font-bold text-blue-800">{txs.length}</span> |
                       Total: <span className="font-bold text-blue-800">{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span> |
                       Credit: <span className="font-bold text-green-700">{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span> |
-                      Debit: <span className="font-bold text-red-700">{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      Debit: <span className="font-bold text-red-700">{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span> |
+                      Balance: <span className={`font-bold ${totalCredit > totalDebit ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {totalCredit - totalDebit > 0 ? '+' : ''}
+                        {(totalCredit - totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
                     </div>
                     {/* Tag breakdown table */}
                     {Object.keys(tagStats).length > 0 && (
@@ -271,6 +293,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                               <th className="border px-4 py-2 font-semibold">Total</th>
                               <th className="border px-4 py-2 font-semibold">Credit</th>
                               <th className="border px-4 py-2 font-semibold">Debit</th>
+                              <th className="border px-4 py-2 font-semibold">Balance</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -281,6 +304,12 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                                 <td className="border px-4 py-2 text-right">{stat.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                                 <td className="border px-4 py-2 text-right text-green-700">{stat.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                                 <td className="border px-4 py-2 text-right text-red-700">{stat.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                <td className={`border px-4 py-2 text-right font-semibold ${
+                                  stat.totalCredit > stat.totalDebit ? 'text-emerald-700' : 'text-amber-700'
+                                }`}>
+                                  {stat.totalCredit - stat.totalDebit > 0 ? '+' : ''}
+                                  {(stat.totalCredit - stat.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -1449,7 +1478,7 @@ export default function SuperBankPage() {
 
   return (
     <div className="min-h-screen py-4 sm:py-6 px-2 sm:px-4">
-      <div className="max-w-full sm:max-w-[75%] mx-auto">
+      <div className="max-w-full mx-auto">
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
           <h1 className="text-base sm:text-2xl font-bold text-blue-700 truncate">Super Bank: All Transactions</h1>
           <button
@@ -1594,6 +1623,7 @@ export default function SuperBankPage() {
             tagged={tagged}
             untagged={untagged}
             showTagStats={true}
+            showBalance={true}
             onShowUntagged={() => {
               // Filter to show only untagged transactions
               setSortOrder('untagged');

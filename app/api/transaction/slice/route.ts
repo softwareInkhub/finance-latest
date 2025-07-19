@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    const { csv, statementId, startRow, endRow, bankId, accountId, fileName, userId, bankName, accountName, duplicateCheckFields, s3FileUrl } = await request.json();
+    const { csv, statementId, startRow, endRow, bankId, accountId, fileName, userId, bankName, accountName, accountNumber, duplicateCheckFields, s3FileUrl } = await request.json();
     if (!csv || !statementId || startRow == null || endRow == null || !bankId || !accountId || !bankName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       cleaned['bankName'] = bankName || '';
       cleaned['accountId'] = accountId;
       cleaned['accountName'] = accountName || '';
+      cleaned['accountNumber'] = accountNumber || '';
       cleaned['statementId'] = statementId;
       cleaned['fileName'] = fileName || '';
       cleaned['s3FileUrl'] = s3FileUrl || '';

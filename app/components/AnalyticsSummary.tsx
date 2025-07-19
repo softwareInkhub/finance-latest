@@ -22,6 +22,7 @@ interface AnalyticsSummaryProps {
   totalTags?: number;
   showAmount?: boolean;
   showTagStats?: boolean;
+  showBalance?: boolean;
   banks?: Bank[];
   onShowUntagged?: () => void;
 }
@@ -38,6 +39,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   totalTags,
   showAmount = true,
   showTagStats = false,
+  showBalance = true,
   banks = [],
   onShowUntagged,
 }) => {
@@ -67,6 +69,16 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           {typeof totalDebit !== 'undefined' && (
             <div className="px-3 sm:px-4 py-2 bg-rose-100 text-rose-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
               Debit: {typeof totalDebit === 'number' ? totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
+            </div>
+          )}
+          {showBalance && typeof totalCredit !== 'undefined' && typeof totalDebit !== 'undefined' && (
+            <div className={`px-3 sm:px-4 py-2 rounded-lg font-semibold shadow text-xs sm:text-sm ${
+              (typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) > (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit))
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-amber-100 text-amber-800'
+            }`}>
+              Balance: {(typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) - (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit)) > 0 ? '+' : ''}
+              {((typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) - (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           )}
         </>

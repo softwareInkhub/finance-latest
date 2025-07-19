@@ -63,6 +63,7 @@ function StatementsContent() {
   const [fileName, setFileName] = useState('');
   const [bankName, setBankName] = useState("");
   const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -138,6 +139,7 @@ function StatementsContent() {
     if (accountId) {
       fetch(`/api/account?accountId=${accountId}`).then(res => res.json()).then((account) => {
         setAccountName(account?.accountHolderName || "");
+        setAccountNumber(account?.accountNumber || "");
       });
     }
   }, [bankId, accountId]);
@@ -1095,6 +1097,7 @@ function StatementsContent() {
         statementId={previewStatementId}
         bankId={bankId}
         accountId={accountId}
+        accountNumber={accountNumber}
         fileName={statements.find(s => s.id === previewStatementId)?.fileName || ''}
       />
       <ConfirmDeleteModal

@@ -11,6 +11,7 @@ interface StatementPreviewModalProps {
   statementId: string | null;
   bankId: string | null;
   accountId: string | null;
+  accountNumber?: string;
   fileName?: string;
 }
 
@@ -221,7 +222,7 @@ const SlicedPreviewModal: React.FC<{
 );
 };
 
-const StatementPreviewModal: React.FC<StatementPreviewModalProps> = ({ isOpen, onClose, s3FileUrl, statementId, bankId, accountId, fileName }) => {
+const StatementPreviewModal: React.FC<StatementPreviewModalProps> = ({ isOpen, onClose, s3FileUrl, statementId, bankId, accountId, accountNumber, fileName }) => {
   const [data, setData] = useState<string[][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -311,9 +312,9 @@ const StatementPreviewModal: React.FC<StatementPreviewModalProps> = ({ isOpen, o
       const baseHeader = (previewDataOverride || data)[0];
       const filteredHeader = baseHeader;
       const filteredRows = (previewDataOverride || data).slice(1);
-      const extraCols = ["accountId", "accountName", "bankId", "bankName"];
+      const extraCols = ["accountId", "accountName", "accountNumber", "bankId", "bankName"];
       const header = [...filteredHeader, ...extraCols];
-      const rows = filteredRows.map(row => [...row, accountId, accountName, bankId, bankName]);
+      const rows = filteredRows.map(row => [...row, accountId, accountName, accountNumber, bankId, bankName]);
       const finalSliced = [header, ...rows];
       const csv = Papa.unparse(finalSliced);
       const dupFields = (fields || duplicateCheckFields).map(f => {
@@ -336,6 +337,7 @@ const StatementPreviewModal: React.FC<StatementPreviewModalProps> = ({ isOpen, o
           userId: localStorage.getItem("userId") || "",
           bankName,
           accountName,
+          accountNumber,
           duplicateCheckFields: dupFields,
         })
       });

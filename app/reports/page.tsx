@@ -31,7 +31,7 @@ interface ReportData {
   taggedTransactions: number;
   untaggedTransactions: number;
   bankBreakdown: { [bankId: string]: { name: string; count: number; amount: number; credit: number; debit: number } };
-  tagBreakdown: { [tagId: string]: { name: string; count: number; amount: number; color: string } };
+  tagBreakdown: { [tagId: string]: { name: string; count: number; amount: number; credit: number; debit: number; color: string } };
   monthlyBreakdown: { [month: string]: { count: number; amount: number; credit: number; debit: number } };
 }
 
@@ -179,10 +179,11 @@ export default function ReportsPage() {
       });
 
       // Tag breakdown
-      const tagBreakdown: { [tagId: string]: { name: string; count: number; amount: number; color: string } } = {};
+      const tagBreakdown: { [tagId: string]: { name: string; count: number; amount: number; credit: number; debit: number; color: string } } = {};
       filteredTransactions.forEach(tx => {
         const txTags = Array.isArray(tx.tags) ? tx.tags : [];
         const amount = getTransactionAmount(tx);
+        const isCredit = isTransactionCredit(tx);
 
         txTags.forEach(tag => {
           const tagId = typeof tag === 'string' ? tag : tag.id;
@@ -190,11 +191,16 @@ export default function ReportsPage() {
           const tagColor = typeof tag === 'string' ? '#60a5fa' : (tag.color || '#60a5fa');
 
           if (!tagBreakdown[tagId]) {
-            tagBreakdown[tagId] = { name: tagName, count: 0, amount: 0, color: tagColor };
+            tagBreakdown[tagId] = { name: tagName, count: 0, amount: 0, credit: 0, debit: 0, color: tagColor };
           }
 
           tagBreakdown[tagId].count++;
           tagBreakdown[tagId].amount += amount;
+          if (isCredit) {
+            tagBreakdown[tagId].credit += Math.abs(amount);
+          } else {
+            tagBreakdown[tagId].debit += Math.abs(amount);
+          }
         });
       });
 
@@ -521,6 +527,27 @@ export default function ReportsPage() {
               </div>
             </div>
           </div>
+
+          <div className={`bg-white/70 backdrop-blur-lg p-6 rounded-xl shadow-lg border ${
+            reportData.totalCredit > reportData.totalDebit ? 'border-emerald-100' : 'border-amber-100'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${
+                reportData.totalCredit > reportData.totalDebit ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
+              }`}>
+                <RiBarChartLine />
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Balance (CR-DR)</p>
+                <p className={`text-2xl font-bold ${
+                  reportData.totalCredit > reportData.totalDebit ? 'text-emerald-600' : 'text-amber-600'
+                }`}>
+                  {reportData.totalCredit - reportData.totalDebit > 0 ? '+' : ''}
+                  ₹{(reportData.totalCredit - reportData.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -546,6 +573,11 @@ export default function ReportsPage() {
                     </p>
                     <p className="text-xs text-gray-600">
                       CR: ₹{bank.credit.toFixed(2)} | DR: ₹{bank.debit.toFixed(2)}
+                    </p>
+                    <p className={`text-xs font-semibold ${
+                      bank.credit > bank.debit ? 'text-emerald-600' : 'text-amber-600'
+                    }`}>
+                      Balance: {bank.credit - bank.debit > 0 ? '+' : ''}₹{(bank.credit - bank.debit).toFixed(2)}
                     </p>
                   </div>
                 </div>
@@ -576,6 +608,14 @@ export default function ReportsPage() {
                     <p className="font-semibold text-gray-800">
                       ₹{tag.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </p>
+                    <p className="text-xs text-gray-600">
+                      CR: ₹{tag.credit.toFixed(2)} | DR: ₹{tag.debit.toFixed(2)}
+                    </p>
+                    <p className={`text-xs font-semibold ${
+                      tag.credit > tag.debit ? 'text-emerald-600' : 'text-amber-600'
+                    }`}>
+                      Balance: {tag.credit - tag.debit > 0 ? '+' : ''}₹{(tag.credit - tag.debit).toFixed(2)}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -600,6 +640,7 @@ export default function ReportsPage() {
                   <th className="text-right py-2 px-3 font-semibold text-gray-700">Amount</th>
                   <th className="text-right py-2 px-3 font-semibold text-gray-700">Credit</th>
                   <th className="text-right py-2 px-3 font-semibold text-gray-700">Debit</th>
+                  <th className="text-right py-2 px-3 font-semibold text-gray-700">Balance</th>
                 </tr>
               </thead>
               <tbody>
@@ -617,6 +658,11 @@ export default function ReportsPage() {
                       </td>
                       <td className="py-2 px-3 text-right text-red-600">
                         ₹{data.debit.toFixed(2)}
+                      </td>
+                      <td className={`py-2 px-3 text-right font-semibold ${
+                        data.credit > data.debit ? 'text-emerald-600' : 'text-amber-600'
+                      }`}>
+                        {data.credit - data.debit > 0 ? '+' : ''}₹{(data.credit - data.debit).toFixed(2)}
                       </td>
                     </tr>
                   ))}

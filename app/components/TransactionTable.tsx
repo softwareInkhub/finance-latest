@@ -164,7 +164,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   return (
-    <div className="h-[43vh] flex flex-col">
+    <div className="h-[97vh] flex flex-col">
       {/* Top horizontal scrollbar */}
       <div
         ref={topScrollRef}
