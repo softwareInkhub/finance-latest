@@ -7,8 +7,8 @@ export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    const { statementId, s3FileUrl, userId, bankName } = await request.json();
-    if (!statementId || !s3FileUrl || !userId || !bankName) {
+    const { statementId, s3FileUrl, userId, bankName, batchStart, batchEnd } = await request.json();
+    if (!statementId || !s3FileUrl || !userId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -29,12 +29,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized: You can only delete your own files' }, { status: 403 });
     }
 
+    // Get bankName from statement if not provided
+    let finalBankName = bankName;
+    if (!finalBankName && statement.bankName) {
+      finalBankName = statement.bankName;
+    }
+    
+    // If still no bankName, try to get it from bankId
+    if (!finalBankName && statement.bankId) {
+      try {
+        const bankResult = await docClient.send(
+          new GetCommand({
+            TableName: 'banks',
+            Key: { id: statement.bankId },
+          })
+        );
+        if (bankResult.Item && bankResult.Item.bankName) {
+          finalBankName = bankResult.Item.bankName;
+        }
+      } catch (error) {
+        console.warn('Failed to fetch bank name from bankId:', error);
+      }
+    }
+
     // Get bank-specific table name
-    const tableName = getBankTransactionTable(bankName);
+    const tableName = getBankTransactionTable(finalBankName || 'default');
 
     // First, find and delete all related transactions from the bank-specific table
     // Look for transactions with matching statementId, fileName, or s3FileUrl
-    const transactionResult = await docClient.send(
+    let transactionResult;
+    try {
+      transactionResult = await docClient.send(
       new ScanCommand({
         TableName: tableName,
         FilterExpression: 'statementId = :statementId OR s3FileUrl = :s3FileUrl',
@@ -44,22 +69,43 @@ export async function POST(request: Request) {
         },
       })
     );
+    } catch (error) {
+      console.warn('Failed to scan transactions table, continuing with file deletion:', error);
+      transactionResult = { Items: [] };
+    }
 
     const relatedTransactions = transactionResult.Items || [];
     console.log(`Found ${relatedTransactions.length} related transactions to delete`);
 
-    // Delete all related transactions
-    if (relatedTransactions.length > 0) {
-      const deletePromises = (relatedTransactions as Array<{ id: string }>).map((transaction) =>
-        docClient.send(
-          new DeleteCommand({
-            TableName: tableName,
-            Key: { id: transaction.id },
-          })
-        )
-      );
-      await Promise.all(deletePromises);
-      console.log(`Successfully deleted ${relatedTransactions.length} related transactions`);
+    // Handle batch deletion if batchStart and batchEnd are provided
+    if (batchStart !== undefined && batchEnd !== undefined) {
+      const batchTransactions = relatedTransactions.slice(batchStart, batchEnd);
+      if (batchTransactions.length > 0) {
+        const deletePromises = (batchTransactions as Array<{ id: string }>).map((transaction) =>
+          docClient.send(
+            new DeleteCommand({
+              TableName: tableName,
+              Key: { id: transaction.id },
+            })
+          )
+        );
+        await Promise.all(deletePromises);
+        console.log(`Successfully deleted batch ${batchStart}-${batchEnd} (${batchTransactions.length} transactions)`);
+      }
+    } else {
+      // Delete all related transactions (original behavior)
+      if (relatedTransactions.length > 0) {
+        const deletePromises = (relatedTransactions as Array<{ id: string }>).map((transaction) =>
+          docClient.send(
+            new DeleteCommand({
+              TableName: tableName,
+              Key: { id: transaction.id },
+            })
+          )
+        );
+        await Promise.all(deletePromises);
+        console.log(`Successfully deleted ${relatedTransactions.length} related transactions`);
+      }
     }
 
     // Extract the key from the s3FileUrl
@@ -88,9 +134,14 @@ export async function POST(request: Request) {
       })
     );
 
+    const deletedCount = batchStart !== undefined && batchEnd !== undefined 
+      ? Math.min(batchEnd - batchStart, relatedTransactions.length - batchStart)
+      : relatedTransactions.length;
+      
     return NextResponse.json({ 
       success: true, 
-      deletedTransactions: relatedTransactions.length 
+      deletedTransactions: deletedCount,
+      isBatch: batchStart !== undefined && batchEnd !== undefined
     });
   } catch (error) {
     console.error('Error deleting statement:', error);

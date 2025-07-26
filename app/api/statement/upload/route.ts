@@ -17,12 +17,14 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get('file');
     const bankId = formData.get('bankId');
+    const bankName = formData.get('bankName');
     const accountId = formData.get('accountId');
     const fileName = formData.get('fileName');
     const userId = formData.get('userId');
+    const fileType = formData.get('fileType');
     
-    if (!file || typeof file === 'string' || !bankId || !accountId) {
-      return NextResponse.json({ error: 'Missing file, bankId, or accountId' }, { status: 400 });
+    if (!file || typeof file === 'string' || !bankId || !bankName || !accountId) {
+      return NextResponse.json({ error: 'Missing file, bankId, bankName, or accountId' }, { status: 400 });
     }
     
     if (!userId) {
@@ -71,10 +73,12 @@ export async function POST(request: Request) {
     const statement = {
       id: statementId,
       bankId,
+      bankName,
       accountId,
       s3FileUrl,
       fileName: uniqueFileName,
       userId: userId,
+      fileType: fileType || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
