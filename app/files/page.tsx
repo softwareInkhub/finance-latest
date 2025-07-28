@@ -3,37 +3,25 @@ import React, { useState, useEffect, useRef } from 'react';
 import FilesSidebar from '../components/FilesSidebar';
 import { RiCloseLine } from 'react-icons/ri';
 import Papa from 'papaparse';
-import { FiEdit2, FiTrash2, FiGrid, FiList, FiColumns } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiGrid, FiList } from 'react-icons/fi';
 import Modal from '../components/Modals/Modal';
 
-// Static file data with versions
-const fileDetails: { [key: string]: { type: string; size: string; uploaded: string; description: string } } = {
-  '1': { type: 'PDF', size: '1.2MB', uploaded: '2024-01-10', description: 'Bank statement for January 2024.' },
-  '1a': { type: 'PDF', size: '1.1MB', uploaded: '2024-01-05', description: 'Version 1.0 of January statement.' },
-  '1b': { type: 'PDF', size: '1.2MB', uploaded: '2024-01-10', description: 'Version 1.1 of January statement.' },
-  '2': { type: 'CSV', size: '800KB', uploaded: '2024-02-15', description: 'All transactions for February 2024.' },
-  '2a': { type: 'CSV', size: '790KB', uploaded: '2024-02-10', description: 'Version 1.0 of February transactions.' },
-  '3': { type: 'XLSX', size: '2.1MB', uploaded: '2024-03-20', description: 'Monthly report for March 2024.' },
-};
 
-function FileDetails({ id, name }: { id: string; name: string }) {
-  const details = fileDetails[id];
-  return (
-    <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-6 mb-8">
-      <h2 className="text-xl font-bold text-blue-800 mb-2">{name}</h2>
-      {details && (
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div><span className="font-semibold">Type:</span> {details.type}</div>
-          <div><span className="font-semibold">Size:</span> {details.size}</div>
-          <div><span className="font-semibold">Uploaded:</span> {details.uploaded}</div>
-        </div>
-      )}
-      <div className="mt-4 text-gray-700">{details?.description}</div>
-    </div>
-  );
+
+
+
+interface UploadedFile {
+  id: string;
+  fileName: string;
+  fileType: string;
+  bankId: string;
+  bankName: string;
+  accountId: string;
+  userId: string;
+  createdAt: string;
 }
 
-function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: (file: any) => void }) {
+function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: (file: UploadedFile) => void }) {
   const [fileName, setFileName] = useState('');
   const [fileType, setFileType] = useState('');
   const [bankId, setBankId] = useState('');
@@ -100,7 +88,7 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
       setShowSuccess(true);
       setUploading(false);
       onSuccess(await res.json());
-    } catch (err) {
+    } catch {
       setError('Failed to upload file');
       setUploading(false);
     }
@@ -178,19 +166,36 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
   );
 }
 
-function FilePreview({ file, onSlice }: { file: any, onSlice?: (sliceData: string[][], file: any, selectedFields: string[]) => void }) {
+interface FileData {
+  id: string;
+  fileName: string;
+  fileType: string;
+  bankId: string;
+  bankName: string;
+  accountId: string;
+  accountName?: string;
+  accountNumber?: string;
+  userId: string;
+  createdAt: string;
+  s3FileUrl?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: string[][], file: FileData, selectedFields: string[]) => void }) {
   const [data, setData] = useState<string[][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [colWidths, setColWidths] = useState<number[]>([]);
-  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const [headerRow, setHeaderRow] = useState<number | null>(null);
   const [startRow, setStartRow] = useState<number | null>(null);
   const [endRow, setEndRow] = useState<number | null>(null);
   const [selectionStep, setSelectionStep] = useState<'header' | 'transactions'>('header');
   const tableRef = React.useRef<HTMLTableElement>(null);
   const [showSliceModal, setShowSliceModal] = useState(false);
-  const [sliceData, setSliceData] = useState<string[][]>([]);
+  const [sliceData] = useState<string[][]>([]);
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [sliceSaving, setSliceSaving] = useState(false);
   const [sliceSaveError, setSliceSaveError] = useState<string | null>(null);
@@ -324,8 +329,6 @@ function FilePreview({ file, onSlice }: { file: any, onSlice?: (sliceData: strin
                     ? 'bg-yellow-100 border-r-4 border-yellow-500'
                     : isInSlice
                     ? 'bg-blue-100'
-                    : hoveredRow === i
-                    ? 'bg-gray-100'
                     : ''
                 }
                 onMouseEnter={() => setHoveredRow(i)}
@@ -373,7 +376,7 @@ function FilePreview({ file, onSlice }: { file: any, onSlice?: (sliceData: strin
                     {allowRangeSelection && isEnd && j === 0 && (
                       <span className="ml-2 px-2 py-1 bg-yellow-500 text-white rounded text-xs">End</span>
                     )}
-                    {allowRangeSelection && selectionStep === 'transactions' && hoveredRow === i && startRow === null && j === 0 && i > (headerRow || 0) && (
+                    {allowRangeSelection && selectionStep === 'transactions' && startRow === null && j === 0 && i > (headerRow || 0) && hoveredRow === i && (
                       <button
                         className="ml-2 px-2 py-1 bg-green-500 text-white rounded text-xs"
                         onClick={() => setStartRow(i)}
@@ -381,7 +384,7 @@ function FilePreview({ file, onSlice }: { file: any, onSlice?: (sliceData: strin
                         Start
                       </button>
                     )}
-                    {allowRangeSelection && selectionStep === 'transactions' && hoveredRow === i && startRow !== null && endRow === null && j === 0 && i > startRow && (
+                    {allowRangeSelection && selectionStep === 'transactions' && startRow !== null && endRow === null && j === 0 && i > startRow && hoveredRow === i && (
                       <button
                         className="ml-2 px-2 py-1 bg-yellow-500 text-white rounded text-xs"
                         onClick={() => setEndRow(i)}
@@ -458,7 +461,6 @@ function FilePreview({ file, onSlice }: { file: any, onSlice?: (sliceData: strin
                 try {
                   // Prepare CSV string from sliceData
                   const csv = Papa.unparse(sliceData);
-                  const headers = sliceData[0];
                   // Prepare payload for /api/transaction/slice
                   const payload = {
                     csv,
@@ -487,8 +489,9 @@ function FilePreview({ file, onSlice }: { file: any, onSlice?: (sliceData: strin
                   setShowSliceModal(false);
                   setSliceSaveError(null);
                   alert('Transactions saved successfully!');
-                } catch (err: any) {
-                  setSliceSaveError(err.message || 'Failed to save transactions');
+                } catch (err: unknown) {
+                  const errorMessage = err instanceof Error ? err.message : 'Failed to save transactions';
+                  setSliceSaveError(errorMessage);
                 } finally {
                   setSliceSaving(false);
                 }
@@ -511,90 +514,107 @@ function FilePreview({ file, onSlice }: { file: any, onSlice?: (sliceData: strin
   );
 }
 
-function FileDetailPanel({ file, onClose }: { file: any, onClose: () => void }) {
-  if (!file) return null;
-  return (
-    <div className="fixed top-0 right-0 h-full w-96 bg-white shadow-2xl border-l border-blue-100 z-50 p-6 overflow-y-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-blue-800">File Details</h2>
-        <button onClick={onClose} className="text-gray-500 hover:text-blue-700 text-2xl"><RiCloseLine /></button>
-      </div>
-      <table className="w-full text-sm">
-        <tbody>
-          {Object.entries(file).map(([key, value]) => (
-            <tr key={key} className="border-b last:border-b-0">
-              <td className="font-semibold py-2 pr-2 text-blue-900 align-top whitespace-nowrap">{key}</td>
-              <td className="py-2 text-gray-700 break-all">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
-function FileDetailInline({ file }: { file: any }) {
-  if (!file) return null;
-  const fields = [
-    'id',
-    'accountId',
-    'bankId',
-    'bankName',
-    'createdAt',
-    'fileName',
-    'fileType',
-    's3FileUrl',
-    'tags',
-    'transaction',
-  ];
-  return (
-    <div className="bg-blue-50 rounded-lg p-4 mt-2 mb-2">
-      <table className="w-full text-sm">
-        <tbody>
-          {fields.map((key) => (
-            <tr key={key} className="border-b last:border-b-0">
-              <td className="font-semibold py-2 pr-2 text-blue-900 align-top whitespace-nowrap w-32">{key}</td>
-              <td className="py-2 text-gray-700 break-all">{file[key] !== undefined && file[key] !== null ? (typeof file[key] === 'object' ? JSON.stringify(file[key]) : String(file[key])) : ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
-function FilesTable({ files, onFileClick, selectedIds, onSelect, onSelectAll, onEdit, onDelete }: { files: any[], onFileClick: (file: any) => void, selectedIds: string[], onSelect: (id: string) => void, onSelectAll: (checked: boolean) => void, onEdit: (file: any) => void, onDelete: (file: any) => void }) {
+
+
+function FilesTable({ files, onFileClick, selectedIds, onSelect, onSelectAll, onEdit, onDelete }: { files: FileData[], onFileClick: (file: FileData) => void, selectedIds: string[], onSelect: (id: string) => void, onSelectAll: (checked: boolean) => void, onEdit: (file: FileData) => void, onDelete: (file: FileData) => void }) {
+  const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
+  const [expandedHeaders, setExpandedHeaders] = useState<Set<string>>(new Set());
+  
   const columns = [
-    { key: 'id', label: 'ID' },
-    { key: 'accountId', label: 'Account ID' },
-    { key: 'bankId', label: 'Bank ID' },
-    { key: 'bankName', label: 'Bank Name' },
-    { key: 'createdAt', label: 'Created At' },
-    { key: 'fileName', label: 'File Name' },
-    { key: 'fileType', label: 'File Type' },
-    { key: 's3FileUrl', label: 'S3 File URL' },
-    { key: 'tags', label: 'Tags' },
-    { key: 'transaction', label: 'Transaction' },
+    { key: 'id', label: 'ID', width: 'w-16' },
+    { key: 'accountId', label: 'Account ID', width: 'w-24' },
+    { key: 'bankId', label: 'Bank ID', width: 'w-20' },
+    { key: 'bankName', label: 'Bank Name', width: 'w-32' },
+    { key: 'createdAt', label: 'Created At', width: 'w-28' },
+    { key: 'fileName', label: 'File Name', width: 'w-48' },
+    { key: 'fileType', label: 'File Type', width: 'w-20' },
+    { key: 's3FileUrl', label: 'S3 File URL', width: 'w-40' },
+    { key: 'tags', label: 'Tags', width: 'w-32' },
+    { key: 'transaction', label: 'Transaction', width: 'w-24' },
   ];
+  
   const allSelected = files.length > 0 && files.every(f => selectedIds.includes(f.id));
+  
+  const toggleCellExpansion = (fileId: string, columnKey: string) => {
+    const key = `${fileId}-${columnKey}`;
+    setExpandedCells(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+  
+  const toggleHeaderExpansion = (columnKey: string) => {
+    setExpandedHeaders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(columnKey)) {
+        newSet.delete(columnKey);
+      } else {
+        newSet.add(columnKey);
+      }
+      return newSet;
+    });
+  };
+  
+  const formatCellContent = (value: unknown) => {
+    if (value === undefined || value === null) return { display: '', full: '' };
+    
+    let displayValue = '';
+    if (typeof value === 'object') {
+      displayValue = JSON.stringify(value);
+    } else {
+      displayValue = String(value);
+    }
+    
+    // Truncate content for display
+    const maxLength = 20;
+    const truncated = displayValue.length > maxLength ? displayValue.substring(0, maxLength) + '...' : displayValue;
+    
+    return { display: truncated, full: displayValue };
+  };
+  
   return (
     <div className="overflow-x-auto max-w-full">
       <div className="overflow-y-auto" style={{ maxHeight: '400px' }}>
         <table className="min-w-full border border-blue-100 rounded-lg">
           <thead>
             <tr className="bg-blue-50">
-              <th className="px-2 py-2 sticky top-0 bg-blue-50 z-10">
+              <th className="px-2 py-2 sticky top-0 bg-blue-50 z-10 w-8">
                 <input type="checkbox" checked={allSelected} onChange={e => onSelectAll(e.target.checked)} />
               </th>
               {columns.map(col => (
                 <th
                   key={col.key}
-                  className="px-4 py-2 text-left text-blue-900 font-semibold border-b border-blue-100 whitespace-nowrap sticky top-0 bg-blue-50 z-10"
+                  className={`px-2 py-2 text-left text-blue-900 font-semibold border-b border-blue-100 sticky top-0 bg-blue-50 z-10 ${col.width} cursor-pointer hover:bg-blue-100 transition-colors`}
+                  onClick={() => toggleHeaderExpansion(col.key)}
+                  title={`Click to ${expandedHeaders.has(col.key) ? 'collapse' : 'expand'} ${col.label}`}
                 >
-                  {col.label}
+                  <div className="flex items-center justify-between">
+                    <span className="truncate">{col.label}</span>
+                    <svg 
+                      width="12" 
+                      height="12" 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      className={`text-blue-600 transition-transform ${expandedHeaders.has(col.key) ? 'rotate-180' : ''}`}
+                    >
+                      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  {expandedHeaders.has(col.key) && (
+                    <div className="mt-1 text-xs text-blue-700 font-normal">
+                      Full column data visible
+                    </div>
+                  )}
                 </th>
               ))}
-              <th className="px-2 py-2 sticky top-0 bg-blue-50 z-10">Actions</th>
+              <th className="px-2 py-2 sticky top-0 bg-blue-50 z-10 w-20">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -612,13 +632,39 @@ function FilesTable({ files, onFileClick, selectedIds, onSelect, onSelectAll, on
                     onClick={e => e.stopPropagation()}
                   />
                 </td>
-                {columns.map(col => (
-                  <td key={col.key} className="px-4 py-2 border-b border-blue-50 text-gray-800 align-top max-w-xs truncate">
-                    {file[col.key] !== undefined && file[col.key] !== null
-                      ? (typeof file[col.key] === 'object' ? JSON.stringify(file[col.key]) : String(file[col.key]))
-                      : ''}
-                  </td>
-                ))}
+                {columns.map(col => {
+                  const content = formatCellContent(file[col.key]);
+                  const isExpanded = expandedCells.has(`${file.id}-${col.key}`) || expandedHeaders.has(col.key);
+                  
+                  return (
+                    <td 
+                      key={col.key} 
+                      className={`px-2 py-2 border-b border-blue-50 text-gray-800 align-top ${col.width} ${isExpanded ? '' : 'truncate'} cursor-pointer hover:bg-blue-50 transition-colors`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCellExpansion(file.id, col.key);
+                      }}
+                      title={content.full !== content.display ? `Click to ${isExpanded ? 'collapse' : 'expand'}. Full content: ${content.full}` : content.full}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={isExpanded ? 'break-words' : 'truncate'}>
+                          {isExpanded ? content.full : content.display}
+                        </span>
+                        {content.full !== content.display && (
+                          <svg 
+                            width="10" 
+                            height="10" 
+                            fill="none" 
+                            viewBox="0 0 24 24" 
+                            className={`text-blue-500 ml-1 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                          >
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
                 <td className="px-2 py-2 border-b border-blue-50 align-top">
                   <div className="flex gap-2 opacity-100 row-actions" onClick={e => e.stopPropagation()}>
                     <button className="text-blue-600 hover:text-blue-800 p-1" title="Edit" onClick={() => onEdit(file)}>
@@ -638,7 +684,7 @@ function FilesTable({ files, onFileClick, selectedIds, onSelect, onSelectAll, on
   );
 }
 
-function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMode, setViewMode }: { files: any[]; onUpload: () => void; onEdit: (file: any) => void; onDelete: (file: any) => void; onFileClick: (file: any) => void; viewMode: 'grid' | 'row'; setViewMode: (mode: 'grid' | 'row') => void }) {
+function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMode, setViewMode }: { files: FileData[]; onUpload: () => void; onEdit: (file: FileData) => void; onDelete: (file: FileData | FileData[]) => void; onFileClick: (file: FileData) => void; viewMode: 'grid' | 'row'; setViewMode: (mode: 'grid' | 'row') => void }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState('');
@@ -675,7 +721,7 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
             <select
               className="bg-transparent text-blue-700 font-semibold text-sm outline-none"
               value={searchField}
-              onChange={e => setSearchField(e.target.value as any)}
+              onChange={e => setSearchField(e.target.value as 'fileName' | 'fileType' | 'bankName')}
             >
               <option value="fileName">File Name</option>
               <option value="bankName">Bank Name</option>
@@ -704,73 +750,103 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
         </div>
       )}
       {viewMode === 'grid' ? (
-        <div className="flex flex-wrap justify-start gap-4">
+        <div className="flex flex-wrap gap-6 p-6">
           {filteredFiles.length === 0 ? (
-            <div className="text-gray-400 text-lg mt-8">No files found. Try a different search or upload a new file!</div>
+            <div className="text-gray-400 text-lg mt-16 w-full text-center">No files found. Try a different search or upload a new file!</div>
           ) : (
             filteredFiles.map((file) => (
             <div
               key={file.id}
-                className="bg-white rounded-lg shadow-md p-4 border border-blue-100 w-48 relative group cursor-pointer transition-transform hover:scale-105 hover:shadow-lg"
+                className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-start border border-gray-200 w-64 relative group cursor-pointer transition-all hover:shadow-xl hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
                 tabIndex={0}
                 aria-label={`File: ${file.fileName}`}
               onClick={() => onFileClick(file)}
                 onKeyDown={e => { if (e.key === 'Enter') onFileClick(file); }}
             >
-                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                  <button className="text-blue-600 hover:text-blue-800 p-1" title="Edit" onClick={e => { e.stopPropagation(); onEdit(file); }}>
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M15.232 5.232a2.5 2.5 0 1 1 3.536 3.536l-9.193 9.193a2 2 0 0 1-.707.464l-3.11 1.037a.5.5 0 0 1-.632-.632l1.037-3.11a2 2 0 0 1 .464-.707l9.193-9.193Z" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <button className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50" title="Edit" onClick={e => { e.stopPropagation(); onEdit(file); }}>
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M15.232 5.232a2.5 2.5 0 1 1 3.536 3.536l-9.193 9.193a2 2 0 0 1-.707.464l-3.11 1.037a.5.5 0 0 1-.632-.632l1.037-3.11a2 2 0 0 1 .464-.707l9.193-9.193Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
-                  <button className="text-red-600 hover:text-red-800 p-1" title="Delete" onClick={e => { e.stopPropagation(); onDelete(file); }}>
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M6 7h12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7h12Z" stroke="#DC2626" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <button className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50" title="Delete" onClick={e => { e.stopPropagation(); onDelete(file); }}>
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M6 7h12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7h12Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>
-              <div className="flex items-center gap-3 mb-3">
-                <span className="inline-block bg-blue-100 p-2 rounded">
-                  {/* File type icon */}
-                  {file.fileType === 'PDF' ? (
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="#DC2626" strokeWidth="2" fill="#FEE2E2"/>
-                      <path d="M14 2v6h6" stroke="#DC2626" strokeWidth="2"/>
-                      <path d="M16 13H8" stroke="#DC2626" strokeWidth="2"/>
-                      <path d="M16 17H8" stroke="#DC2626" strokeWidth="2"/>
-                      <path d="M10 9H8" stroke="#DC2626" strokeWidth="2"/>
-                    </svg>
-                  ) : file.fileType === 'CSV' ? (
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="#059669" strokeWidth="2" fill="#D1FAE5"/>
-                      <path d="M14 2v6h6" stroke="#059669" strokeWidth="2"/>
-                      <path d="M8 13l2 2 2-2" stroke="#059669" strokeWidth="2"/>
-                      <path d="M12 15v-4" stroke="#059669" strokeWidth="2"/>
-                      <path d="M16 13l2 2 2-2" stroke="#059669" strokeWidth="2"/>
-                      <path d="M20 15v-4" stroke="#059669" strokeWidth="2"/>
-                    </svg>
-                  ) : file.fileType === 'XLSX' ? (
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="#2563EB" strokeWidth="2" fill="#DBEAFE"/>
-                      <path d="M14 2v6h6" stroke="#2563EB" strokeWidth="2"/>
-                      <path d="M8 13l2 2 2-2" stroke="#2563EB" strokeWidth="2"/>
-                      <path d="M12 15v-4" stroke="#2563EB" strokeWidth="2"/>
-                      <path d="M16 13l2 2 2-2" stroke="#2563EB" strokeWidth="2"/>
-                      <path d="M20 15v-4" stroke="#2563EB" strokeWidth="2"/>
-                    </svg>
-                  ) : (
-                    <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="#6B7280" strokeWidth="2" fill="#F3F4F6"/>
-                      <path d="M14 2v6h6" stroke="#6B7280" strokeWidth="2"/>
-                      <path d="M16 13H8" stroke="#6B7280" strokeWidth="2"/>
-                      <path d="M16 17H8" stroke="#6B7280" strokeWidth="2"/>
-                      <path d="M10 9H8" stroke="#6B7280" strokeWidth="2"/>
-                    </svg>
-                  )}
-              </span>
-                <span className="text-sm font-semibold text-blue-800 truncate" title={file.fileName}>{file.fileName}</span>
+              
+              {/* File icon with better styling */}
+              <div className="flex items-center gap-2 mb-3 w-full">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
+                                          {file.fileType === 'PDF' ? (
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M9 13h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M9 17h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M9 9h1" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                      ) : file.fileType === 'CSV' ? (
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M8 13l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      ) : file.fileType === 'XLSX' ? (
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M8 13l3 3 5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M8 17l3-3 5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-semibold text-gray-900 truncate" title={file.fileName}>{file.fileName}</h3>
+                  <p className="text-sm text-gray-500">{file.fileType || 'File'}</p>
+                </div>
               </div>
-              <div className="text-xs text-gray-600 space-y-1">
-                <div><span className="font-medium">Bank:</span> <span className="text-gray-800">{file.bankName || '-'}</span></div>
-                <div><span className="font-medium">Type:</span> <span className="text-gray-800">{file.fileType || '-'}</span></div>
-                <div><span className="font-medium">Created:</span> <span className="text-gray-800">{file.createdAt ? new Date(file.createdAt).toLocaleDateString() : '-'}</span></div>
-            </div>
+              
+                             {/* File details with icons */}
+               <div className="space-y-1.5 w-full">
+                <div className="flex items-center gap-2 text-sm">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
+                    <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M8 5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2H8V5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-gray-600">{file.bankName || 'Unknown Bank'}</span>
+                </div>
+                
+                <div className="flex items-center gap-2 text-sm">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
+                    <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-gray-600">{file.fileType || 'Statement'}</span>
+                </div>
+                
+                {file.size && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="text-gray-600">{file.size}</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-2 text-sm">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
+                    <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-gray-600">
+                    Created at: {file.createdAt ? new Date(file.createdAt).toLocaleString() : file.uploaded ? new Date(file.uploaded).toLocaleString() : 'Unknown'}
+                  </span>
+                </div>
+              </div>
             </div>
             ))
           )}
@@ -782,7 +858,7 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
   );
 }
 
-function EditFileModal({ isOpen, file, onClose, onSave }: { isOpen: boolean; file: any; onClose: () => void; onSave: (newName: string, newBankId: string, newFileType: string) => void }) {
+function EditFileModal({ isOpen, file, onClose, onSave }: { isOpen: boolean; file: FileData | null; onClose: () => void; onSave: (newName: string, newBankId: string, newFileType: string) => void }) {
   const [newName, setNewName] = useState(file?.fileName || '');
   const [newFileType, setNewFileType] = useState(file?.fileType || '');
   const [newBankId, setNewBankId] = useState(file?.bankId || '');
@@ -835,7 +911,7 @@ function EditFileModal({ isOpen, file, onClose, onSave }: { isOpen: boolean; fil
 
 function DeleteFileModal({ isOpen, file, onClose, onDelete, loading, deleteProgress, deleteTotal, isBatchDeleting }: { 
   isOpen: boolean; 
-  file: any; 
+  file: FileData | null; 
   onClose: () => void; 
   onDelete: () => void; 
   loading: boolean;
@@ -886,9 +962,8 @@ function DeleteFileModal({ isOpen, file, onClose, onDelete, loading, deleteProgr
   );
 }
 
-function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelectedFields }: { sliceData: string[][]; file: any; selectedFields: string[] }) {
+function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; file: FileData; selectedFields: string[] }) {
   const [colWidths, setColWidths] = useState<number[]>([]);
-  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const tableRef = React.useRef<HTMLTableElement>(null);
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set(sliceData.slice(1).map((_, i) => i + 1)));
@@ -897,7 +972,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [duplicateRows, setDuplicateRows] = useState<Set<number>>(new Set());
-  const [duplicateInfo, setDuplicateInfo] = useState<any[]>([]);
+  const [duplicateInfo, setDuplicateInfo] = useState<Array<{ row: number; key: string; fields: string; type: string }>>([]);
   const [duplicateChecked, setDuplicateChecked] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const [saveTotal, setSaveTotal] = useState(0);
@@ -920,31 +995,35 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
   // All columns selected by default for duplicate checking
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
 
-  // Update selectedFields when previewData changes
+  // Update selectedFields when previewData changes, but preserve user selections when possible
   useEffect(() => {
     if (previewData.length > 0) {
-      // Reset selectedFields to match the current columns exactly
-      const newSelectedFields = previewData[0].map((header, idx) => `${header}-${idx}`);
-      setSelectedFields(newSelectedFields);
-      setColWidths(previewData[0].map(() => 160));
+      // Only reset selectedFields if they don't match the current columns
+      const currentHeaders = previewData[0];
+      const currentFieldNames = currentHeaders.map((header, idx) => `${header}-${idx}`);
+      
+      // Check if current selectedFields match the new headers
+      const selectedFieldNames = selectedFields.map(f => f.split('-')[0]);
+      const currentHeaderNames = currentHeaders.map(h => h);
+      
+      const fieldsMatch = selectedFieldNames.length === currentHeaderNames.length &&
+        selectedFieldNames.every((name, idx) => name === currentHeaderNames[idx]);
+      
+      if (!fieldsMatch) {
+        // Reset selectedFields to match the current columns exactly
+        setSelectedFields(currentFieldNames);
+      }
+      setColWidths(currentHeaders.map(() => 160));
     }
-  }, [previewData]);
+  }, [previewData, selectedFields]);
+
+  // Update allDuplicatesSelected whenever selectedRows or duplicateRows changes
+  useEffect(() => {
+    const allDupSelected = Array.from(duplicateRows).every(rowIndex => selectedRows.has(rowIndex));
+    setAllDuplicatesSelected(allDupSelected);
+  }, [selectedRows, duplicateRows]);
 
   if (!sliceData || !sliceData.length) return <div>No data to display.</div>;
-
-  // Handle row selection
-  const toggleRow = (i: number) => {
-    setSelectedRows(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(i)) newSet.delete(i); else newSet.add(i);
-      return newSet;
-    });
-  };
-  const allSelected = selectedRows.size === sliceData.length - 1 && selectedRows.size > 0;
-  const toggleAll = () => {
-    if (allSelected) setSelectedRows(new Set());
-    else setSelectedRows(new Set(sliceData.slice(1).map((_, i) => i + 1)));
-  };
 
   // Duplicate check handler
   const handleCheckDuplicates = async () => {
@@ -965,40 +1044,174 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
       }
       
       console.log('Found existing transactions:', existing.length);
+      console.log('Sample existing transaction:', existing[0]);
       
       const uniqueFields = selectedFields.map(f => f.split('-')[0]);
+      console.log('Selected fields (raw):', selectedFields);
       console.log('Checking against fields:', uniqueFields);
+      console.log('Available fields in existing data:', existing.length > 0 ? Object.keys(existing[0]) : []);
+      console.log('Preview data headers:', previewData[0]);
       
-      const existingSet = new Set(
-        existing.map((tx: any) => uniqueFields.map(f => (tx[f] || '').toString().trim().toLowerCase()).join('|'))
-      );
-      
-      const dupRows = new Set<number>();
-      const dupInfo: any[] = [];
+      // Check for duplicates within the current slice data first
+      const currentDataKeys = new Set<string>();
+      const currentDataDups = new Set<number>();
+      const currentDataDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
       
       previewData.slice(1).forEach((row, i) => {
-        const rowObj: any = {};
+        const rowObj: Record<string, string> = {};
         previewData[0].forEach((header, j) => { rowObj[header] = row[j]; });
-        const key = uniqueFields.map(f => (rowObj[f] || '').toString().trim().toLowerCase()).join('|');
+        const key = uniqueFields.map(f => {
+          let value = (rowObj[f] || '').toString().trim().toLowerCase();
+          // Normalize amount fields by removing commas
+          if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+            value = value.replace(/,/g, '');
+          }
+          return value;
+        }).join('|');
         
-        if (existingSet.has(key)) {
-          dupRows.add(i + 1); // +1 because data rows now start at index 1
-          dupInfo.push({ 
+        if (currentDataKeys.has(key)) {
+          currentDataDups.add(i + 1);
+          currentDataDupInfo.push({ 
             row: i + 2, 
             key,
-            fields: uniqueFields.map(f => `${f}: ${rowObj[f]}`).join(', ')
+            fields: uniqueFields.map(f => `${f}: ${rowObj[f]}`).join(', '),
+            type: 'internal'
           });
+        } else {
+          currentDataKeys.add(key);
         }
       });
       
-      setDuplicateRows(dupRows);
-      setDuplicateInfo(dupInfo);
+      // Check for duplicates against existing database data
+      // Create a mapping of field names to handle potential mismatches
+      const fieldMapping: { [key: string]: string } = {};
+      if (existing.length > 0) {
+        const existingFields = Object.keys(existing[0]);
+        console.log('Available database fields:', existingFields);
+        console.log('Fields to check:', uniqueFields);
+        
+        uniqueFields.forEach(field => {
+          // Try exact match first
+          if (existingFields.includes(field)) {
+            fieldMapping[field] = field;
+            console.log(`Field "${field}" mapped to "${field}" (exact match)`);
+          } else {
+            // Try case-insensitive match
+            const lowerField = field.toLowerCase();
+            const matchedField = existingFields.find(ef => ef.toLowerCase() === lowerField);
+            if (matchedField) {
+              fieldMapping[field] = matchedField;
+              console.log(`Field "${field}" mapped to "${matchedField}" (case-insensitive match)`);
+            } else {
+              // Try partial match (for cases like "Chq / Ref number" vs "Chq / Ref nu...")
+              const partialMatch = existingFields.find(ef => 
+                ef.toLowerCase().includes(lowerField) || lowerField.includes(ef.toLowerCase())
+              );
+              if (partialMatch) {
+                fieldMapping[field] = partialMatch;
+                console.log(`Field "${field}" mapped to "${partialMatch}" (partial match)`);
+              } else {
+                fieldMapping[field] = field; // Keep original if no match found
+                console.log(`Field "${field}" not found in database, keeping original`);
+              }
+            }
+          }
+        });
+      }
+      
+      console.log('Field mapping:', fieldMapping);
+      
+      // Debug: Check what values are being extracted for each field
+      if (existing.length > 0) {
+        console.log('Sample existing transaction field values:');
+        uniqueFields.forEach(field => {
+          const dbField = fieldMapping[field];
+          const value = existing[0][dbField];
+          console.log(`  ${field} (mapped to ${dbField}): "${value}"`);
+        });
+      }
+      
+      const existingSet = new Set(
+        existing.map((tx: Record<string, unknown>) => uniqueFields.map(f => {
+          const dbField = fieldMapping[f];
+          let value = (tx[dbField] || '').toString().trim().toLowerCase();
+          // Normalize amount fields by removing commas
+          if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+            value = value.replace(/,/g, '');
+          }
+          return value;
+        }).join('|'))
+      );
+      
+      console.log('Existing keys sample:', Array.from(existingSet).slice(0, 5));
+      
+      const dbDupRows = new Set<number>();
+      const dbDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
+      
+      previewData.slice(1).forEach((row, i) => {
+        const rowObj: Record<string, string> = {};
+        previewData[0].forEach((header, j) => { rowObj[header] = row[j]; });
+        const key = uniqueFields.map(f => {
+          let value = (rowObj[f] || '').toString().trim().toLowerCase();
+          // Normalize amount fields by removing commas
+          if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+            value = value.replace(/,/g, '');
+          }
+          return value;
+        }).join('|');
+        
+        console.log(`Row ${i + 1} key:`, key);
+        console.log(`Row ${i + 1} data:`, rowObj);
+        
+        // Debug: Show what values are being extracted for each field
+        console.log(`Row ${i + 1} field values:`);
+        uniqueFields.forEach(field => {
+          const value = rowObj[field];
+          console.log(`  ${field}: "${value}"`);
+        });
+        
+        // Also check if this key exists in any existing transaction for debugging
+        const matchingExisting = existing.filter(tx => {
+          const existingKey = uniqueFields.map(f => {
+            const dbField = fieldMapping[f];
+            let value = (tx[dbField] || '').toString().trim().toLowerCase();
+            // Normalize amount fields by removing commas
+            if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+              value = value.replace(/,/g, '');
+            }
+            return value;
+          }).join('|');
+          return existingKey === key;
+        });
+        
+        if (matchingExisting.length > 0) {
+          console.log(`Row ${i + 1} matches ${matchingExisting.length} existing transactions:`, matchingExisting);
+        }
+        
+        if (existingSet.has(key)) {
+          dbDupRows.add(i + 1);
+          dbDupInfo.push({ 
+            row: i + 2, 
+            key,
+            fields: uniqueFields.map(f => `${f}: ${rowObj[f]}`).join(', '),
+            type: 'database'
+          });
+          console.log(`Row ${i + 1} is a database duplicate`);
+        }
+      });
+      
+      // Combine both types of duplicates
+      const allDupRows = new Set([...currentDataDups, ...dbDupRows]);
+      const allDupInfo = [...currentDataDupInfo, ...dbDupInfo];
+      
+      setDuplicateRows(allDupRows);
+      setDuplicateInfo(allDupInfo);
       setDuplicateChecked(true);
       
       // Auto-select all duplicate rows
       setSelectedRows(prev => {
         const newSelected = new Set(prev);
-        dupRows.forEach(rowIndex => {
+        allDupRows.forEach(rowIndex => {
           newSelected.add(rowIndex);
         });
         return newSelected;
@@ -1006,10 +1219,76 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
       
       console.log('Duplicate check complete:', {
         totalRows: previewData.length - 1,
-        duplicateRows: dupRows.size,
-        duplicateInfo: dupInfo,
-        remainingSelected: selectedRows.size - dupRows.size
+        internalDuplicates: currentDataDups.size,
+        databaseDuplicates: dbDupRows.size,
+        totalDuplicates: allDupRows.size,
+        duplicateInfo: allDupInfo,
+        fieldsChecked: uniqueFields,
+        fieldsMapped: Object.keys(fieldMapping)
       });
+      
+      // If we found very few duplicates, use the alternative approach as primary
+      if (allDupRows.size < 5 && existing.length > 0) {
+        console.log('Using alternative duplicate check with Date + Description fields...');
+        
+        // Use Date and Description as the primary duplicate check fields
+        const primaryFields = ['Date', 'Description'];
+        const primaryKeys = new Set(
+          existing.map((tx: Record<string, unknown>) => primaryFields.map(f => {
+            const dbField = fieldMapping[f] || f;
+            let value = (tx[dbField] || '').toString().trim().toLowerCase();
+            if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+              value = value.replace(/,/g, '');
+            }
+            return value;
+          }).join('|'))
+        );
+        
+        const primaryDups = new Set<number>();
+        const primaryDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
+        
+        previewData.slice(1).forEach((row, i) => {
+          const rowObj: Record<string, string> = {};
+          previewData[0].forEach((header, j) => { rowObj[header] = row[j]; });
+          const key = primaryFields.map(f => {
+            let value = (rowObj[f] || '').toString().trim().toLowerCase();
+            if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+              value = value.replace(/,/g, '');
+            }
+            return value;
+          }).join('|');
+          
+          if (primaryKeys.has(key)) {
+            primaryDups.add(i + 1);
+            primaryDupInfo.push({ 
+              row: i + 2, 
+              key,
+              fields: primaryFields.map(f => `${f}: ${rowObj[f]}`).join(', '),
+              type: 'database'
+            });
+            console.log(`Row ${i + 1} is a duplicate with primary fields (Date + Description)`);
+          }
+        });
+        
+        // Use the primary results instead of the original results
+        const allDupRows = new Set([...currentDataDups, ...primaryDups]);
+        const allDupInfo = [...currentDataDupInfo, ...primaryDupInfo];
+        
+        setDuplicateRows(allDupRows);
+        setDuplicateInfo(allDupInfo);
+        setDuplicateChecked(true);
+        
+        // Auto-select all duplicate rows
+        setSelectedRows(prev => {
+          const newSelected = new Set(prev);
+          allDupRows.forEach(rowIndex => {
+            newSelected.add(rowIndex);
+          });
+          return newSelected;
+        });
+        
+        console.log(`Primary check found ${primaryDups.size} duplicates using Date + Description only`);
+      }
       
     } catch (err) {
       console.error('Error checking duplicates:', err);
@@ -1037,31 +1316,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
     });
   };
 
-  // Add a button to toggle select/deselect all rows
-  const handleToggleAllRows = () => {
-    setSelectedRows(prev => {
-      const allDataRows = previewData.slice(1).map((_, i) => i + 1);
-      const allSelected = allDataRows.every(rowIndex => prev.has(rowIndex));
-      let newSelected: Set<number>;
-      if (allSelected) {
-        // Deselect all rows
-        newSelected = new Set();
-      } else {
-        // Select all rows
-        newSelected = new Set(allDataRows);
-      }
-      // Update allDuplicatesSelected state based on new selection
-      const allDupSelected = Array.from(duplicateRows).every(rowIndex => newSelected.has(rowIndex));
-      setAllDuplicatesSelected(allDupSelected);
-      return newSelected;
-    });
-  };
 
-  // Update allDuplicatesSelected whenever selectedRows or duplicateRows changes
-  useEffect(() => {
-    const allDupSelected = Array.from(duplicateRows).every(rowIndex => selectedRows.has(rowIndex));
-    setAllDuplicatesSelected(allDupSelected);
-  }, [selectedRows, duplicateRows]);
 
   // Delimit handlers
   const handleDelimitPreview = () => {
@@ -1155,8 +1410,9 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
         }
       }
       setSaveSuccess(true);
-    } catch (err: any) {
-      setSaveError(err.message || 'Failed to save transactions');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save transactions';
+      setSaveError(errorMessage);
     } finally {
       setSaving(false);
       setIsBatchSaving(false);
@@ -1233,6 +1489,8 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
             )}
           </button>
           
+
+          
           {duplicateRows.size > 0 && (
             <button
               className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium"
@@ -1262,25 +1520,28 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
                       ? 'bg-blue-50'
                       : ''
                   }
+                  title={
+                    duplicateRows.has(i) 
+                      ? duplicateInfo.find(info => info.row === i + 2)?.type === 'internal'
+                        ? 'Duplicate within uploaded data'
+                        : 'Duplicate in database'
+                      : undefined
+                  }
                 >
                   <td className="px-2 py-1 border border-blue-200 text-center">
                     {isHeader ? (
-                      <div className="flex items-center gap-1 justify-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.size === previewData.slice(1).length && previewData.length > 1}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setSelectedRows(new Set(previewData.slice(1).map((_, idx) => idx + 1)));
-                            } else {
-                              setSelectedRows(new Set());
-                            }
-                          }}
-                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-                          title="Select/Deselect All Rows"
-                        />
-                        <span>No.</span>
-                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedRows.size === previewData.slice(1).length && selectedRows.size > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedRows(new Set(previewData.slice(1).map((_, i) => i + 1)));
+                          } else {
+                            setSelectedRows(new Set());
+                          }
+                        }} 
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2" 
+                      />
                     ) : (
                       <input type="checkbox" checked={selectedRows.has(i)} onChange={(e) => {
                         if (e.target.checked) {
@@ -1311,13 +1572,26 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
         </table>
       </div>
       {duplicateChecked && duplicateRows.size > 0 && (
-        <div className="mt-2 text-red-700 text-sm font-semibold">
-          ⚠️ {duplicateRows.size} row(s) already exist in database
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-red-800 text-base font-semibold mb-2">
+            ⚠️ {duplicateRows.size} row(s) already exist in database
+          </div>
+          <div className="text-red-600 text-sm space-y-1">
+            {duplicateInfo.some(info => info.type === 'internal') && (
+              <div>• Some duplicates exist within the uploaded data</div>
+            )}
+            {duplicateInfo.some(info => info.type === 'database') && (
+              <div>• Some duplicates exist in the database (checked using Date + Description)</div>
+            )}
+            <div className="mt-2 text-xs">
+              These rows are highlighted in red and will be skipped during save to avoid duplicates.
+            </div>
+          </div>
         </div>
       )}
       {duplicateChecked && duplicateRows.size === 0 && (
         <div className="mt-2 text-green-700 text-sm font-semibold">
-          ✅ No duplicate rows found in database
+          ✅ No duplicate rows found
         </div>
       )}
       {/* Progress bar UI below the table and above the Save button */}
@@ -1410,29 +1684,28 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
 }
 
 const FilesPage: React.FC = () => {
-  const [isAllFilesSelected, setIsAllFilesSelected] = useState(true);
+
   const [openTabs, setOpenTabs] = useState<{ id: string; name: string }[]>([{ id: 'all', name: 'All Files' }]);
-  const [openSliceTabs, setOpenSliceTabs] = useState<{ id: string; name: string; sliceData: string[][]; file: any; selectedFields: string[] }[]>([]);
+  const [openSliceTabs, setOpenSliceTabs] = useState<{ id: string; name: string; sliceData: string[][]; file: FileData; selectedFields: string[] }[]>([]);
   const [activeTabId, setActiveTabId] = useState<string>('all');
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [expandedFileId, setExpandedFileId] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadedMatch, setUploadedMatch] = useState<any>(null);
-  const [banks, setBanks] = useState<{ id: string; fileName: string; versions: any[] }[]>([]);
-  const [files, setFiles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const [banks, setBanks] = useState<{ id: string; fileName: string; versions: unknown[] }[]>([]);
+  const [files, setFiles] = useState<FileData[]>([]);
+
   const [filesLoading, setFilesLoading] = useState(true);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [editFile, setEditFile] = useState<any>(null);
-  const [deleteFile, setDeleteFile] = useState<any>(null);
+  const [editFile, setEditFile] = useState<FileData | null>(null);
+  const [deleteFile, setDeleteFile] = useState<FileData | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
   const [deleteTotal, setDeleteTotal] = useState(0);
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'row'>('grid');
-  // Add state to track if all duplicates are selected
-  const [allDuplicatesSelected, setAllDuplicatesSelected] = useState(false);
+
 
   useEffect(() => {
     const fetchAllUserFiles = async () => {
@@ -1441,26 +1714,26 @@ const FilesPage: React.FC = () => {
       // 1. Fetch all banks
       const banksRes = await fetch('/api/bank');
       const banksData = await banksRes.json();
-      setBanks(Array.isArray(banksData) ? banksData.map((b: any) => ({ id: b.id, fileName: b.bankName, versions: [] })) : []);
-      let allAccounts: any[] = [];
+      setBanks(Array.isArray(banksData) ? banksData.map((b: Record<string, unknown>) => ({ id: b.id as string, fileName: b.bankName as string, versions: [] })) : []);
+      let allAccounts: Record<string, unknown>[] = [];
       // 2. For each bank, fetch all accounts for the user
       for (const bank of banksData) {
-        const accountsRes = await fetch(`/api/account?bankId=${bank.id}&userId=${userId}`);
+        const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
         const accounts = await accountsRes.json();
         if (Array.isArray(accounts)) {
           allAccounts = allAccounts.concat(accounts);
         }
       }
       // 3. For each account, fetch all statements for the user
-      let allStatements: any[] = [];
+      let allStatements: Record<string, unknown>[] = [];
       for (const account of allAccounts) {
-        const statementsRes = await fetch(`/api/statements?accountId=${account.id}&userId=${userId}`);
+        const statementsRes = await fetch(`/api/statements?accountId=${account.id as string}&userId=${userId}`);
         const statements = await statementsRes.json();
         if (Array.isArray(statements)) {
           allStatements = allStatements.concat(statements);
         }
       }
-      setFiles(allStatements);
+      setFiles(allStatements as FileData[]);
       setFilesLoading(false);
     };
     fetchAllUserFiles();
@@ -1472,39 +1745,30 @@ const FilesPage: React.FC = () => {
     const userId = localStorage.getItem('userId');
     const banksRes = await fetch('/api/bank');
     const banksData = await banksRes.json();
-    let allAccounts: any[] = [];
+    let allAccounts: Record<string, unknown>[] = [];
     for (const bank of banksData) {
-      const accountsRes = await fetch(`/api/account?bankId=${bank.id}&userId=${userId}`);
+      const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
       const accounts = await accountsRes.json();
       if (Array.isArray(accounts)) {
         allAccounts = allAccounts.concat(accounts);
       }
     }
-    let allStatements: any[] = [];
+    let allStatements: Record<string, unknown>[] = [];
     for (const account of allAccounts) {
-      const statementsRes = await fetch(`/api/statements?accountId=${account.id}&userId=${userId}`);
+      const statementsRes = await fetch(`/api/statements?accountId=${account.id as string}&userId=${userId}`);
       const statements = await statementsRes.json();
       if (Array.isArray(statements)) {
         allStatements = allStatements.concat(statements);
       }
     }
-    setFiles(allStatements);
+    setFiles(allStatements as FileData[]);
     setFilesLoading(false);
   };
 
-  // All Files button
-  const handleAllFilesClick = () => {
-    setIsAllFilesSelected(true);
-    setActiveTabId('all');
-    setSelectedFileId(null);
-    if (!openTabs.find((tab) => tab.id === 'all')) {
-      setOpenTabs((prev) => [{ id: 'all', name: 'All Files' }, ...prev]);
-    }
-  };
+
 
   // File click (main file, not version)
   const handleFileClick = (file: { id: string; fileName: string }) => {
-    setIsAllFilesSelected(false);
     setSelectedFileId(file.id);
     setActiveTabId(file.id);
     setOpenTabs((prevTabs) => {
@@ -1515,7 +1779,6 @@ const FilesPage: React.FC = () => {
 
   // Version click (not used here, but keep for compatibility)
   const handleVersionClick = (file: { id: string; fileName: string }, version: { id: string; versionName: string }) => {
-    setIsAllFilesSelected(false);
     setSelectedFileId(version.id);
     setActiveTabId(version.id);
     setOpenTabs((prevTabs) => {
@@ -1530,14 +1793,13 @@ const FilesPage: React.FC = () => {
 
   // Update handleTabClick to NOT open any modal
   const handleTabClick = (tabId: string) => {
-    setIsAllFilesSelected(tabId === 'all');
     setActiveTabId(tabId);
     setSelectedFileId(tabId === 'all' ? null : tabId);
     // No modal logic here
   };
 
   // Helper to open a slice tab
-  const handleOpenSliceTab = (sliceData: string[][], file: any, selectedFields: string[]) => {
+  const handleOpenSliceTab = (sliceData: string[][], file: FileData, selectedFields: string[]) => {
     const newTabId = 'slice-' + Date.now();
     const newTab = {
       id: newTabId,
@@ -1560,13 +1822,11 @@ const FilesPage: React.FC = () => {
         setOpenTabs((tabs) => {
           const allTabs = [...tabs, ...openSliceTabs.filter(tab => tab.id !== tabId)];
           if (allTabs.length === 0) {
-            setIsAllFilesSelected(true);
             setActiveTabId('all');
             setSelectedFileId(null);
             return [{ id: 'all', name: 'All Files' }];
           }
           const lastTab = allTabs[allTabs.length - 1];
-          setIsAllFilesSelected(lastTab.id === 'all');
           setActiveTabId(lastTab.id);
           setSelectedFileId(lastTab.id === 'all' ? null : lastTab.id);
           return tabs;
@@ -1575,13 +1835,19 @@ const FilesPage: React.FC = () => {
     }
   };
 
-  const handleEditFile = (file: any) => {
+  const handleEditFile = (file: FileData) => {
     setEditFile(file);
     setEditModalOpen(true);
   };
-  const handleDeleteFile = (file: any) => {
-    setDeleteFile(file);
-    setDeleteModalOpen(true);
+  const handleDeleteFile = (file: FileData | FileData[]) => {
+    if (Array.isArray(file)) {
+      // Handle multiple files deletion
+      setDeleteFile(file[0]); // For now, just use the first file for the modal
+      setDeleteModalOpen(true);
+    } else {
+      setDeleteFile(file);
+      setDeleteModalOpen(true);
+    }
   };
   const handleEditSave = async (newName: string, newBankId: string, newFileType: string) => {
     if (!editFile) return;
@@ -1601,7 +1867,7 @@ const FilesPage: React.FC = () => {
         }),
       });
       refreshFiles();
-    } catch (err) {
+    } catch {
       // Optionally show error toast
     }
   };
@@ -1626,17 +1892,17 @@ const FilesPage: React.FC = () => {
           const txs = await countRes.json();
           console.log('Found transactions:', txs);
           if (Array.isArray(txs)) {
-            const relatedTransactions = txs.filter((tx: any) => tx.statementId === deleteFile.id);
+            const relatedTransactions = txs.filter((tx: Record<string, unknown>) => (tx.statementId as string) === deleteFile.id);
             console.log('Related transactions:', relatedTransactions);
             
             // Count the actual rows in each transaction (if they have row data)
-            totalRows = relatedTransactions.reduce((total, tx) => {
+            totalRows = relatedTransactions.reduce((total: number, tx: Record<string, unknown>) => {
               console.log('Processing transaction:', tx);
               let rowCount = 0;
               
               // If transaction has rowCount field, use it
               if (tx.rowCount) {
-                rowCount = tx.rowCount;
+                rowCount = tx.rowCount as number;
                 console.log(`Using rowCount: ${rowCount}`);
               }
               // If transaction has rows array, count the rows
@@ -1652,16 +1918,16 @@ const FilesPage: React.FC = () => {
               // If transaction has csvData, try to parse it
               else if (tx.csvData) {
                 try {
-                  const lines = tx.csvData.split('\n').filter((line: string) => line.trim());
+                  const lines = (tx.csvData as string).split('\n').filter((line: string) => line.trim());
                   rowCount = lines.length - 1; // Subtract header
                   console.log(`Using csvData lines: ${rowCount}`);
-                } catch (e) {
+                } catch {
                   console.log('Failed to parse csvData');
                 }
               }
               // If transaction has startRow and endRow, calculate difference
               else if (tx.startRow && tx.endRow) {
-                rowCount = tx.endRow - tx.startRow + 1;
+                rowCount = (tx.endRow as number) - (tx.startRow as number) + 1;
                 console.log(`Using startRow/endRow: ${rowCount}`);
               }
               // Default to 1 row per transaction
@@ -1685,20 +1951,20 @@ const FilesPage: React.FC = () => {
           if (countRes2.ok) {
             const txs = await countRes2.json();
             if (Array.isArray(txs)) {
-              const relatedTransactions = txs.filter((tx: any) => 
-                tx.statementId === deleteFile.id || 
-                tx.fileName === deleteFile.fileName ||
-                tx.s3FileUrl === deleteFile.s3FileUrl
+              const relatedTransactions = txs.filter((tx: Record<string, unknown>) => 
+                (tx.statementId as string) === deleteFile.id || 
+                (tx.fileName as string) === deleteFile.fileName ||
+                (tx.s3FileUrl as string) === deleteFile.s3FileUrl
               );
-              totalRows = relatedTransactions.reduce((total, tx) => {
-                if (tx.rowCount) return total + tx.rowCount;
+              totalRows = relatedTransactions.reduce((total: number, tx: Record<string, unknown>) => {
+                if (tx.rowCount) return total + (tx.rowCount as number);
                 if (tx.rows && Array.isArray(tx.rows)) return total + tx.rows.length;
                 if (tx.data && Array.isArray(tx.data)) return total + tx.data.length;
                 return total + 1;
               }, 0);
             }
           }
-        } catch (error) {
+        } catch {
           console.log('Method 2 failed');
         }
       }
@@ -1719,7 +1985,7 @@ const FilesPage: React.FC = () => {
               const lines = deleteFile.csvData.split('\n').filter((line: string) => line.trim());
               totalRows = lines.length - 1; // Subtract header
               console.log(`Using file csvData lines: ${totalRows}`);
-            } catch (e) {
+            } catch {
               console.log('Failed to parse file csvData');
             }
           } else {
@@ -1743,15 +2009,15 @@ const FilesPage: React.FC = () => {
                   console.log(`Using fetched file data array: ${totalRows} rows`);
                 } else if (fileData.transactions && Array.isArray(fileData.transactions)) {
                   // Count rows from transactions
-                  totalRows = fileData.transactions.reduce((total: number, tx: any) => {
-                    if (tx.rowCount) return total + tx.rowCount;
+                  totalRows = fileData.transactions.reduce((total: number, tx: Record<string, unknown>) => {
+                    if (tx.rowCount) return total + (tx.rowCount as number);
                     if (tx.rows && Array.isArray(tx.rows)) return total + tx.rows.length;
                     if (tx.data && Array.isArray(tx.data)) return total + tx.data.length;
                     if (tx.csvData) {
-                      const lines = tx.csvData.split('\n').filter((line: string) => line.trim());
+                      const lines = (tx.csvData as string).split('\n').filter((line: string) => line.trim());
                       return total + (lines.length - 1);
                     }
-                    if (tx.startRow && tx.endRow) return total + (tx.endRow - tx.startRow + 1);
+                    if (tx.startRow && tx.endRow) return total + ((tx.endRow as number) - (tx.startRow as number) + 1);
                     return total + 1;
                   }, 0);
                   console.log(`Using transactions data: ${totalRows} rows`);
@@ -1771,8 +2037,8 @@ const FilesPage: React.FC = () => {
               console.log(`Using default estimate: ${totalRows} rows`);
             }
           }
-        } catch (error) {
-          console.log('Error getting file row count:', error);
+        } catch {
+          console.log('Error getting file row count');
           totalRows = 10; // Default fallback
         }
       }
@@ -1819,9 +2085,9 @@ const FilesPage: React.FC = () => {
           setDeleteProgress(totalRows);
           console.log(`Progress: ${totalRows}/${totalRows} (100%)`);
           
-      } catch (error) {
+      } catch {
           clearInterval(progressInterval);
-          throw error;
+          throw new Error('Failed to delete file');
         }
       
       // Verify deletion was successful
@@ -1830,7 +2096,7 @@ const FilesPage: React.FC = () => {
       if (verifyRes.ok) {
         const txs = await verifyRes.json();
         if (Array.isArray(txs)) {
-          remainingTransactions = txs.filter((tx: any) => tx.statementId === deleteFile.id).length;
+          remainingTransactions = txs.filter((tx: Record<string, unknown>) => (tx.statementId as string) === deleteFile.id).length;
         }
       }
       
@@ -1886,7 +2152,7 @@ const FilesPage: React.FC = () => {
                 className="bg-white rounded-xl shadow-md p-3 flex flex-col items-center justify-center border border-blue-100 mb-3 w-48 relative group cursor-pointer"
                 onClick={() => handleFileClick(file)}
               >
-                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                   <button className="text-blue-600 hover:text-blue-800 p-1" title="Edit" onClick={() => handleEditFile(file)}>
                     <FiEdit2 size={18} />
                   </button>
@@ -1901,8 +2167,10 @@ const FilesPage: React.FC = () => {
                 <div className="text-xs text-gray-500 text-center w-full mt-1">
                   <div><span className="font-semibold">Bank:</span> {file.bankName || '-'}</div>
                   <div><span className="font-semibold">Type:</span> {file.fileType || '-'}</div>
-                  <div><span className="font-semibold">Created:</span> {file.createdAt ? new Date(file.createdAt).toLocaleDateString() : '-'}</div>
+                  {/* Uncomment if you have a bankType field: */}
+                  {/* <div><span className="font-semibold">Bank Type:</span> {file.bankType || '-'}</div> */}
                 </div>
+                <span className="text-xs text-gray-400 mt-1">Uploaded: {file.uploaded}</span>
               </div>
             ))}
           </div>

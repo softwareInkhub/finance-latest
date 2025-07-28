@@ -1,6 +1,5 @@
 'use client';
-import { useState } from 'react';
-import { RiFileLine, RiArrowDownSLine, RiArrowRightSLine } from 'react-icons/ri';
+import { RiFileLine } from 'react-icons/ri';
 
 interface FileItem {
   id: string;
@@ -31,7 +30,7 @@ interface FilesSidebarProps {
   statements: StatementItem[];
 }
 
-export default function FilesSidebar({ files, selectedFileId, expandedFileId, onFileClick, onVersionClick, onExpand, statements }: FilesSidebarProps) {
+export default function FilesSidebar({ }: FilesSidebarProps) {
   return (
     <aside className="w-64 min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2">
       <nav className="flex-1">

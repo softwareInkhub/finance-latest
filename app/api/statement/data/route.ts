@@ -58,19 +58,19 @@ export async function GET(request: Request) {
     let totalRows = 0;
     let csvData = '';
     
-    transactions.forEach((tx: any) => {
+    transactions.forEach((tx: Record<string, unknown>) => {
       if (tx.rowCount) {
-        totalRows += tx.rowCount;
+        totalRows += tx.rowCount as number;
       } else if (tx.rows && Array.isArray(tx.rows)) {
         totalRows += tx.rows.length;
       } else if (tx.data && Array.isArray(tx.data)) {
         totalRows += tx.data.length;
       } else if (tx.csvData) {
-        const lines = tx.csvData.split('\n').filter((line: string) => line.trim());
+        const lines = (tx.csvData as string).split('\n').filter((line: string) => line.trim());
         totalRows += lines.length - 1; // Subtract header
-        if (!csvData) csvData = tx.csvData;
+        if (!csvData) csvData = tx.csvData as string;
       } else if (tx.startRow && tx.endRow) {
-        totalRows += tx.endRow - tx.startRow + 1;
+        totalRows += (tx.endRow as number) - (tx.startRow as number) + 1;
       } else {
         totalRows += 1; // Default to 1 row per transaction
       }
