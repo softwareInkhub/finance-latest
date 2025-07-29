@@ -32,16 +32,26 @@ export async function POST(request: Request) {
     // Use provided fields for duplicate check
     const uniqueFields = Array.isArray(duplicateCheckFields) && duplicateCheckFields.length > 0 ? duplicateCheckFields : null;
     if (uniqueFields) {
+      // Check for duplicates within the new data first
+      const newDataKeys = new Set<string>();
+      for (const row of rows) {
+        const key = uniqueFields.map(f => (row[f] || '').toString().trim().toLowerCase()).join('|');
+        if (newDataKeys.has(key)) {
+          return NextResponse.json({ error: 'Duplicate transaction(s) exist within the uploaded data. No transactions were saved.' }, { status: 400 });
+        }
+        newDataKeys.add(key);
+      }
+      
+      // Check for duplicates against existing database data
     const existingSet = new Set(
       existing.map(tx => uniqueFields.map(f => (tx[f] || '').toString().trim().toLowerCase()).join('|'))
     );
-    const newSet = new Set();
+      
     for (const row of rows) {
       const key = uniqueFields.map(f => (row[f] || '').toString().trim().toLowerCase()).join('|');
-      if (existingSet.has(key) || newSet.has(key)) {
-        return NextResponse.json({ error: 'Duplicate transaction(s) exist. No transactions were saved.' }, { status: 400 });
+        if (existingSet.has(key)) {
+          return NextResponse.json({ error: 'Duplicate transaction(s) exist in database. No transactions were saved.' }, { status: 400 });
       }
-      newSet.add(key);
       }
     }
 
