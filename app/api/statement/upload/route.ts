@@ -19,6 +19,8 @@ export async function POST(request: Request) {
     const bankId = formData.get('bankId');
     const bankName = formData.get('bankName');
     const accountId = formData.get('accountId');
+    const accountName = formData.get('accountName');
+    const accountNumber = formData.get('accountNumber');
     const fileName = formData.get('fileName');
     const userId = formData.get('userId');
     const fileType = formData.get('fileType');
@@ -75,6 +77,8 @@ export async function POST(request: Request) {
       bankId,
       bankName,
       accountId,
+      accountName: accountName || '',
+      accountNumber: accountNumber || '',
       s3FileUrl,
       fileName: uniqueFileName,
       userId: userId,

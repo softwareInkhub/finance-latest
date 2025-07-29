@@ -29,7 +29,7 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
   const [showSuccess, setShowSuccess] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [banks, setBanks] = useState<{ id: string; bankName: string }[]>([]);
-  const [accounts, setAccounts] = useState<{ id: string; accountHolderName: string }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; accountHolderName: string; accountNumber?: string }[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +73,14 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
     formData.append('bankId', bankId);
     formData.append('bankName', banks.find(b => b.id === bankId)?.bankName || '');
     formData.append('accountId', bankAccount);
+    
+    // Get account details for the selected account
+    const selectedAccount = accounts.find(a => a.id === bankAccount);
+    if (selectedAccount) {
+      formData.append('accountName', selectedAccount.accountHolderName || '');
+      formData.append('accountNumber', selectedAccount.accountNumber || '');
+    }
+    
     formData.append('userId', userId || '');
     try {
       const res = await fetch('/api/statement/upload', {
@@ -1724,13 +1732,19 @@ const FilesPage: React.FC = () => {
           allAccounts = allAccounts.concat(accounts);
         }
       }
-      // 3. For each account, fetch all statements for the user
+      // 3. For each account, fetch all statements for the user and merge account info
       let allStatements: Record<string, unknown>[] = [];
       for (const account of allAccounts) {
         const statementsRes = await fetch(`/api/statements?accountId=${account.id as string}&userId=${userId}`);
         const statements = await statementsRes.json();
         if (Array.isArray(statements)) {
-          allStatements = allStatements.concat(statements);
+          // Merge account information with each statement
+          const statementsWithAccountInfo = statements.map((statement: Record<string, unknown>) => ({
+            ...statement,
+            accountName: account.accountHolderName || statement.accountName || '',
+            accountNumber: account.accountNumber || statement.accountNumber || '',
+          }));
+          allStatements = allStatements.concat(statementsWithAccountInfo);
         }
       }
       setFiles(allStatements as FileData[]);
@@ -1758,7 +1772,13 @@ const FilesPage: React.FC = () => {
       const statementsRes = await fetch(`/api/statements?accountId=${account.id as string}&userId=${userId}`);
       const statements = await statementsRes.json();
       if (Array.isArray(statements)) {
-        allStatements = allStatements.concat(statements);
+        // Merge account information with each statement
+        const statementsWithAccountInfo = statements.map((statement: Record<string, unknown>) => ({
+          ...statement,
+          accountName: account.accountHolderName || statement.accountName || '',
+          accountNumber: account.accountNumber || statement.accountNumber || '',
+        }));
+        allStatements = allStatements.concat(statementsWithAccountInfo);
       }
     }
     setFiles(allStatements as FileData[]);
@@ -2129,7 +2149,26 @@ const FilesPage: React.FC = () => {
     if (sliceTab) {
       mainContent = (
         <div className="p-8">
-          <h2 className="text-xl font-bold mb-4 text-blue-800">{sliceTab.name}</h2>
+          <div className="mb-4">
+            <h2 className="text-xl font-bold text-blue-800">{sliceTab.name}</h2>
+            {/* Account Information Header */}
+            <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex flex-wrap gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-blue-900">Bank:</span>
+                  <span className="text-blue-700">{sliceTab.file.bankName || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-blue-900">Account Name:</span>
+                  <span className="text-blue-700">{sliceTab.file.accountName || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-blue-900">Account Number:</span>
+                  <span className="text-blue-700">{sliceTab.file.accountNumber || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
           {/* Render the sliced transactions preview table here, reusing the modal's content as a standalone component */}
           <SlicePreviewComponent sliceData={sliceTab.sliceData} file={sliceTab.file} selectedFields={sliceTab.selectedFields} />
         </div>

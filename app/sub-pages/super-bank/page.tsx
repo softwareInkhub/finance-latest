@@ -41,13 +41,278 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
   bankIdNameMap: { [id: string]: string };
   tagFilters: string[];
 }) {
+  // Tag transactions modal state
+  const [tagTransactionsModal, setTagTransactionsModal] = useState<{
+    isOpen: boolean;
+    tagName: string;
+    transactions: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[];
+    bankName: string;
+    accountId: string;
+    groupedTransactions?: { [bankId: string]: { [accountId: string]: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[] } };
+  }>({
+    isOpen: false,
+    tagName: '',
+    transactions: [],
+    bankName: '',
+    accountId: '',
+    groupedTransactions: {}
+  });
+  const [showTagModalDownloadDropdown, setShowTagModalDownloadDropdown] = useState(false);
   // Move all hooks to the top, before any early return
   const A4_HEIGHT_PX = 1122; // 297mm at 96dpi
   const A4_WIDTH_PX = 794;   // 210mm at 96dpi
   const [page, setPage] = useState(0);
   const [exportingAllPages, setExportingAllPages] = useState(false);
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
   const reportContainerRef = useRef<HTMLDivElement>(null);
   const allPagesRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDownloadDropdown(false);
+      }
+    };
+
+    if (showDownloadDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDownloadDropdown]);
+
+  // Close tag modal dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const tagModalDropdown = document.getElementById('tag-modal-dropdown');
+      if (tagModalDropdown && !tagModalDropdown.contains(event.target as Node)) {
+        setShowTagModalDownloadDropdown(false);
+      }
+    };
+
+    if (showTagModalDownloadDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showTagModalDownloadDropdown]);
+
+  // Handle tag row click from Per-Bank, Per-Account Report
+  const handleTagRowClick = (tagName: string) => {
+    // Find all transactions for this tag across ALL banks and accounts
+    const tagTransactions = transactions.filter(tx => {
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      return tags.some(tag => tag.name === tagName);
+    });
+
+    // Group transactions by bank and account for display
+    const groupedTransactions: { [bankId: string]: { [accountId: string]: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[] } } = {};
+    tagTransactions.forEach(tx => {
+      const txBankId = tx.bankId;
+      const txAccountId = tx.accountId;
+      if (!groupedTransactions[txBankId]) groupedTransactions[txBankId] = {};
+      if (!groupedTransactions[txBankId][txAccountId]) groupedTransactions[txBankId][txAccountId] = [];
+      groupedTransactions[txBankId][txAccountId].push(tx);
+    });
+
+    setTagTransactionsModal({
+      isOpen: true,
+      tagName,
+      transactions: tagTransactions,
+      bankName: 'All Banks', // Changed to indicate it's across all banks
+      accountId: 'All Accounts', // Changed to indicate it's across all accounts
+      groupedTransactions // Add grouped data for better display
+    });
+  };
+
+  // Download functions for tag transactions modal
+  const handleDownloadTagTransactionsCSV = () => {
+    if (!tagTransactionsModal.transactions.length) return;
+    
+    const csvData = [];
+    
+    // Add header
+    csvData.push(['Tag Transactions Report']);
+    csvData.push(['Tag', tagTransactionsModal.tagName]);
+    csvData.push(['Total Transactions', tagTransactionsModal.transactions.length]);
+    
+    // Calculate totals
+    let totalCredit = 0, totalDebit = 0;
+    tagTransactionsModal.transactions.forEach(tx => {
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      if (crdr === 'CR') totalCredit += Math.abs(amount);
+      else if (crdr === 'DR') totalDebit += Math.abs(amount);
+    });
+    const balance = totalCredit - totalDebit;
+    
+    csvData.push(['Total Credit', totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
+    csvData.push(['Total Debit', totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
+    csvData.push(['Balance', balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
+    csvData.push([]); // Empty row
+    
+    // Add transaction details
+    csvData.push(['Bank', 'Account ID', 'Account Name', 'Account Number', 'Date', 'Description', 'Reference', 'Amount', 'Type', 'Tags']);
+    
+    tagTransactionsModal.transactions.forEach(tx => {
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      const description = tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A';
+      const reference = tx['Reference No.'] || tx['Reference'] || tx['Cheque No.'] || 'N/A';
+      const date = tx.Date || tx['Transaction Date'] || 'N/A';
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      const bankName = bankIdNameMap[tx.bankId] || tx.bankId;
+      const accountName = tx.accountName || tx.accountHolderName || 'N/A';
+      const accountNumber = tx.accountNumber || 'N/A';
+      
+      csvData.push([
+        bankName,
+        tx.accountId,
+        accountName,
+        accountNumber,
+        date,
+        description,
+        reference,
+        amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+        crdr,
+        tags.map(tag => tag.name).join('; ')
+      ]);
+    });
+    
+    // Convert to CSV string
+    const csvContent = csvData.map(row => 
+      row.map(cell => `"${cell}"`).join(',')
+    ).join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `tag-transactions-${tagTransactionsModal.tagName}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTagTransactionsPDF = async () => {
+    if (!tagTransactionsModal.transactions.length) return;
+    
+    // Create a temporary container for PDF generation
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.left = '-9999px';
+    tempContainer.style.top = '0';
+    tempContainer.style.width = '800px';
+    tempContainer.style.background = 'white';
+    tempContainer.style.padding = '20px';
+    tempContainer.style.fontFamily = 'Arial, sans-serif';
+    
+    // Calculate totals
+    let totalCredit = 0, totalDebit = 0;
+    tagTransactionsModal.transactions.forEach(tx => {
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      if (crdr === 'CR') totalCredit += Math.abs(amount);
+      else if (crdr === 'DR') totalDebit += Math.abs(amount);
+    });
+    const balance = totalCredit - totalDebit;
+    
+    // Create PDF content
+    tempContainer.innerHTML = `
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #1f2937; margin-bottom: 10px;">Tag Transactions Report</h1>
+                        <h2 style="color: #3b82f6; margin-bottom: 20px;">Tag: &quot;${tagTransactionsModal.tagName}&quot;</h2>
+      </div>
+      
+      <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <h3 style="color: #1e40af; margin-bottom: 10px;">Summary</h3>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
+          <div style="text-align: center;">
+            <div style="font-size: 12px; color: #6b7280;">Total Credit</div>
+            <div style="font-size: 18px; font-weight: bold; color: #059669;">₹${totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 12px; color: #6b7280;">Total Debit</div>
+            <div style="font-size: 18px; font-weight: bold; color: #dc2626;">₹${totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 12px; color: #6b7280;">Balance</div>
+            <div style="font-size: 18px; font-weight: bold; color: ${balance >= 0 ? '#059669' : '#dc2626'};">₹${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 12px; color: #6b7280;">Total Transactions</div>
+            <div style="font-size: 18px; font-weight: bold; color: #3b82f6;">${tagTransactionsModal.transactions.length}</div>
+          </div>
+        </div>
+      </div>
+      
+      <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+        <thead>
+          <tr style="background: #f3f4f6;">
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 12px;">Bank</th>
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 12px;">Account ID</th>
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 12px;">Account Name</th>
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 12px;">Account Number</th>
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 12px;">Date</th>
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: left; font-size: 12px;">Description</th>
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: right; font-size: 12px;">Amount</th>
+            <th style="border: 1px solid #d1d5db; padding: 8px; text-align: center; font-size: 12px;">Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tagTransactionsModal.transactions.map(tx => {
+            const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+            const description = tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A';
+            const date = tx.Date || tx['Transaction Date'] || 'N/A';
+            const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+            const bankName = bankIdNameMap[tx.bankId] || tx.bankId;
+            const accountName = tx.accountName || tx.accountHolderName || 'N/A';
+            const accountNumber = tx.accountNumber || 'N/A';
+            const color = crdr === 'CR' ? '#059669' : '#dc2626';
+            
+            return `
+              <tr>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px;">${bankName}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px;">${tx.accountId}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px;">${accountName}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px;">${accountNumber}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px;">${date}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px;">${description}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px; text-align: right; color: ${color}; font-weight: bold;">₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; font-size: 11px; text-align: center;">${crdr}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+    
+    document.body.appendChild(tempContainer);
+    
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      await html2pdf()
+        .set({
+          margin: 10,
+          filename: `tag-transactions-${tagTransactionsModal.tagName}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, allowTaint: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        })
+        .from(tempContainer)
+        .save();
+    } finally {
+      document.body.removeChild(tempContainer);
+    }
+  };
 
   if (Object.keys(bankIdNameMap).length === 0) {
     return (
@@ -298,7 +563,11 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                           </thead>
                           <tbody>
                             {Object.entries(tagStats).map(([tagName, stat]) => (
-                              <tr key={tagName} className="hover:bg-blue-100/60 transition">
+                              <tr 
+                                key={tagName} 
+                                className="hover:bg-blue-100/60 transition cursor-pointer"
+                                onClick={() => handleTagRowClick(tagName)}
+                              >
                                 <td className="border px-4 py-2">{tagName}</td>
                                 <td className="border px-4 py-2 text-center">{stat.count}</td>
                                 <td className="border px-4 py-2 text-right">{stat.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -344,16 +613,132 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
       .finally(() => setExportingAllPages(false));
   };
 
+  const handleDownloadCSV = () => {
+    // Create CSV data for the current view
+    const csvData = [];
+    
+    // Add Super Bank Summary
+    csvData.push(['Super Bank Summary']);
+    csvData.push(['Total Transactions', superTotalTransactions]);
+    csvData.push(['Total Amount', superTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
+    csvData.push(['Total Credit', superTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
+    csvData.push(['Total Debit', superTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
+    csvData.push(['Balance', (superTotalCredit - superTotalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
+    csvData.push(['Total Banks', totalBanks]);
+    csvData.push(['Total Accounts', totalAccounts]);
+    csvData.push(['Tagged', superTagged]);
+    csvData.push(['Untagged', superUntagged]);
+    csvData.push([]); // Empty row for spacing
+    
+    // Add Per-Bank Summary
+    csvData.push(['Per-Bank Summary']);
+    csvData.push(['Bank', 'Total Txns', 'Total Amount', 'Credit', 'Debit', 'Balance', 'Tagged', 'Untagged']);
+    
+    statsArr.forEach(stat => {
+      const balance = stat.totalCredit - stat.totalDebit;
+      csvData.push([
+        stat.label,
+        stat.totalTransactions,
+        stat.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+        stat.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+        stat.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+        balance.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+        stat.tagged,
+        stat.untagged
+      ]);
+    });
+    
+    csvData.push([]); // Empty row for spacing
+    
+    // Add Per-Bank, Per-Account Details
+    csvData.push(['Per-Bank, Per-Account Details']);
+    csvData.push(['Bank', 'Account', 'Total Txns', 'Total Amount', 'Credit', 'Debit', 'Balance']);
+    
+    Object.entries(perBankAccount).forEach(([bankId, accounts]) => {
+      const bankName = bankIdNameMap[bankId] || bankId;
+      Object.entries(accounts).forEach(([accountId, txs]) => {
+        let totalAmount = 0, totalCredit = 0, totalDebit = 0;
+        txs.forEach(tx => {
+          const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+          totalAmount += amount;
+          const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+          if (crdr === 'CR') totalCredit += Math.abs(amount);
+          else if (crdr === 'DR') totalDebit += Math.abs(amount);
+        });
+        const balance = totalCredit - totalDebit;
+        csvData.push([
+          bankName,
+          accountId,
+          txs.length,
+          totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+          totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+          totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+          balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+        ]);
+      });
+    });
+    
+    // Convert to CSV string
+    const csvContent = csvData.map(row => 
+      row.map(cell => `"${cell}"`).join(',')
+    ).join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'super-bank-report.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Super Bank Report" maxWidthClass="max-w-[810px]">
-      {/* Download PDF Button */}
+      {/* Download Dropdown */}
       <div className="relative">
-        <button
-          className="absolute top-4 right-4 z-10 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow transition-all"
-          onClick={handleDownloadPDF}
-        >
-          Download PDF
-        </button>
+        <div className="absolute top-4 right-4 z-10">
+          <div className="relative" ref={dropdownRef}>
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow transition-all text-sm flex items-center gap-2"
+              onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
+            >
+              <span>Download</span>
+              <svg className={`w-4 h-4 transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {showDownloadDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-20">
+                <div className="py-1">
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    onClick={() => {
+                      handleDownloadCSV();
+                      setShowDownloadDropdown(false);
+                    }}
+                  >
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    Download CSV
+                  </button>
+                  <button
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    onClick={() => {
+                      handleDownloadPDF();
+                      setShowDownloadDropdown(false);
+                    }}
+                  >
+                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    Download PDF
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       {/* Pagination controls at the top */}
       {pages.length > 1 && (
@@ -405,6 +790,239 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
           </div>
         ))}
       </div>
+
+      {/* Tag Transactions Modal */}
+      {tagTransactionsModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Transactions for &quot;{tagTransactionsModal.tagName}&quot;
+              </h2>
+              <div className="flex gap-2">
+                <div className="relative" id="tag-modal-dropdown">
+                  <button
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded shadow transition-all text-xs flex items-center gap-2"
+                    onClick={() => setShowTagModalDownloadDropdown(!showTagModalDownloadDropdown)}
+                  >
+                    <span>Download</span>
+                    <svg className={`w-4 h-4 transition-transform ${showTagModalDownloadDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showTagModalDownloadDropdown && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-20">
+                      <div className="py-1">
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                          onClick={() => {
+                            handleDownloadTagTransactionsCSV();
+                            setShowTagModalDownloadDropdown(false);
+                          }}
+                        >
+                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                          Download CSV
+                        </button>
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                          onClick={() => {
+                            handleDownloadTagTransactionsPDF();
+                            setShowTagModalDownloadDropdown(false);
+                          }}
+                        >
+                          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                          Download PDF
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded shadow transition-all text-xs"
+                  onClick={() => setTagTransactionsModal(prev => ({ ...prev, isOpen: false }))}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                  All Transactions with Tag: &quot;{tagTransactionsModal.tagName}&quot;
+                </h3>
+                <p className="text-sm text-blue-700">
+                  Showing {tagTransactionsModal.transactions.length} transactions across all banks and accounts
+                </p>
+              </div>
+
+              {/* Summary Statistics */}
+              {(() => {
+                let totalCredit = 0, totalDebit = 0;
+                tagTransactionsModal.transactions.forEach(tx => {
+                  const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+                  const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+                  if (crdr === 'CR') totalCredit += Math.abs(amount);
+                  else if (crdr === 'DR') totalDebit += Math.abs(amount);
+                });
+                const balance = totalCredit - totalDebit;
+
+                return (
+                  <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <h4 className="text-md font-semibold text-green-800 mb-3">Summary for Tag: &quot;{tagTransactionsModal.tagName}&quot;</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600">Total Credit</div>
+                        <div className="text-lg font-bold text-green-700">
+                          ₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600">Total Debit</div>
+                        <div className="text-lg font-bold text-red-700">
+                          ₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600">Balance</div>
+                        <div className={`text-lg font-bold ${balance >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                          ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600">Total Transactions</div>
+                        <div className="text-lg font-bold text-blue-700">
+                          {tagTransactionsModal.transactions.length}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {tagTransactionsModal.transactions.length > 0 ? (
+                <div className="space-y-6">
+                  {tagTransactionsModal.groupedTransactions && Object.entries(tagTransactionsModal.groupedTransactions).map(([bankId, accounts]) => (
+                    <div key={bankId} className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-2 border-b">
+                        <h4 className="font-semibold text-gray-800">
+                          {bankIdNameMap[bankId] || bankId}
+                        </h4>
+                        {/* Bank Summary */}
+                        {(() => {
+                          let bankCredit = 0, bankDebit = 0;
+                          Object.values(accounts).flat().forEach(tx => {
+                            const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+                            const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+                            if (crdr === 'CR') bankCredit += Math.abs(amount);
+                            else if (crdr === 'DR') bankDebit += Math.abs(amount);
+                          });
+                          const bankBalance = bankCredit - bankDebit;
+
+                          return (
+                            <div className="mt-2 text-xs text-gray-600">
+                              <span className="mr-4">Credit: <span className="text-green-700 font-semibold">₹{bankCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                              <span className="mr-4">Debit: <span className="text-red-700 font-semibold">₹{bankDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                              <span>Balance: <span className={`font-semibold ${bankBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{bankBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      {Object.entries(accounts).map(([accountId, accountTransactions]) => (
+                        <div key={accountId} className="border-b last:border-b-0">
+                          <div className="bg-blue-50 px-4 py-2 border-b">
+                            <h5 className="text-sm font-medium text-blue-800">
+                              Account: {accountId}
+                            </h5>
+                            <p className="text-xs text-blue-600">
+                              {accountTransactions.length} transactions
+                            </p>
+                            {/* Account Summary */}
+                            {(() => {
+                              let accountCredit = 0, accountDebit = 0;
+                              accountTransactions.forEach(tx => {
+                                const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+                                const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+                                if (crdr === 'CR') accountCredit += Math.abs(amount);
+                                else if (crdr === 'DR') accountDebit += Math.abs(amount);
+                              });
+                              const accountBalance = accountCredit - accountDebit;
+
+                              return (
+                                <div className="mt-1 text-xs text-blue-600">
+                                  <span className="mr-3">Credit: <span className="text-green-700 font-semibold">₹{accountCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                                  <span className="mr-3">Debit: <span className="text-red-700 font-semibold">₹{accountDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                                  <span>Balance: <span className={`font-semibold ${accountBalance >= 0 ? 'text-green-700' : 'text-red-700'}`}>₹{accountBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                              <thead>
+                                <tr className="bg-gray-50">
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account Name</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account No.</th>
+                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tags</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {accountTransactions.map((tx, idx) => {
+                                  const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+                                  const tags = Array.isArray(tx.tags) ? tx.tags : [];
+                                  const description = (tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A') as string;
+                                  const reference = (tx['Reference No.'] || tx['Reference'] || tx['Cheque No.'] || 'N/A') as string;
+                                  const date = (tx.Date || tx['Transaction Date'] || 'N/A') as string;
+                                  const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+                                  const accountName = (tx.accountName || tx.accountHolderName || 'N/A') as string;
+                                  const accountNumber = (tx.accountNumber || 'N/A') as string;
+
+                                  return (
+                                    <tr key={idx} className="hover:bg-gray-50">
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{date}</td>
+                                      <td className="px-4 py-2 text-sm text-gray-900">{description}</td>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{reference}</td>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700 font-medium">{accountName}</td>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">{accountNumber}</td>
+                                      <td className={`px-4 py-2 whitespace-nowrap text-sm text-right font-medium ${
+                                        crdr === 'CR' ? 'text-green-600' : 'text-red-600'
+                                      }`}>
+                                        ₹{amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      </td>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm text-center text-gray-500">{crdr}</td>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                        {tags.map(tag => (
+                                          <span key={tag.id} className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mr-1 mb-1">
+                                            {tag.name}
+                                          </span>
+                                        ))}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  No transactions found for this tag.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -465,6 +1083,7 @@ export default function SuperBankPage() {
   const [reportOpen, setReportOpen] = useState(false);
 
   const [bankIdNameMap, setBankIdNameMap] = useState<{ [id: string]: string }>({});
+  const [transactionsWithAccountInfo, setTransactionsWithAccountInfo] = useState<(Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[]>([]);
 
   // Progress tracking for bulk operations
   const [matchingTransactions, setMatchingTransactions] = useState<Transaction[]>([]);
@@ -482,6 +1101,49 @@ export default function SuperBankPage() {
     const [removed] = updated.splice(from, 1);
     updated.splice(to, 0, removed);
     return updated;
+  };
+
+  // Fetch account information and merge with transactions
+  const fetchAccountInfoAndMerge = async (transactions: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[]) => {
+    try {
+      // Get unique account IDs from transactions
+      const uniqueAccountIds = [...new Set(transactions.map(tx => tx.accountId))];
+      
+      // Fetch account information for all unique accounts
+      const accountInfoMap: { [accountId: string]: { accountName: string; accountNumber: string } } = {};
+      
+      for (const accountId of uniqueAccountIds) {
+        try {
+          const response = await fetch(`/api/account?accountId=${accountId}`);
+          if (response.ok) {
+            const account = await response.json();
+            if (account) {
+              accountInfoMap[accountId] = {
+                accountName: account.accountHolderName || 'N/A',
+                accountNumber: account.accountNumber || 'N/A'
+              };
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch account info for ${accountId}:`, error);
+        }
+      }
+      
+      // Merge account information with transactions
+      const transactionsWithAccountInfo = transactions.map(tx => {
+        const accountInfo = accountInfoMap[tx.accountId];
+        return {
+          ...tx,
+          accountName: accountInfo?.accountName || 'N/A',
+          accountNumber: accountInfo?.accountNumber || 'N/A'
+        };
+      });
+      
+      return transactionsWithAccountInfo;
+    } catch (error) {
+      console.error('Error fetching account information:', error);
+      return transactions; // Return original transactions if fetch fails
+    }
   };
 
   // Fetch all transactions
@@ -1061,8 +1723,6 @@ export default function SuperBankPage() {
         .catch(() => setError("Failed to fetch transactions"))
         .finally(() => {
           setLoading(false);
-          // Refresh the tab after tag deletion
-          window.location.reload();
         });
     } catch (error) {
       setTagError(error as string || 'Failed to remove tag');
@@ -1354,6 +2014,13 @@ export default function SuperBankPage() {
   useEffect(() => {
     console.log('BANKS:', bankIdNameMap);
   }, [bankIdNameMap]);
+
+  // Fetch account information when report modal opens
+  useEffect(() => {
+    if (reportOpen && filteredRows.length > 0) {
+      fetchAccountInfoAndMerge(filteredRows).then(setTransactionsWithAccountInfo);
+    }
+  }, [reportOpen, filteredRows]);
 
   // Add this handler in SuperBankPage
   const handleCreateTag = async (name: string) => {
@@ -1842,7 +2509,7 @@ export default function SuperBankPage() {
       <SuperBankReportModal
         isOpen={reportOpen}
         onClose={() => setReportOpen(false)}
-        transactions={filteredRows}
+        transactions={transactionsWithAccountInfo.length > 0 ? transactionsWithAccountInfo : filteredRows}
         totalBanks={totalBanks}
         totalAccounts={totalAccounts}
         bankIdNameMap={bankIdNameMap}
