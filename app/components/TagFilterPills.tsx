@@ -60,12 +60,23 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
         return (
           <span key={tag.id} className="relative inline-flex items-center group">
             <button
-              className={`px-2 py-1 rounded-full text-xs font-semibold border shadow-sm transition-all ${tagFilters.includes(tag.name) ? 'bg-indigo-700 text-white border-indigo-800 scale-110' : 'bg-indigo-100 text-indigo-800 border-indigo-200 hover:bg-indigo-200'}`}
+              className={`px-2 py-1 rounded-full text-xs font-semibold border shadow-sm transition-all ${tagFilters.includes(tag.name) ? 'scale-110' : 'hover:opacity-80'}`}
+              style={{
+                backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}20`,
+                color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
+                borderColor: tag.color || '#6366F1'
+              }}
               onClick={() => onToggleTag(tag.name)}
             >
               {tag.name}
               {typeof count === 'number' && (
-                <span className="ml-1 bg-white/80 border border-indigo-200 rounded-full px-1.5 text-[10px] font-bold text-indigo-700 align-middle inline-block min-w-[18px] text-center">
+                <span 
+                  className="ml-1 bg-white/80 border rounded-full px-1.5 text-[10px] font-bold align-middle inline-block min-w-[18px] text-center"
+                  style={{
+                    borderColor: tag.color || '#6366F1',
+                    color: tag.color || '#6366F1'
+                  }}
+                >
                   {count}
                 </span>
               )}

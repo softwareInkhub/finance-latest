@@ -192,7 +192,7 @@ function StatementsContent() {
       const res = await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: selection.text, userId }),
+        body: JSON.stringify({ name: selection.text, userId }), // color will be auto-assigned
       });
       
       if (res.status === 409) {
@@ -832,14 +832,22 @@ function StatementsContent() {
                   </h3>
                   <div className="mt-1 flex flex-wrap gap-0.5 min-h-[18px]">
                     {statement.tags && statement.tags.length > 0 ? (
-                      statement.tags.map((tag) => (
+                      statement.tags.map((tagName) => {
+                        const tagObj = allTags.find(t => t.name === tagName);
+                        return (
                       <span
-                        key={tag}
-                          className="flex items-center gap-0.5 px-1 py-0.5 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 text-[10px] rounded-full shadow border border-blue-200 font-medium"
+                            key={tagName}
+                            className="flex items-center gap-0.5 px-1 py-0.5 text-[10px] rounded-full shadow border font-medium"
+                            style={{
+                              backgroundColor: tagObj?.color || '#3B82F6',
+                              color: '#ffffff',
+                              borderColor: tagObj?.color || '#3B82F6'
+                            }}
                       >
-                          <RiPriceTag3Line className="text-blue-400 text-xs" /> {tag}
+                            <RiPriceTag3Line className="text-white text-xs" /> {tagName}
                       </span>
-                      ))
+                        );
+                      })
                     ) : (
                       <span className="text-gray-300 text-[10px] italic">No tags</span>
                     )}
@@ -912,7 +920,7 @@ function StatementsContent() {
                   const res = await fetch('/api/tags', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, userId, color: '#60a5fa' })
+                    body: JSON.stringify({ name, userId }) // color will be auto-assigned
                   });
                   
                   if (res.status === 409) {

@@ -59,7 +59,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       {showAmount && (
         <>
           <div className="px-3 sm:px-4 py-2 bg-green-100 text-green-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-            Total Amount: {totalAmount}
+            Total Amount: {typeof totalAmount === 'number' ? totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : totalAmount}
           </div>
           {typeof totalCredit !== 'undefined' && (
             <div className="px-3 sm:px-4 py-2 bg-cyan-100 text-cyan-800 rounded-lg font-semibold shadow text-xs sm:text-sm">

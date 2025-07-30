@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { RiEdit2Line } from 'react-icons/ri';
 import { FiDownload } from 'react-icons/fi';
 import type { JSX } from 'react';
@@ -338,11 +338,36 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
       const txs = transactions.filter(tx => Array.isArray(tx.tags) && tx.tags.some(t => t.name === tagName));
       let totalAmount = 0, totalCredit = 0, totalDebit = 0, tagged = 0, untagged = 0;
       txs.forEach(tx => {
-        const amount = typeof (tx as Transaction & { AmountRaw?: number }).AmountRaw === 'number' ? (tx as Transaction & { AmountRaw?: number }).AmountRaw : 0;
-        totalAmount += amount || 0;
+        // Get amount from AmountRaw or parse from Amount field
+        let amount = 0;
+        if (typeof (tx as Transaction & { AmountRaw?: number }).AmountRaw === 'number') {
+          amount = (tx as Transaction & { AmountRaw?: number }).AmountRaw || 0;
+        } else {
+                  // Fallback to parsing Amount field
+        const amountField = (tx as Transaction & { Amount?: string; amount?: string }).Amount || (tx as Transaction & { Amount?: string; amount?: string }).amount || 0;
+          // Simple parsing without parseIndianAmount
+          if (typeof amountField === 'number') {
+            amount = amountField;
+          } else if (typeof amountField === 'string') {
+            const cleaned = amountField.replace(/,/g, '').trim();
+            const num = parseFloat(cleaned);
+            amount = isNaN(num) ? 0 : num;
+          } else {
+            amount = 0;
+          }
+        }
+        
+        // Use Math.round to avoid floating point precision issues
+        amount = Math.round(amount * 100) / 100;
+        totalAmount = Math.round((totalAmount + amount) * 100) / 100;
+        
         const crdr = ((tx as Transaction & { 'Dr./Cr.'?: string })['Dr./Cr.'] || '').toString().trim().toUpperCase();
-        if (crdr === 'CR') totalCredit += Math.abs(amount || 0);
-        else if (crdr === 'DR') totalDebit += Math.abs(amount || 0);
+        if (crdr === 'CR') {
+          totalCredit = Math.round((totalCredit + Math.abs(amount)) * 100) / 100;
+        } else if (crdr === 'DR') {
+          totalDebit = Math.round((totalDebit + Math.abs(amount)) * 100) / 100;
+        }
+        
         const tags = (tx as Transaction).tags;
         if (Array.isArray(tags) && tags.length > 0) tagged++;
         else untagged++;
@@ -374,12 +399,35 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
           untagged: 0,
         };
       }
-      const amount = typeof (tx as Transaction & { AmountRaw?: number }).AmountRaw === 'number' ? (tx as Transaction & { AmountRaw?: number }).AmountRaw : 0;
+      // Get amount from AmountRaw or parse from Amount field
+      let amount = 0;
+      if (typeof (tx as Transaction & { AmountRaw?: number }).AmountRaw === 'number') {
+        amount = (tx as Transaction & { AmountRaw?: number }).AmountRaw || 0;
+      } else {
+        // Fallback to parsing Amount field
+        const amountField = (tx as Transaction & { Amount?: string; amount?: string }).Amount || (tx as Transaction & { Amount?: string; amount?: string }).amount || 0;
+        // Simple parsing without parseIndianAmount
+        if (typeof amountField === 'number') {
+          amount = amountField;
+        } else if (typeof amountField === 'string') {
+          const cleaned = amountField.replace(/,/g, '').trim();
+          const num = parseFloat(cleaned);
+          amount = isNaN(num) ? 0 : num;
+        } else {
+          amount = 0;
+        }
+      }
+      
+      // Use Math.round to avoid floating point precision issues
+      amount = Math.round(amount * 100) / 100;
       bankStats[bankId].totalTransactions++;
-      bankStats[bankId].totalAmount += amount || 0;
+      bankStats[bankId].totalAmount = Math.round((bankStats[bankId].totalAmount + amount) * 100) / 100;
       const crdr = ((tx as Transaction & { 'Dr./Cr.'?: string })['Dr./Cr.'] || '').toString().trim().toUpperCase();
-      if (crdr === 'CR') bankStats[bankId].totalCredit += Math.abs(amount || 0);
-      else if (crdr === 'DR') bankStats[bankId].totalDebit += Math.abs(amount || 0);
+      if (crdr === 'CR') {
+        bankStats[bankId].totalCredit = Math.round((bankStats[bankId].totalCredit + Math.abs(amount)) * 100) / 100;
+      } else if (crdr === 'DR') {
+        bankStats[bankId].totalDebit = Math.round((bankStats[bankId].totalDebit + Math.abs(amount)) * 100) / 100;
+      }
       const tags = (tx as Transaction).tags;
       if (Array.isArray(tags) && tags.length > 0) bankStats[bankId].tagged++;
       else bankStats[bankId].untagged++;
@@ -998,7 +1046,14 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                                       <td className="px-4 py-2 whitespace-nowrap text-sm text-center text-gray-500">{crdr}</td>
                                       <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                                         {tags.map(tag => (
-                                          <span key={tag.id} className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mr-1 mb-1">
+                                          <span 
+                                            key={tag.id} 
+                                            className="inline-block text-xs px-2 py-1 rounded mr-1 mb-1"
+                                            style={{
+                                              backgroundColor: tag.color || '#3B82F6',
+                                              color: '#ffffff'
+                                            }}
+                                          >
                                             {tag.name}
                                           </span>
                                         ))}
@@ -1212,24 +1267,28 @@ export default function SuperBankPage() {
       .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
   }, []);
 
-  // Fetch all banks and accounts for stats
+  // Calculate stats from actual transactions using useMemo for stability
+  const stats = useMemo(() => {
+    if (transactions.length === 0) {
+      return { totalBanks: 0, totalAccounts: 0 };
+    }
+    
+    // Count unique banks from transactions
+    const uniqueBankIds = new Set(transactions.map(tx => tx.bankId));
+    const totalBanks = uniqueBankIds.size;
+    
+    // Count unique accounts from transactions
+    const uniqueAccountIds = new Set(transactions.map(tx => tx.accountId));
+    const totalAccounts = uniqueAccountIds.size;
+    
+    return { totalBanks, totalAccounts };
+  }, [transactions]);
+
+  // Update state when stats change
   useEffect(() => {
-    fetch('/api/bank')
-      .then(res => res.json())
-      .then(async (banks: { id: string; bankName: string }[]) => {
-        if (!Array.isArray(banks)) return;
-        setTotalBanks(banks.length);
-        let accountCount = 0;
-        await Promise.all(
-          banks.map(async (bank) => {
-            const res = await fetch(`/api/account?bankId=${bank.id}`);
-            const accounts = await res.json();
-            if (Array.isArray(accounts)) accountCount += accounts.length;
-          })
-        );
-        setTotalAccounts(accountCount);
-      });
-  }, []);
+    setTotalBanks(stats.totalBanks);
+    setTotalAccounts(stats.totalAccounts);
+  }, [stats]);
 
   // Detect text selection in table and which row
   useEffect(() => {
@@ -1273,7 +1332,7 @@ export default function SuperBankPage() {
       const res = await fetch("/api/tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: selection.text, userId }),
+        body: JSON.stringify({ name: selection.text, userId }), // color will be auto-assigned
       });
       
       if (res.status === 409) {
@@ -2032,12 +2091,12 @@ export default function SuperBankPage() {
       setTimeout(() => handleAddTag(), 0);
       return existing.id;
     }
-    // Create tag in backend
+    // Create tag in backend - color will be auto-assigned
     const userId = localStorage.getItem('userId');
     const res = await fetch('/api/tags', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, userId, color: '#60a5fa' }) // default blue
+      body: JSON.stringify({ name, userId }) // color will be auto-assigned
     });
     
     if (res.status === 409) {
@@ -2144,8 +2203,9 @@ export default function SuperBankPage() {
   };
 
   return (
-    <div className="min-h-screen py-4 sm:py-6 px-2 sm:px-4">
-      <div className="max-w-full mx-auto">
+    <div className="h-screen overflow-hidden">
+      <div className="h-full py-4 sm:py-6 px-2 sm:px-4">
+        <div className="max-w-full mx-auto h-full flex flex-col">
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
           <h1 className="text-base sm:text-2xl font-bold text-blue-700 truncate">Super Bank: All Transactions</h1>
           <button
@@ -2474,28 +2534,31 @@ export default function SuperBankPage() {
               </button>
             </div>
           )}
-          <TransactionTable
-            rows={sortedAndFilteredRows}
-            headers={superHeader}
-            selectedRows={new Set(sortedAndFilteredRows.map((tx, idx) => selectedRows.has(tx.id) ? idx : -1).filter(i => i !== -1))}
-            onRowSelect={idx => {
-              const tx = sortedAndFilteredRows[idx];
-              if (tx) handleRowSelect(tx.id);
-            }}
-            onSelectAll={handleSelectAll}
-            selectAll={selectAll}
-            loading={loading}
-            error={error}
-            onRemoveTag={handleRemoveTag}
-            onReorderHeaders={handleReorderHeaders}
-            transactions={transactions}
-            bankMappings={bankMappings}
-            getValueForColumn={(tx, bankId, sh) => {
-              const value = getValueForColumn(tx, bankId, sh);
-              return value;
-            }}
-          />
+          <div className="flex-1 min-h-0">
+            <TransactionTable
+              rows={sortedAndFilteredRows}
+              headers={superHeader}
+              selectedRows={new Set(sortedAndFilteredRows.map((tx, idx) => selectedRows.has(tx.id) ? idx : -1).filter(i => i !== -1))}
+              onRowSelect={idx => {
+                const tx = sortedAndFilteredRows[idx];
+                if (tx) handleRowSelect(tx.id);
+              }}
+              onSelectAll={handleSelectAll}
+              selectAll={selectAll}
+              loading={loading}
+              error={error}
+              onRemoveTag={handleRemoveTag}
+              onReorderHeaders={handleReorderHeaders}
+              transactions={transactions}
+              bankMappings={bankMappings}
+              getValueForColumn={(tx, bankId, sh) => {
+                const value = getValueForColumn(tx, bankId, sh);
+                return value;
+              }}
+            />
+          </div>
         </div>
+      </div>
       </div>
       {/* Floating Download Report Button */}
       <button

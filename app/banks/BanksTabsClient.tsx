@@ -4,7 +4,7 @@ import AccountsClient from '../sub-pages/accounts/AccountsClient';
 import StatementsPage from '../sub-pages/statements/page';
 import SuperBankPage from '../sub-pages/super-bank/page';
 import CreateBankModal from '../components/Modals/CreateBankModal';
-import { RiBankLine, RiAddLine, RiPriceTag3Line, RiCloseLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
+import { RiBankLine, RiPriceTag3Line, RiCloseLine, RiEdit2Line, RiDeleteBin6Line, RiMapPinLine } from 'react-icons/ri';
 import { Bank } from '../types/aws';
 import { useRouter, usePathname } from 'next/navigation';
 import BanksSidebar from '../components/BanksSidebar';
@@ -28,9 +28,13 @@ export default function BanksTabsClient() {
   const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editBank, setEditBank] = useState<Bank | null>(null);
+  const [allTags, setAllTags] = useState<Array<{ id: string; name: string; color?: string }>>([]);
+  const [bankStats, setBankStats] = useState<{ [bankId: string]: { accountCount: number; transactionCount: number; totalAmount: number } }>({});
+  const [statsLoading, setStatsLoading] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
+  const adminEmail = 'nitesh.inkhub@gmail.com';
 
   useEffect(() => {
     const fetchBanks = async () => {
@@ -53,7 +57,88 @@ export default function BanksTabsClient() {
     fetchBanks();
   }, []);
 
+  // Fetch tags
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const userId = localStorage.getItem('userId');
+        if (userId) {
+          const response = await fetch(`/api/tags?userId=${userId}`);
+          if (response.ok) {
+            const tags = await response.json();
+            setAllTags(Array.isArray(tags) ? tags : []);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching tags:', error);
+      }
+    };
+    fetchTags();
+  }, []);
 
+  // Fetch bank stats
+  useEffect(() => {
+    const fetchBankStats = async () => {
+      if (banks.length === 0) return;
+      
+      setStatsLoading(true);
+      const stats: { [bankId: string]: { accountCount: number; transactionCount: number; totalAmount: number } } = {};
+      
+      try {
+        const userId = localStorage.getItem('userId');
+        
+        // Fetch all accounts and transactions in parallel
+        const [accountsResponse, transactionsResponse] = await Promise.all([
+          fetch(`/api/account?userId=${userId}`),
+          fetch(`/api/transactions/all?userId=${userId}`)
+        ]);
+        
+        const allAccounts = await accountsResponse.json();
+        const allTransactions = await transactionsResponse.json();
+        
+        // Process each bank
+        for (const bank of banks) {
+          try {
+            // Filter accounts for this bank
+            const bankAccounts = Array.isArray(allAccounts) ? allAccounts.filter((acc: { bankId: string }) => acc.bankId === bank.id) : [];
+            const accountCount = bankAccounts.length;
+            
+            // Filter transactions for this bank
+            const bankTransactions = Array.isArray(allTransactions) ? allTransactions.filter((tx: { bankId: string }) => tx.bankId === bank.id) : [];
+            const transactionCount = bankTransactions.length;
+            
+            // Calculate total amount
+            const totalAmount = bankTransactions.reduce((sum: number, tx: { Amount?: string; amount?: string }) => {
+              const amount = parseFloat(tx.Amount || tx.amount || '0');
+              return sum + (isNaN(amount) ? 0 : amount);
+            }, 0);
+            
+            stats[bank.id] = {
+              accountCount,
+              transactionCount,
+              totalAmount: Math.round(totalAmount * 100) / 100
+            };
+          } catch (error) {
+            console.error(`Error processing stats for bank ${bank.id}:`, error);
+            stats[bank.id] = { accountCount: 0, transactionCount: 0, totalAmount: 0 };
+          }
+        }
+        
+        setBankStats(stats);
+      } catch (error) {
+        console.error('Error fetching bank stats:', error);
+        // Set default stats for all banks
+        banks.forEach(bank => {
+          stats[bank.id] = { accountCount: 0, transactionCount: 0, totalAmount: 0 };
+        });
+        setBankStats(stats);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+    
+    fetchBankStats();
+  }, [banks]);
 
   const handleCreateBank = async (bankName: string, tags: string[]) => {
     const exists = banks.some(
@@ -101,8 +186,6 @@ export default function BanksTabsClient() {
     }
   };
 
-  
-
   const handleBankCardClick = (bank: Bank) => {
     const tabKey = `accounts-${bank.id}`;
     if (tabs.some(tab => tab.key === tabKey)) {
@@ -116,43 +199,36 @@ export default function BanksTabsClient() {
   };
 
   const handleAccountClick = (account: { id: string; accountHolderName: string }, bankId: string) => {
-    const tabKey = `statements-${account.id}`;
+    const tabKey = `statements-${bankId}-${account.id}`;
     if (tabs.some(tab => tab.key === tabKey)) {
       setActiveTab(tabKey);
       router.push(`${pathname}?bankId=${bankId}&accountId=${account.id}`);
       return;
     }
-    setTabs([
-      ...tabs,
-      {
-        key: tabKey,
-        label: account.accountHolderName,
-        type: 'statements',
-        bankId,
-        accountId: account.id,
-        accountName: account.accountHolderName,
-      },
-    ]);
+    setTabs([...tabs, { 
+      key: tabKey, 
+      label: account.accountHolderName, 
+      type: 'statements', 
+      bankId, 
+      accountId: account.id,
+      accountName: account.accountHolderName
+    }]);
     setActiveTab(tabKey);
     router.push(`${pathname}?bankId=${bankId}&accountId=${account.id}`);
   };
 
-  // const handleSuperBankClick = () => {
-  //   const tabKey = 'super-bank';
-  //   if (tabs.some(tab => tab.key === tabKey)) {
-  //     setActiveTab(tabKey);
-  //     return;
-  //   }
-  //   setTabs([...tabs, { key: tabKey, label: 'Super Bank', type: 'super-bank' }]);
-  //   setActiveTab(tabKey);
-  // };
-
   const handleCloseTab = (tabKey: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (tabKey === 'overview') return;
     const newTabs = tabs.filter(tab => tab.key !== tabKey);
-    setTabs(newTabs);
-    if (activeTab === tabKey) setActiveTab('overview');
+    if (newTabs.length === 0) {
+      setTabs([{ key: 'overview', label: 'Overview', type: 'overview' }]);
+      setActiveTab('overview');
+    } else {
+      setTabs(newTabs);
+      if (activeTab === tabKey) {
+        setActiveTab(newTabs[newTabs.length - 1].key);
+      }
+    }
   };
 
   const handleEditBank = (bank: Bank) => {
@@ -161,44 +237,16 @@ export default function BanksTabsClient() {
   };
 
   const handleDeleteBank = async (bankId: string) => {
-    const bank = banks.find(b => b.id === bankId);
-    const bankName = bank?.bankName || 'this bank';
-    
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${bankName}"?\n\n` +
-      `⚠️  WARNING: This will also delete:\n` +
-      `• ALL accounts under this bank\n` +
-      `• ALL statement files uploaded for this bank\n` +
-      `• ALL transactions from this bank\n\n` +
-      `This action cannot be undone.`
-    );
-    
-    if (!confirmed) return;
-    
+    if (!confirm('Are you sure you want to delete this bank? This will also delete all associated accounts, statements, and transactions.')) {
+      return;
+    }
     try {
-      const response = await fetch(`/api/bank/${bankId}`, { method: 'DELETE' });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete bank');
-      }
-      
-      const result = await response.json();
+      const response = await fetch(`/api/bank/${bankId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete bank');
       setBanks(prev => prev.filter(b => b.id !== bankId));
-      
-      // Show success message with deletion counts
-      let message = `Successfully deleted "${bankName}".`;
-      if (result.deletedAccounts > 0 || result.deletedStatements > 0 || result.deletedTransactions > 0) {
-        message += `\n\nAlso deleted:`;
-        if (result.deletedAccounts > 0) {
-          message += `\n• ${result.deletedAccounts} account(s)`;
-        }
-        if (result.deletedStatements > 0) {
-          message += `\n• ${result.deletedStatements} statement file(s)`;
-        }
-        if (result.deletedTransactions > 0) {
-          message += `\n• ${result.deletedTransactions} transaction(s)`;
-        }
-      }
+      const message = 'Bank deleted successfully. All associated accounts, statements, and transactions have also been deleted.';
       alert(message);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete bank');
@@ -207,7 +255,7 @@ export default function BanksTabsClient() {
 
   // Render tab bar and content
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-gray-50">
       <BanksSidebar 
         onSuperBankClick={() => {
           const tabKey = 'super-bank';
@@ -232,54 +280,39 @@ export default function BanksTabsClient() {
         onAccountClick={handleAccountClick}
       />
       <div className="flex-1 flex flex-col">
-        <div className="flex items-center gap-2 mb-2 sm:mb-3">
-          {tabs.map(tab => (
-            <button
-              key={tab.key}
-              className={`px-5 py-2 rounded-t-lg text-sm font-semibold transition-colors border-b-2 flex items-center gap-2 ${
-                activeTab === tab.key
-                  ? 'border-blue-600 text-blue-700 bg-white shadow-sm'
-                  : 'border-transparent text-gray-500 bg-transparent hover:text-blue-600'
-              }`}
-              style={{
-                marginBottom: activeTab === tab.key ? '-2px' : '0',
-                boxShadow: activeTab === tab.key ? '0 2px 8px 0 rgba(0,0,0,0.03)' : undefined,
-              }}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              {tab.label}
-              {tab.key !== 'overview' && (
-                <RiCloseLine 
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                  onClick={(e) => handleCloseTab(tab.key, e)}
-                />
-              )}
-            </button>
-          ))}
-        </div>
-        <div>
-          {activeTab === 'overview' && (
-            <div className="space-y-4 sm:space-y-6 px-5">
-              <div className="flex flex-row justify-between items-center gap-2 sm:gap-4 mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-xl sm:text-2xl shadow">
-                    <RiBankLine />
-                  </div>
-                  <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Banks</h1>
-                </div>
-                {user?.email === "nitesh.inkhub@gmail.com" && (
-                  <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 sm:px-5 py-2 rounded-lg shadow hover:scale-[1.02] hover:shadow-lg transition-all font-semibold w-auto"
-                  >
-                    <RiAddLine className="text-lg sm:text-xl" />
-                    <span className="block sm:hidden">Add</span>
-                    <span className="hidden sm:block">Add Bank</span>
-                  </button>
+       
+
+        {/* Tab Navigation */}
+        <div className="bg-white border-b border-gray-200 px-6">
+          <div className="flex items-center space-x-1">
+            {tabs.map(tab => (
+              <button
+                key={tab.key}
+                className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 flex items-center space-x-2 ${
+                  activeTab === tab.key
+                    ? 'border-blue-600 text-blue-700 bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+                onClick={() => setActiveTab(tab.key)}
+              >
+                <span>{tab.label}</span>
+                {tab.key !== 'overview' && (
+                  <RiCloseLine 
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    onClick={(e) => handleCloseTab(tab.key, e)}
+                  />
                 )}
-              </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 overflow-hidden">
+          {activeTab === 'overview' && (
+            <div className="p-6">
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-3 rounded-lg">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
                   <p className="font-medium">Error</p>
                   <p className="text-sm">{error}</p>
                   {error.includes('AWS configuration') && (
@@ -289,6 +322,7 @@ export default function BanksTabsClient() {
                   )}
                 </div>
               )}
+              
               <CreateBankModal
                 isOpen={isModalOpen}
                 onClose={() => { setIsModalOpen(false); setEditBank(null); }}
@@ -296,56 +330,107 @@ export default function BanksTabsClient() {
                 editBank={editBank}
                 onUpdate={handleUpdateBank}
               />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {isFetching ? (
-                  <div className="col-span-full text-center py-8 sm:py-12 text-gray-500">
+                  <div className="col-span-full text-center py-12 text-gray-500">
+                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     Loading banks...
                   </div>
                 ) : banks.length === 0 ? (
-                  <div className="col-span-full text-center py-8 sm:py-12 text-gray-500">
-                    No banks added yet. Click &quot;Add Bank&quot; to get started.
+                  <div className="col-span-full text-center py-12 text-gray-500">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <RiBankLine className="text-gray-400" size={32} />
+                    </div>
+                    <p className="text-lg font-medium text-gray-900 mb-2">No banks added yet</p>
+                    <p className="text-sm text-gray-500">Click &quot;Add Bank&quot; to get started</p>
                   </div>
                 ) : (
                   banks.map((bank) => (
                     <div
                       key={bank.id}
                       onClick={() => handleBankCardClick(bank)}
-                      className="cursor-pointer relative bg-white/70 backdrop-blur-lg p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-lg border border-blue-100 transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl group overflow-hidden"
+                      className="cursor-pointer bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 group relative overflow-hidden"
                     >
-                      {user?.email === "nitesh.inkhub@gmail.com" && (
-                        <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      {/* Watermark Icon */}
+                      <div className="absolute top-4 right-4 opacity-5 text-blue-500 text-4xl pointer-events-none select-none rotate-12">
+                        <RiBankLine />
+                      </div>
+                      
+                      {/* Edit/Delete Buttons */}
+                      {user?.email === adminEmail && (
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <button
                             className="p-1 bg-blue-100 hover:bg-blue-200 rounded-full"
                             onClick={e => { e.stopPropagation(); handleEditBank(bank); }}
                             title="Edit Bank"
                           >
-                            <RiEdit2Line className="text-blue-600" />
+                            <RiEdit2Line className="text-blue-600" size={14} />
                           </button>
                           <button
                             className="p-1 bg-red-100 hover:bg-red-200 rounded-full"
                             onClick={e => { e.stopPropagation(); handleDeleteBank(bank.id); }}
                             title="Delete Bank"
                           >
-                            <RiDeleteBin6Line className="text-red-600" />
+                            <RiDeleteBin6Line className="text-red-600" size={14} />
                           </button>
                         </div>
                       )}
-                      <div className="absolute top-4 right-4 opacity-5 text-blue-500 text-4xl sm:text-5xl pointer-events-none select-none rotate-12">
-                        <RiBankLine />
+                      
+                      {/* Bank Content */}
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <RiBankLine className="text-blue-600" size={20} />
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">{bank.bankName}</h3>
                       </div>
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-800 flex items-center gap-2">
-                        <span className="bg-blue-100 p-2 rounded-full text-blue-500 text-lg sm:text-xl shadow">
-                          <RiBankLine />
+                      
+                      {/* Bank Stats */}
+                      {statsLoading ? (
+                        <div className="mb-4 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Accounts:</span>
+                            <div className="w-8 h-4 bg-gray-200 rounded animate-pulse"></div>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Transactions:</span>
+                            <div className="w-8 h-4 bg-gray-200 rounded animate-pulse"></div>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Total Amount:</span>
+                            <div className="w-16 h-4 bg-gray-200 rounded animate-pulse"></div>
+                          </div>
+                        </div>
+                      ) : bankStats[bank.id] ? (
+                        <div className="mb-4 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Accounts:</span>
+                            <span className="font-medium text-gray-900">{bankStats[bank.id].accountCount}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Transactions:</span>
+                            <span className="font-medium text-gray-900">{bankStats[bank.id].transactionCount}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Total Amount:</span>
+                            <span className="font-medium text-gray-900">₹{bankStats[bank.id].totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      ) : null}
+                      
+                      {/* Tags */}
+                      <div className="flex flex-wrap gap-2">
+                        <span className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
+                          <RiMapPinLine size={12} />
+                          {bank.bankName}
                         </span>
-                        {bank.bankName}
-                      </h3>
-                      <div className="mt-3 sm:mt-4 flex flex-wrap gap-1.5 sm:gap-2">
                         {bank.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="flex items-center gap-1 px-2 sm:px-3 py-1 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 text-xs rounded-full shadow border border-blue-200 font-medium"
+                            className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium"
                           >
-                            <RiPriceTag3Line className="text-blue-400" /> {tag}
+                            <RiPriceTag3Line size={12} />
+                            {tag}
                           </span>
                         ))}
                       </div>
@@ -358,7 +443,7 @@ export default function BanksTabsClient() {
           {activeTab !== 'overview' && (() => {
             const tab = tabs.find(t => t.key === activeTab);
             if (tab?.type === 'accounts' && tab.bankId) {
-              return <AccountsClient bankId={tab.bankId} onAccountClick={account => handleAccountClick(account, tab.bankId!)} />;
+              return <AccountsClient bankId={tab.bankId} onAccountClick={account => handleAccountClick(account, tab.bankId!)} allTags={allTags} />;
             }
             if (tab?.type === 'statements' && tab.bankId && tab.accountId) {
               return <StatementsPage />;

@@ -13,7 +13,7 @@ export default function TagsPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [newTag, setNewTag] = useState({ name: '', color: '#60a5fa' });
+  const [newTag, setNewTag] = useState({ name: '', color: '' });
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('#60a5fa');
@@ -49,10 +49,10 @@ export default function TagsPage() {
       const res = await fetch('/api/tags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newTag, userId }),
+        body: JSON.stringify({ name: newTag.name, userId }), // color will be auto-assigned
       });
       if (!res.ok) throw new Error('Failed to add tag');
-      setNewTag({ name: '', color: '#60a5fa' });
+      setNewTag({ name: '', color: '' });
       fetchTags();
     } catch {
       setError('Failed to add tag');
@@ -113,12 +113,9 @@ export default function TagsPage() {
               value={newTag.name}
               onChange={e => setNewTag({ ...newTag, name: e.target.value })}
             />
-            <input
-              type="color"
-              value={newTag.color}
-              onChange={e => setNewTag({ ...newTag, color: e.target.value })}
-              className="w-10 h-10 p-1 rounded-lg border border-gray-200 cursor-pointer"
-            />
+            <div className="text-xs text-gray-500 px-2 py-2">
+              Color will be auto-assigned
+            </div>
           </div>
           <button type="submit" className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-5 py-2 rounded-lg shadow hover:scale-105 hover:shadow-lg transition-all font-semibold whitespace-nowrap ml-auto">Add Tag</button>
         </form>

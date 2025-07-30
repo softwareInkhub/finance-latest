@@ -164,7 +164,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   return (
-    <div className="h-[97vh] flex flex-col">
+    <div className="h-full flex flex-col" style={{ minHeight: 0 }}>
       {/* Top horizontal scrollbar */}
       <div
         ref={topScrollRef}
@@ -179,7 +179,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         <div style={{ width: tableWidth, height: 1 }} />
       </div>
       {/* Table container with vertical scroll */}
-      <div ref={tableScrollRef} className="flex-1 overflow-auto">
+      <div ref={tableScrollRef} className="flex-1 overflow-auto" style={{ minHeight: 0 }}>
       {loading ? (
         <div className="text-gray-500 text-sm">Loading transactions...</div>
       ) : error ? (
@@ -187,6 +187,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       ) : rows.length === 0 ? (
         <div className="text-gray-500 text-sm">No mapped transactions found.</div>
       ) : (
+          <div className="h-full overflow-auto">
         <table className="min-w-full border text-xs sm:text-sm bg-white/80 rounded-xl shadow" style={{ tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: 40 }} />
@@ -294,6 +295,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             })}
           </tbody>
         </table>
+          </div>
       )}
       </div>
     </div>
