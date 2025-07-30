@@ -498,7 +498,8 @@ function StatementsContent() {
     // Tag filter
     if (tagFilters.length > 0) {
       const tags = (tx.tags || []) as Tag[];
-      if (!tags.some(t => tagFilters.includes(t.name))) return false;
+      // Use AND logic: transaction must have ALL selected tags
+      if (!tagFilters.every(selectedTag => tags.some(t => t.name === selectedTag))) return false;
     }
     // Search
     if (

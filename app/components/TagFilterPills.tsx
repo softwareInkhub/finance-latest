@@ -72,16 +72,16 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-4">
       {/* First row: Tags on left, controls on right */}
-      <div className="flex items-center p-3 border-b border-gray-100">
+      <div className="flex items-center p-2 border-b border-gray-100">
         {/* Left half - First 6 tag pills */}
-        <div className="flex-1 flex items-center gap-2">
+        <div className="flex-1 flex items-center gap-1.5">
           {firstRowTags.map(tag => {
             const btnRef = React.createRef<HTMLButtonElement>();
             const count = tagStats ? tagStats[tag.name] : undefined;
             return (
               <span key={tag.id} className="relative inline-flex items-center group">
                 <button
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-md' : 'hover:scale-105 hover:shadow-sm'}`}
+                  className={`px-2 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                   style={{
                     backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
                     color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
@@ -92,7 +92,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                   {tag.name}
                   {typeof count === 'number' && (
                     <span 
-                      className="ml-1.5 bg-white/90 border rounded-full px-1.5 text-xs font-bold align-middle inline-block min-w-[18px] text-center"
+                      className="ml-1 bg-white/90 border rounded-full px-1 text-[10px] font-bold align-middle inline-block min-w-[14px] text-center"
                       style={{
                         borderColor: tag.color || '#6366F1',
                         color: tag.color || '#6366F1'
@@ -104,7 +104,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                 </button>
                 <button
                   ref={btnRef}
-                  className="ml-1 p-1 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="ml-0.5 p-0.5 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
                   style={{ lineHeight: 0 }}
                   onClick={e => {
                     e.stopPropagation();
@@ -114,7 +114,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                   title="Tag options"
                   tabIndex={0}
                 >
-                  <FiMoreHorizontal size={14} />
+                  <FiMoreHorizontal size={12} />
                 </button>
               </span>
             );
@@ -122,28 +122,32 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
           
           {/* Show more indicator when collapsed */}
           {!isExpanded && hasMoreTags && (
-            <span className="px-3 py-1.5 text-sm text-gray-500 bg-gray-50 rounded-full border border-gray-200">
+            <button
+              onClick={() => setIsExpanded(true)}
+              className="px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer"
+              title="Click to show more tags"
+            >
               +{filteredTags.length - 6} more
-            </span>
+            </button>
           )}
         </div>
 
         {/* Right half - Controls and statistics */}
-        <div className="flex items-center gap-4 ml-4">
+        <div className="flex items-center gap-3 ml-3">
           {/* Tag statistics */}
-          <div className="flex items-center gap-3 text-sm text-gray-600">
+          <div className="flex items-center gap-2 text-xs text-gray-600">
             <div className="flex items-center gap-1">
-              <FiTag size={14} />
+              <FiTag size={12} />
               <span>{totalTags} tags</span>
             </div>
             {tagStats && (
               <div className="flex items-center gap-1">
-                <FiFilter size={14} />
+                <FiFilter size={12} />
                 <span>{tagsWithCounts} active</span>
               </div>
             )}
             {activeFilters > 0 && (
-              <div className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+              <div className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md text-xs font-medium">
                 {activeFilters} selected
               </div>
             )}
@@ -151,29 +155,29 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
 
           {/* Search bar */}
           <div className="relative">
-            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <FiSearch className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
             <input
               type="text"
               placeholder="Search tags..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-44 pl-10 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="w-36 pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
           {/* Quick filters */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-sm text-gray-500">
-              <FiFilter size={14} />
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <FiFilter size={12} />
               <span>Quick:</span>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1">
               <button
                 onClick={() => {
                   const tagsWithCounts = allTags.filter(tag => tagStats && tagStats[tag.name] > 0);
                   tagsWithCounts.forEach(tag => onToggleTag(tag.name));
                 }}
-                className="px-2.5 py-1.5 text-sm bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 transition-colors font-medium"
+                className="px-2 py-1 text-xs bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 transition-colors font-medium"
                 title="Select all tags with transactions"
               >
                 Active
@@ -183,7 +187,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                   const tagsWithZeroCounts = allTags.filter(tag => !tagStats || tagStats[tag.name] === 0);
                   tagsWithZeroCounts.forEach(tag => onToggleTag(tag.name));
                 }}
-                className="px-2.5 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors font-medium"
+                className="px-2 py-1 text-xs bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors font-medium"
                 title="Select all tags without transactions"
               >
                 Inactive
@@ -196,7 +200,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                     .slice(0, 3);
                   topTags.forEach(tag => onToggleTag(tag.name));
                 }}
-                className="px-2.5 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors font-medium"
+                className="px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors font-medium"
                 title="Select top 3 most used tags"
               >
                 Top 3
@@ -205,10 +209,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
           </div>
 
           {/* Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {tagFilters.length > 0 && onClear && (
               <button
-                className="px-2.5 py-1.5 text-sm font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md"
+                className="px-2 py-1 text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md"
                 onClick={onClear}
               >
                 Clear
@@ -216,10 +220,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
             )}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+              className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
               title={isExpanded ? "Show less" : "Show more"}
             >
-              {isExpanded ? <FiChevronUp size={18} /> : <FiChevronDown size={18} />}
+              {isExpanded ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
             </button>
           </div>
         </div>
@@ -227,15 +231,15 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
 
       {/* Second row - Additional tags when expanded */}
       {isExpanded && secondRowTags.length > 0 && (
-        <div className="p-3 border-b border-gray-100">
-          <div className="flex flex-wrap gap-2 items-center">
+        <div className="p-2 border-b border-gray-100">
+          <div className="flex flex-wrap gap-1.5 items-center">
             {secondRowTags.map(tag => {
               const btnRef = React.createRef<HTMLButtonElement>();
               const count = tagStats ? tagStats[tag.name] : undefined;
               return (
                 <span key={tag.id} className="relative inline-flex items-center group">
                   <button
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-md' : 'hover:scale-105 hover:shadow-sm'}`}
+                    className={`px-2 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                     style={{
                       backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
                       color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
@@ -246,7 +250,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                     {tag.name}
                     {typeof count === 'number' && (
                       <span 
-                        className="ml-1.5 bg-white/90 border rounded-full px-1.5 text-xs font-bold align-middle inline-block min-w-[18px] text-center"
+                        className="ml-1 bg-white/90 border rounded-full px-1 text-[10px] font-bold align-middle inline-block min-w-[14px] text-center"
                         style={{
                           borderColor: tag.color || '#6366F1',
                           color: tag.color || '#6366F1'
@@ -258,7 +262,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                   </button>
                   <button
                     ref={btnRef}
-                    className="ml-1 p-1 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="ml-0.5 p-0.5 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ lineHeight: 0 }}
                     onClick={e => {
                       e.stopPropagation();
@@ -268,7 +272,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                     title="Tag options"
                     tabIndex={0}
                   >
-                    <FiMoreHorizontal size={14} />
+                    <FiMoreHorizontal size={12} />
                   </button>
                 </span>
               );
@@ -279,7 +283,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
 
       {/* No results message */}
       {searchQuery && filteredTags.length === 0 && (
-        <div className="p-3 text-center text-gray-400 text-sm">
+        <div className="p-2 text-center text-gray-400 text-xs">
           No tags found matching &quot;{searchQuery}&quot;
         </div>
       )}

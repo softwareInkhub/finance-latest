@@ -613,10 +613,18 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                             {Object.entries(tagStats).map(([tagName, stat]) => (
                               <tr 
                                 key={tagName} 
-                                className="hover:bg-blue-100/60 transition cursor-pointer"
+                                className="hover:bg-blue-100/60 transition cursor-pointer group"
                                 onClick={() => handleTagRowClick(tagName)}
+                                title={`Click to view all transactions for tag "${tagName}"`}
                               >
-                                <td className="border px-4 py-2">{tagName}</td>
+                                <td className="border px-4 py-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="group-hover:text-blue-700 transition-colors">{tagName}</span>
+                                    <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                  </div>
+                                </td>
                                 <td className="border px-4 py-2 text-center">{stat.count}</td>
                                 <td className="border px-4 py-2 text-right">{stat.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                                 <td className="border px-4 py-2 text-right text-green-700">{stat.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -848,6 +856,20 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                 Transactions for &quot;{tagTransactionsModal.tagName}&quot;
               </h2>
               <div className="flex gap-2">
+                <button
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow transition-all text-xs flex items-center gap-2"
+                  onClick={() => {
+                    // Open tag transactions in new page
+                    const tagName = encodeURIComponent(tagTransactionsModal.tagName);
+                    window.open(`/tag-transactions?tag=${tagName}`, '_blank');
+                  }}
+                  title="Open in new page"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                  <span>New Page</span>
+                </button>
                 <div className="relative" id="tag-modal-dropdown">
                   <button
                     className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded shadow transition-all text-xs flex items-center gap-2"
@@ -1267,28 +1289,7 @@ export default function SuperBankPage() {
       .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
   }, []);
 
-  // Calculate stats from actual transactions using useMemo for stability
-  const stats = useMemo(() => {
-    if (transactions.length === 0) {
-      return { totalBanks: 0, totalAccounts: 0 };
-    }
-    
-    // Count unique banks from transactions
-    const uniqueBankIds = new Set(transactions.map(tx => tx.bankId));
-    const totalBanks = uniqueBankIds.size;
-    
-    // Count unique accounts from transactions
-    const uniqueAccountIds = new Set(transactions.map(tx => tx.accountId));
-    const totalAccounts = uniqueAccountIds.size;
-    
-    return { totalBanks, totalAccounts };
-  }, [transactions]);
 
-  // Update state when stats change
-  useEffect(() => {
-    setTotalBanks(stats.totalBanks);
-    setTotalAccounts(stats.totalAccounts);
-  }, [stats]);
 
   // Detect text selection in table and which row
   useEffect(() => {
@@ -1579,7 +1580,14 @@ export default function SuperBankPage() {
 
   // Tag filter logic: filter mappedRowsWithConditions by selected tags first
   const tagFilteredRows = tagFilters.length > 0
-    ? mappedRowsWithConditions.filter(row => Array.isArray(row.tags) && row.tags.some(t => tagFilters.includes(t.name)))
+    ? mappedRowsWithConditions.filter(row => {
+        const tags = row.tags;
+        if (!Array.isArray(tags)) return false;
+        // Use AND logic: transaction must have ALL selected tags
+        return tagFilters.every(selectedTag => 
+          tags.some(t => t.name === selectedTag)
+        );
+      })
     : mappedRowsWithConditions;
 
   // Then apply search, date, and tag/untagged filters to tagFilteredRows
@@ -1634,6 +1642,29 @@ export default function SuperBankPage() {
     }
     return searchMatch && dateMatch;
   });
+
+  // Calculate stats from filtered transactions
+  const stats = useMemo(() => {
+    if (filteredRows.length === 0) {
+      return { totalBanks: 0, totalAccounts: 0 };
+    }
+    
+    // Count unique banks from filtered transactions
+    const uniqueBankIds = new Set(filteredRows.map(tx => tx.bankId));
+    const totalBanks = uniqueBankIds.size;
+    
+    // Count unique accounts from filtered transactions
+    const uniqueAccountIds = new Set(filteredRows.map(tx => tx.accountId));
+    const totalAccounts = uniqueAccountIds.size;
+    
+    return { totalBanks, totalAccounts };
+  }, [filteredRows]);
+
+  // Update state when stats change
+  useEffect(() => {
+    setTotalBanks(stats.totalBanks);
+    setTotalAccounts(stats.totalAccounts);
+  }, [stats]);
 
   // Filtered and searched rows (already present as filteredRows)
   const sortedAndFilteredRows = [...filteredRows].sort((a, b) => {
