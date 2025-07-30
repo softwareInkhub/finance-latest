@@ -19,6 +19,7 @@ interface Account {
 interface AccountsClientProps {
   bankId: string | null;
   onAccountClick?: (account: Account) => void;
+  allTags?: Array<{ id: string; name: string; color?: string }>;
 }
 
 // Add type definitions above the component
@@ -27,7 +28,7 @@ type Condition = {
   then: { [key: string]: string };
 };
 
-export default function AccountsClient({ bankId, onAccountClick }: AccountsClientProps) {
+export default function AccountsClient({ bankId, onAccountClick, allTags = [] }: AccountsClientProps) {
   const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -703,14 +704,22 @@ export default function AccountsClient({ bankId, onAccountClick }: AccountsClien
                 </div>
                 {account.tags && account.tags.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {account.tags.map((tag, index) => (
+                    {account.tags.map((tagName, index) => {
+                      const tagObj = allTags.find(t => t.name === tagName);
+                      return (
                       <span
                         key={index}
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200"
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
+                          style={{
+                            backgroundColor: tagObj?.color || '#3B82F6',
+                            color: '#ffffff',
+                            borderColor: tagObj?.color || '#3B82F6'
+                          }}
                       >
-                        {tag}
+                          {tagName}
                       </span>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 <div className="mt-2 border-t border-gray-100 pt-2">

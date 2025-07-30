@@ -3,6 +3,7 @@ import { ScanCommand, PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/
 import { docClient, TABLES, getBankTransactionTable } from '../aws-client';
 import { v4 as uuidv4 } from 'uuid';
 import { ScanCommandInput } from '@aws-sdk/lib-dynamodb';
+import { getUniqueColor, getExistingColors } from '../../utils/colorUtils';
 
 export const runtime = 'nodejs';
 
@@ -50,10 +51,16 @@ export async function POST(request: Request) {
       }
     }
     
+    // Get existing colors to ensure uniqueness
+    const existingColors = getExistingColors(existingTagsResult.Items || []);
+    
+    // Generate unique color if not provided
+    const uniqueColor = color || getUniqueColor(existingColors);
+    
     const tag = {
       id: uuidv4(),
       name,
-      color: color || '#60a5fa', // default: light blue
+      color: uniqueColor,
       userId,
       createdAt: new Date().toISOString(),
     };

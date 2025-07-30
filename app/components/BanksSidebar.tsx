@@ -49,7 +49,7 @@ export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountC
   };
 
   return (
-    <aside className="w-64 min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2">
+    <aside className="w-64 min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2 ">
       <div className="mb-6">
         <input
           type="text"

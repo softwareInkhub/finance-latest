@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FiMoreHorizontal } from 'react-icons/fi';
+import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch, FiFilter, FiTag } from 'react-icons/fi';
 
 interface Tag {
   id: string;
@@ -22,6 +22,8 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
   const [deleteModal, setDeleteModal] = useState<{ tag: Tag } | null>(null);
   const [deleteInput, setDeleteInput] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close context menu on click outside
@@ -52,58 +54,245 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
     }
   };
 
+  // Filter tags based on search query
+  const filteredTags = allTags.filter(tag =>
+    tag.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Show first 6 tags in first row, rest in second row when expanded
+  const firstRowTags = filteredTags.slice(0, 6);
+  const secondRowTags = filteredTags.slice(6);
+  const hasMoreTags = filteredTags.length > 6;
+
+  // Calculate tag statistics
+  const totalTags = allTags.length;
+  const activeFilters = tagFilters.length;
+  const tagsWithCounts = allTags.filter(tag => tagStats && tagStats[tag.name] > 0).length;
+
   return (
-    <div className="flex max-h-[10vh] overflow-y-auto p-4 border-gray-200 border-2 flex-wrap gap-1 sm:gap-2 items-center mb-4 relative">
-      {allTags.map(tag => {
-        const btnRef = React.createRef<HTMLButtonElement>();
-        const count = tagStats ? tagStats[tag.name] : undefined;
-        return (
-          <span key={tag.id} className="relative inline-flex items-center group">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-4">
+      {/* First row: Tags on left, controls on right */}
+      <div className="flex items-center p-3 border-b border-gray-100">
+        {/* Left half - First 6 tag pills */}
+        <div className="flex-1 flex items-center gap-2">
+          {firstRowTags.map(tag => {
+            const btnRef = React.createRef<HTMLButtonElement>();
+            const count = tagStats ? tagStats[tag.name] : undefined;
+            return (
+              <span key={tag.id} className="relative inline-flex items-center group">
+                <button
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-md' : 'hover:scale-105 hover:shadow-sm'}`}
+                  style={{
+                    backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
+                    color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
+                    borderColor: tag.color || '#6366F1'
+                  }}
+                  onClick={() => onToggleTag(tag.name)}
+                >
+                  {tag.name}
+                  {typeof count === 'number' && (
+                    <span 
+                      className="ml-1.5 bg-white/90 border rounded-full px-1.5 text-xs font-bold align-middle inline-block min-w-[18px] text-center"
+                      style={{
+                        borderColor: tag.color || '#6366F1',
+                        color: tag.color || '#6366F1'
+                      }}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+                <button
+                  ref={btnRef}
+                  className="ml-1 p-1 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ lineHeight: 0 }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    const rect = (e.target as HTMLElement).getBoundingClientRect();
+                    setContextMenu({ x: rect.left, y: rect.bottom + 4, tag });
+                  }}
+                  title="Tag options"
+                  tabIndex={0}
+                >
+                  <FiMoreHorizontal size={14} />
+                </button>
+              </span>
+            );
+          })}
+          
+          {/* Show more indicator when collapsed */}
+          {!isExpanded && hasMoreTags && (
+            <span className="px-3 py-1.5 text-sm text-gray-500 bg-gray-50 rounded-full border border-gray-200">
+              +{filteredTags.length - 6} more
+            </span>
+          )}
+        </div>
+
+        {/* Right half - Controls and statistics */}
+        <div className="flex items-center gap-4 ml-4">
+          {/* Tag statistics */}
+          <div className="flex items-center gap-3 text-sm text-gray-600">
+            <div className="flex items-center gap-1">
+              <FiTag size={14} />
+              <span>{totalTags} tags</span>
+            </div>
+            {tagStats && (
+              <div className="flex items-center gap-1">
+                <FiFilter size={14} />
+                <span>{tagsWithCounts} active</span>
+              </div>
+            )}
+            {activeFilters > 0 && (
+              <div className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                {activeFilters} selected
+              </div>
+            )}
+          </div>
+
+          {/* Search bar */}
+          <div className="relative">
+            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search tags..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-44 pl-10 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          {/* Quick filters */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-sm text-gray-500">
+              <FiFilter size={14} />
+              <span>Quick:</span>
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => {
+                  const tagsWithCounts = allTags.filter(tag => tagStats && tagStats[tag.name] > 0);
+                  tagsWithCounts.forEach(tag => onToggleTag(tag.name));
+                }}
+                className="px-2.5 py-1.5 text-sm bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 transition-colors font-medium"
+                title="Select all tags with transactions"
+              >
+                Active
+              </button>
+              <button
+                onClick={() => {
+                  const tagsWithZeroCounts = allTags.filter(tag => !tagStats || tagStats[tag.name] === 0);
+                  tagsWithZeroCounts.forEach(tag => onToggleTag(tag.name));
+                }}
+                className="px-2.5 py-1.5 text-sm bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors font-medium"
+                title="Select all tags without transactions"
+              >
+                Inactive
+              </button>
+              <button
+                onClick={() => {
+                  const topTags = allTags
+                    .filter(tag => tagStats && tagStats[tag.name] > 0)
+                    .sort((a, b) => (tagStats?.[b.name] || 0) - (tagStats?.[a.name] || 0))
+                    .slice(0, 3);
+                  topTags.forEach(tag => onToggleTag(tag.name));
+                }}
+                className="px-2.5 py-1.5 text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors font-medium"
+                title="Select top 3 most used tags"
+              >
+                Top 3
+              </button>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex items-center gap-2">
+            {tagFilters.length > 0 && onClear && (
+              <button
+                className="px-2.5 py-1.5 text-sm font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md"
+                onClick={onClear}
+              >
+                Clear
+              </button>
+            )}
             <button
-              className={`px-2 py-1 rounded-full text-xs font-semibold border shadow-sm transition-all ${tagFilters.includes(tag.name) ? 'bg-indigo-700 text-white border-indigo-800 scale-110' : 'bg-indigo-100 text-indigo-800 border-indigo-200 hover:bg-indigo-200'}`}
-              onClick={() => onToggleTag(tag.name)}
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+              title={isExpanded ? "Show less" : "Show more"}
             >
-              {tag.name}
-              {typeof count === 'number' && (
-                <span className="ml-1 bg-white/80 border border-indigo-200 rounded-full px-1.5 text-[10px] font-bold text-indigo-700 align-middle inline-block min-w-[18px] text-center">
-                  {count}
+              {isExpanded ? <FiChevronUp size={18} /> : <FiChevronDown size={18} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Second row - Additional tags when expanded */}
+      {isExpanded && secondRowTags.length > 0 && (
+        <div className="p-3 border-b border-gray-100">
+          <div className="flex flex-wrap gap-2 items-center">
+            {secondRowTags.map(tag => {
+              const btnRef = React.createRef<HTMLButtonElement>();
+              const count = tagStats ? tagStats[tag.name] : undefined;
+              return (
+                <span key={tag.id} className="relative inline-flex items-center group">
+                  <button
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-md' : 'hover:scale-105 hover:shadow-sm'}`}
+                    style={{
+                      backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
+                      color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
+                      borderColor: tag.color || '#6366F1'
+                    }}
+                    onClick={() => onToggleTag(tag.name)}
+                  >
+                    {tag.name}
+                    {typeof count === 'number' && (
+                      <span 
+                        className="ml-1.5 bg-white/90 border rounded-full px-1.5 text-xs font-bold align-middle inline-block min-w-[18px] text-center"
+                        style={{
+                          borderColor: tag.color || '#6366F1',
+                          color: tag.color || '#6366F1'
+                        }}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    ref={btnRef}
+                    className="ml-1 p-1 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ lineHeight: 0 }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      const rect = (e.target as HTMLElement).getBoundingClientRect();
+                      setContextMenu({ x: rect.left, y: rect.bottom + 4, tag });
+                    }}
+                    title="Tag options"
+                    tabIndex={0}
+                  >
+                    <FiMoreHorizontal size={14} />
+                  </button>
                 </span>
-              )}
-            </button>
-            <button
-              ref={btnRef}
-              className="ml-1 p-0.5 rounded-full hover:bg-gray-200 focus:bg-gray-300 focus:outline-none text-gray-500"
-              style={{ lineHeight: 0 }}
-              onClick={e => {
-                e.stopPropagation();
-                const rect = (e.target as HTMLElement).getBoundingClientRect();
-                setContextMenu({ x: rect.left, y: rect.bottom + 4, tag });
-              }}
-              title="Tag options"
-              tabIndex={0}
-            >
-              <FiMoreHorizontal size={16} />
-            </button>
-          </span>
-        );
-      })}
-      {tagFilters.length > 0 && onClear && (
-        <button
-          className="px-2 py-1 rounded-full text-xs font-semibold border border-gray-300 bg-white text-gray-700 hover:bg-gray-100 ml-1 sm:ml-2"
-          onClick={onClear}
-        >
-          Clear
-        </button>
+              );
+            })}
+          </div>
+        </div>
       )}
+
+      {/* No results message */}
+      {searchQuery && filteredTags.length === 0 && (
+        <div className="p-3 text-center text-gray-400 text-sm">
+          No tags found matching &quot;{searchQuery}&quot;
+        </div>
+      )}
+
       {/* Context Menu */}
       {contextMenu && (
         <div
           ref={menuRef}
-          className="fixed z-50 bg-white border border-gray-200 rounded shadow-lg py-1 px-2 text-sm"
+          className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-sm min-w-[200px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button
-            className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded w-full text-left"
+            className="text-blue-600 hover:bg-blue-50 px-3 py-2 rounded w-full text-left transition-colors"
             onClick={() => {
               if (onApplyTagToAll) onApplyTagToAll(contextMenu.tag.name);
               setContextMenu(null);
@@ -112,7 +301,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
             Apply Tag to All Matching Transactions
           </button>
           <button
-            className="text-red-600 hover:bg-red-50 px-3 py-1 rounded w-full text-left"
+            className="text-red-600 hover:bg-red-50 px-3 py-2 rounded w-full text-left transition-colors"
             onClick={() => {
               setDeleteModal({ tag: contextMenu.tag });
               setContextMenu(null);
@@ -122,23 +311,30 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
           </button>
         </div>
       )}
+      
       {/* Delete Modal */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-xs">
-            <div className="mb-2 text-lg font-semibold text-red-700">Delete Tag</div>
-            <div className="mb-2 text-sm text-gray-700">Type <b>{deleteModal.tag.name}</b> to confirm deletion.</div>
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
+            <div className="mb-4 text-lg font-semibold text-red-700">Delete Tag</div>
+            <div className="mb-4 text-sm text-gray-600">Type <b>{deleteModal.tag.name}</b> to confirm deletion.</div>
             <input
-              className="border px-2 py-1 rounded w-full mb-3"
+              className="border border-gray-300 px-3 py-2 rounded-md w-full mb-4 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
               value={deleteInput}
               onChange={e => setDeleteInput(e.target.value)}
               autoFocus
               disabled={deleting}
             />
-            <div className="flex gap-2 justify-end">
-              <button className="px-3 py-1 rounded bg-gray-100 text-gray-700" onClick={() => { setDeleteModal(null); setDeleteInput(''); }} disabled={deleting}>Cancel</button>
+            <div className="flex gap-3 justify-end">
+              <button 
+                className="px-4 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors" 
+                onClick={() => { setDeleteModal(null); setDeleteInput(''); }} 
+                disabled={deleting}
+              >
+                Cancel
+              </button>
               <button
-                className="px-3 py-1 rounded bg-red-600 text-white disabled:opacity-50"
+                className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
                 disabled={deleteInput.trim().toLowerCase() !== deleteModal.tag.name.toLowerCase() || deleting}
                 onClick={handleDelete}
               >

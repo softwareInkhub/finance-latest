@@ -54,21 +54,21 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   return (
     <div className="flex flex-wrap gap-2 sm:gap-4 justify-center mb-4">
       <div className="px-3 sm:px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-        Total Transactions: {totalTransactions}
+        Total Tranx: {totalTransactions}
       </div>
       {showAmount && (
         <>
           <div className="px-3 sm:px-4 py-2 bg-green-100 text-green-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-            Total Amount: {totalAmount}
+            Total Amt.: {typeof totalAmount === 'number' ? totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : totalAmount}
           </div>
           {typeof totalCredit !== 'undefined' && (
             <div className="px-3 sm:px-4 py-2 bg-cyan-100 text-cyan-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-              Credit: {typeof totalCredit === 'number' ? totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(totalCredit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
+              Cr.: {typeof totalCredit === 'number' ? totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(totalCredit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
             </div>
           )}
           {typeof totalDebit !== 'undefined' && (
             <div className="px-3 sm:px-4 py-2 bg-rose-100 text-rose-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-              Debit: {typeof totalDebit === 'number' ? totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
+              Dr.: {typeof totalDebit === 'number' ? totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
             </div>
           )}
           {showBalance && typeof totalCredit !== 'undefined' && typeof totalDebit !== 'undefined' && (
@@ -77,7 +77,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                 ? 'bg-emerald-100 text-emerald-800'
                 : 'bg-amber-100 text-amber-800'
             }`}>
-              Balance: {(typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) - (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit)) > 0 ? '+' : ''}
+              Bal.: {(typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) - (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit)) > 0 ? '+' : ''}
               {((typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) - (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           )}
@@ -123,7 +123,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         )}
       </div>
       <div className="px-3 sm:px-4 py-2 bg-pink-100 text-pink-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-        Total Accounts: {totalAccounts}
+        Total Acc.: {totalAccounts}
       </div>
       {showTagStats && (
         <>
