@@ -2357,8 +2357,21 @@ export default function SuperBankPage() {
             }}
           />
         )}
-        {/* Filter box below stats, wider on PC */}
-        <TransactionFilterBar
+
+        {/* Tag filter pills section below controls */}
+        <TagFilterPills
+          allTags={sortedTags}
+          tagFilters={tagFilters}
+          onToggleTag={tagName => setTagFilters(filters => filters.includes(tagName) ? filters.filter(t => t !== tagName) : [...filters, tagName])}
+          onClear={() => setTagFilters([])}
+          onTagDeleted={() => handleTagDeleted()}
+          onApplyTagToAll={handleApplyTagToAllFromMenu}
+          tagStats={filteredTagStats}
+        />
+
+
+                {/* Filter box below stats, wider on PC */}
+                <TransactionFilterBar
           search={search}
           onSearchChange={setSearch}
           dateRange={dateRange}
@@ -2376,16 +2389,6 @@ export default function SuperBankPage() {
             { value: 'tagged', label: 'Tagged Only' },
             { value: 'untagged', label: 'Untagged Only' },
           ]}
-        />
-        {/* Tag filter pills section below controls */}
-        <TagFilterPills
-          allTags={sortedTags}
-          tagFilters={tagFilters}
-          onToggleTag={tagName => setTagFilters(filters => filters.includes(tagName) ? filters.filter(t => t !== tagName) : [...filters, tagName])}
-          onClear={() => setTagFilters([])}
-          onTagDeleted={() => handleTagDeleted()}
-          onApplyTagToAll={handleApplyTagToAllFromMenu}
-          tagStats={filteredTagStats}
         />
         {/* Tagging controls above table */}
         {sortedAndFilteredRows.filter(tx => selectedRows.has(tx.id)).length > 0 && (
