@@ -749,7 +749,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
       <div className="relative">
         <div className="absolute top-4 right-4 z-10">
           <div className="relative" ref={dropdownRef}>
-            <button
+        <button
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow transition-all text-sm flex items-center gap-2"
               onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
             >
@@ -778,10 +778,10 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                       handleDownloadPDF();
                       setShowDownloadDropdown(false);
                     }}
-                  >
+        >
                     <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    Download PDF
-                  </button>
+          Download PDF
+        </button>
                 </div>
               </div>
             )}
@@ -2535,30 +2535,30 @@ export default function SuperBankPage() {
             </div>
           )}
           <div className="flex-1 min-h-0">
-            <TransactionTable
-              rows={sortedAndFilteredRows}
-              headers={superHeader}
-              selectedRows={new Set(sortedAndFilteredRows.map((tx, idx) => selectedRows.has(tx.id) ? idx : -1).filter(i => i !== -1))}
-              onRowSelect={idx => {
-                const tx = sortedAndFilteredRows[idx];
-                if (tx) handleRowSelect(tx.id);
-              }}
-              onSelectAll={handleSelectAll}
-              selectAll={selectAll}
-              loading={loading}
-              error={error}
-              onRemoveTag={handleRemoveTag}
-              onReorderHeaders={handleReorderHeaders}
-              transactions={transactions}
-              bankMappings={bankMappings}
-              getValueForColumn={(tx, bankId, sh) => {
-                const value = getValueForColumn(tx, bankId, sh);
-                return value;
-              }}
-            />
+          <TransactionTable
+            rows={sortedAndFilteredRows}
+            headers={superHeader}
+            selectedRows={new Set(sortedAndFilteredRows.map((tx, idx) => selectedRows.has(tx.id) ? idx : -1).filter(i => i !== -1))}
+            onRowSelect={idx => {
+              const tx = sortedAndFilteredRows[idx];
+              if (tx) handleRowSelect(tx.id);
+            }}
+            onSelectAll={handleSelectAll}
+            selectAll={selectAll}
+            loading={loading}
+            error={error}
+            onRemoveTag={handleRemoveTag}
+            onReorderHeaders={handleReorderHeaders}
+            transactions={transactions}
+            bankMappings={bankMappings}
+            getValueForColumn={(tx, bankId, sh) => {
+              const value = getValueForColumn(tx, bankId, sh);
+              return value;
+            }}
+          />
           </div>
         </div>
-      </div>
+        </div>
       </div>
       {/* Floating Download Report Button */}
       <button

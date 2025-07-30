@@ -111,7 +111,7 @@ export default function DashboardPage() {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Total Banks */}
+        {/* Total Banks */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -150,7 +150,7 @@ export default function DashboardPage() {
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <RiFileList3Line className="text-purple-600" size={24} />
               </div>
-            </div>
+        </div>
           </div>
 
           {/* Total Transactions */}
@@ -189,7 +189,7 @@ export default function DashboardPage() {
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <RiTimeLine className="text-gray-400" size={32} />
-              </div>
+          </div>
               <p className="text-gray-500 font-medium">No recent activity</p>
               <p className="text-sm text-gray-400 mt-1">Your recent transactions will appear here</p>
             </div>
@@ -204,8 +204,8 @@ export default function DashboardPage() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
                 <p className="text-sm text-gray-500">Common tasks and shortcuts</p>
-              </div>
-            </div>
+        </div>
+      </div>
             <div className="space-y-4">
               <Link href="/banks" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">

@@ -206,11 +206,11 @@ export default function BanksTabsClient() {
       return;
     }
     setTabs([...tabs, { 
-      key: tabKey, 
-      label: account.accountHolderName, 
-      type: 'statements', 
-      bankId, 
-      accountId: account.id,
+        key: tabKey,
+        label: account.accountHolderName,
+        type: 'statements',
+        bankId,
+        accountId: account.id,
       accountName: account.accountHolderName
     }]);
     setActiveTab(tabKey);
@@ -224,7 +224,7 @@ export default function BanksTabsClient() {
       setTabs([{ key: 'overview', label: 'Overview', type: 'overview' }]);
       setActiveTab('overview');
     } else {
-      setTabs(newTabs);
+    setTabs(newTabs);
       if (activeTab === tabKey) {
         setActiveTab(newTabs[newTabs.length - 1].key);
       }
@@ -285,26 +285,26 @@ export default function BanksTabsClient() {
         {/* Tab Navigation */}
         <div className="bg-white border-b border-gray-200 px-6">
           <div className="flex items-center space-x-1">
-            {tabs.map(tab => (
-              <button
-                key={tab.key}
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
                 className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 flex items-center space-x-2 ${
-                  activeTab === tab.key
+                activeTab === tab.key
                     ? 'border-blue-600 text-blue-700 bg-white'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-                onClick={() => setActiveTab(tab.key)}
-              >
+              }`}
+              onClick={() => setActiveTab(tab.key)}
+            >
                 <span>{tab.label}</span>
-                {tab.key !== 'overview' && (
-                  <RiCloseLine 
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                    onClick={(e) => handleCloseTab(tab.key, e)}
-                  />
-                )}
-              </button>
-            ))}
-          </div>
+              {tab.key !== 'overview' && (
+                <RiCloseLine 
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  onClick={(e) => handleCloseTab(tab.key, e)}
+                />
+              )}
+            </button>
+          ))}
+        </div>
         </div>
 
         {/* Main Content */}
