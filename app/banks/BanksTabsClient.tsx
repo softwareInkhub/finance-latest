@@ -4,7 +4,7 @@ import AccountsClient from '../sub-pages/accounts/AccountsClient';
 import StatementsPage from '../sub-pages/statements/page';
 import SuperBankPage from '../sub-pages/super-bank/page';
 import CreateBankModal from '../components/Modals/CreateBankModal';
-import { RiBankLine, RiPriceTag3Line, RiCloseLine, RiEdit2Line, RiDeleteBin6Line, RiMapPinLine } from 'react-icons/ri';
+import { RiBankLine, RiCloseLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
 import { Bank } from '../types/aws';
 import { useRouter, usePathname } from 'next/navigation';
 import BanksSidebar from '../components/BanksSidebar';
@@ -29,8 +29,6 @@ export default function BanksTabsClient() {
   const [error, setError] = useState<string | null>(null);
   const [editBank, setEditBank] = useState<Bank | null>(null);
   const [allTags, setAllTags] = useState<Array<{ id: string; name: string; color?: string }>>([]);
-  const [bankStats, setBankStats] = useState<{ [bankId: string]: { accountCount: number; transactionCount: number; totalAmount: number } }>({});
-  const [statsLoading, setStatsLoading] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -76,69 +74,7 @@ export default function BanksTabsClient() {
     fetchTags();
   }, []);
 
-  // Fetch bank stats
-  useEffect(() => {
-    const fetchBankStats = async () => {
-      if (banks.length === 0) return;
-      
-      setStatsLoading(true);
-      const stats: { [bankId: string]: { accountCount: number; transactionCount: number; totalAmount: number } } = {};
-      
-      try {
-        const userId = localStorage.getItem('userId');
-        
-        // Fetch all accounts and transactions in parallel
-        const [accountsResponse, transactionsResponse] = await Promise.all([
-          fetch(`/api/account?userId=${userId}`),
-          fetch(`/api/transactions/all?userId=${userId}`)
-        ]);
-        
-        const allAccounts = await accountsResponse.json();
-        const allTransactions = await transactionsResponse.json();
-        
-        // Process each bank
-        for (const bank of banks) {
-          try {
-            // Filter accounts for this bank
-            const bankAccounts = Array.isArray(allAccounts) ? allAccounts.filter((acc: { bankId: string }) => acc.bankId === bank.id) : [];
-            const accountCount = bankAccounts.length;
-            
-            // Filter transactions for this bank
-            const bankTransactions = Array.isArray(allTransactions) ? allTransactions.filter((tx: { bankId: string }) => tx.bankId === bank.id) : [];
-            const transactionCount = bankTransactions.length;
-            
-            // Calculate total amount
-            const totalAmount = bankTransactions.reduce((sum: number, tx: { Amount?: string; amount?: string }) => {
-              const amount = parseFloat(tx.Amount || tx.amount || '0');
-              return sum + (isNaN(amount) ? 0 : amount);
-            }, 0);
-            
-            stats[bank.id] = {
-              accountCount,
-              transactionCount,
-              totalAmount: Math.round(totalAmount * 100) / 100
-            };
-          } catch (error) {
-            console.error(`Error processing stats for bank ${bank.id}:`, error);
-            stats[bank.id] = { accountCount: 0, transactionCount: 0, totalAmount: 0 };
-          }
-        }
-        
-        setBankStats(stats);
-      } catch (error) {
-        console.error('Error fetching bank stats:', error);
-        // Set default stats for all banks
-        banks.forEach(bank => {
-          stats[bank.id] = { accountCount: 0, transactionCount: 0, totalAmount: 0 };
-        });
-        setBankStats(stats);
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-    
-    fetchBankStats();
-  }, [banks]);
+
 
   const handleCreateBank = async (bankName: string, tags: string[]) => {
     const exists = banks.some(
@@ -378,61 +314,11 @@ export default function BanksTabsClient() {
                       )}
                       
                       {/* Bank Content */}
-                      <div className="flex items-center space-x-3 mb-4">
+                      <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                           <RiBankLine className="text-blue-600" size={20} />
                         </div>
                         <h3 className="text-lg font-semibold text-gray-900">{bank.bankName}</h3>
-                      </div>
-                      
-                      {/* Bank Stats */}
-                      {statsLoading ? (
-                        <div className="mb-4 space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Accounts:</span>
-                            <div className="w-8 h-4 bg-gray-200 rounded animate-pulse"></div>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Transactions:</span>
-                            <div className="w-8 h-4 bg-gray-200 rounded animate-pulse"></div>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Total Amount:</span>
-                            <div className="w-16 h-4 bg-gray-200 rounded animate-pulse"></div>
-                          </div>
-                        </div>
-                      ) : bankStats[bank.id] ? (
-                        <div className="mb-4 space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Accounts:</span>
-                            <span className="font-medium text-gray-900">{bankStats[bank.id].accountCount}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Transactions:</span>
-                            <span className="font-medium text-gray-900">{bankStats[bank.id].transactionCount}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Total Amount:</span>
-                            <span className="font-medium text-gray-900">₹{bankStats[bank.id].totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        </div>
-                      ) : null}
-                      
-                      {/* Tags */}
-                      <div className="flex flex-wrap gap-2">
-                        <span className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
-                          <RiMapPinLine size={12} />
-                          {bank.bankName}
-                        </span>
-                        {bank.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium"
-                          >
-                            <RiPriceTag3Line size={12} />
-                            {tag}
-                          </span>
-                        ))}
                       </div>
                     </div>
                   ))

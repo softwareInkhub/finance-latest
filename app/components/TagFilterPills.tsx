@@ -81,10 +81,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
             return (
               <span key={tag.id} className="relative inline-flex items-center group">
                 <button
-                  className={`px-2 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
+                  className={`px-2 py-1 rounded-md text-xs font-bold border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                   style={{
                     backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
-                    color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
+                    color: tagFilters.includes(tag.name) ? '#ffffff' : '#000000',
                     borderColor: tag.color || '#6366F1'
                   }}
                   onClick={() => onToggleTag(tag.name)}
@@ -239,10 +239,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
               return (
                 <span key={tag.id} className="relative inline-flex items-center group">
                   <button
-                    className={`px-2 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
+                    className={`px-2 py-1 rounded-md text-xs font-bold border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                     style={{
                       backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
-                      color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
+                      color: tagFilters.includes(tag.name) ? '#ffffff' : '#000000',
                       borderColor: tag.color || '#6366F1'
                     }}
                     onClick={() => onToggleTag(tag.name)}
