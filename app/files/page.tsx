@@ -1001,29 +1001,28 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
   }, [sliceData]);
 
   // All columns selected by default for duplicate checking
-  const [selectedFields, setSelectedFields] = useState<string[]>([]);
+  const [selectedFields, setSelectedFields] = useState<string[]>(() => {
+    // Initialize with the headers from sliceData if available
+    if (sliceData.length > 0) {
+      return sliceData[0].map((header, idx) => `${header}-${idx}`);
+    }
+    return [];
+  });
 
   // Update selectedFields when previewData changes, but preserve user selections when possible
   useEffect(() => {
-    if (previewData.length > 0) {
-      // Only reset selectedFields if they don't match the current columns
+    if (previewData.length > 0 && selectedFields.length === 0) {
+      // Only initialize selectedFields if they're empty
       const currentHeaders = previewData[0];
       const currentFieldNames = currentHeaders.map((header, idx) => `${header}-${idx}`);
-      
-      // Check if current selectedFields match the new headers
-      const selectedFieldNames = selectedFields.map(f => f.split('-')[0]);
-      const currentHeaderNames = currentHeaders.map(h => h);
-      
-      const fieldsMatch = selectedFieldNames.length === currentHeaderNames.length &&
-        selectedFieldNames.every((name, idx) => name === currentHeaderNames[idx]);
-      
-      if (!fieldsMatch) {
-        // Reset selectedFields to match the current columns exactly
-        setSelectedFields(currentFieldNames);
-      }
+      setSelectedFields(currentFieldNames);
+      setColWidths(currentHeaders.map(() => 160));
+    } else if (previewData.length > 0) {
+      // Just update column widths if selectedFields are already set
+      const currentHeaders = previewData[0];
       setColWidths(currentHeaders.map(() => 160));
     }
-  }, [previewData, selectedFields]);
+  }, [previewData]); // Removed selectedFields from dependencies to prevent infinite loop
 
   // Update allDuplicatesSelected whenever selectedRows or duplicateRows changes
   useEffect(() => {
@@ -1752,6 +1751,31 @@ const FilesPage: React.FC = () => {
     };
     fetchAllUserFiles();
   }, []);
+
+  // Handle fileId parameter from URL to automatically open a specific file
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !filesLoading && files.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const fileId = urlParams.get('fileId');
+      
+      if (fileId) {
+        const file = files.find(f => f.id === fileId);
+        if (file) {
+          // Open the file automatically
+          setSelectedFileId(file.id);
+          setActiveTabId(file.id);
+          setOpenTabs((prevTabs) => {
+            if (prevTabs.find((tab) => tab.id === file.id)) return prevTabs;
+            return [...prevTabs, { id: file.id, name: file.fileName }];
+          });
+          
+          // Clear the URL parameter to avoid reopening on refresh
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, '', newUrl);
+        }
+      }
+    }
+  }, [filesLoading, files]);
 
   // Add a function to refresh files
   const refreshFiles = async () => {

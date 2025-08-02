@@ -2606,7 +2606,7 @@ export default function SuperBankPage() {
               </button>
             </div>
           )}
-          <div className="flex-1 min-h-0" style={{ height: 'calc(100vh - 200px)' }}>
+          <div className="flex-1 h-[65vh] overflow-hidden" >
           <TransactionTable
             rows={sortedAndFilteredRows}
             headers={superHeader}

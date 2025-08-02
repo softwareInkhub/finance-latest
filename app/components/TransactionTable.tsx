@@ -164,7 +164,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col" style={{ minHeight: 0 }}>
+    <div className="h-full flex flex-col h-[85vh]" >
       {/* Top horizontal scrollbar */}
       <div
         ref={topScrollRef}
@@ -179,7 +179,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         <div style={{ width: tableWidth, height: 1 }} />
       </div>
       {/* Table container with vertical scroll */}
-      <div ref={tableScrollRef} className="flex-1 overflow-auto" style={{ minHeight: 0, maxHeight: 'calc(100vh - 250px)' }}>
+      <div ref={tableScrollRef} className="flex-1 overflow-auto" >
       {loading ? (
         <div className="text-gray-500 text-sm">Loading transactions...</div>
       ) : error ? (

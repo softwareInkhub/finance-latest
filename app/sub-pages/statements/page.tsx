@@ -2,27 +2,13 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Modal from '../../components/Modals/Modal';
-import StatementPreviewModal from '../../components/Modals/StatementPreviewModal';
-import { RiFileList3Line, RiUpload2Line, RiDeleteBin6Line, RiPriceTag3Line } from 'react-icons/ri';
 import TransactionTable from '../../components/TransactionTable';
 import TaggingControls from '../../components/TaggingControls';
 import AnalyticsSummary from '../../components/AnalyticsSummary';
 import TransactionFilterBar from '../../components/TransactionFilterBar';
 import TagFilterPills from '../../components/TagFilterPills';
 import React from 'react';
-import ConfirmDeleteModal from '../../components/Modals/ConfirmDeleteModal';
-import { Toaster, toast } from 'react-hot-toast';
-
-interface Statement {
-  id: string;
-  bankId: string;
-  accountId: string;
-  s3FileUrl: string;
-  transactionHeader: string[];
-  tags: string[];
-  fileName?: string;
-}
+import { Toaster } from 'react-hot-toast';
 
 interface Tag {
   id: string;
@@ -48,19 +34,9 @@ function StatementsContent() {
   const searchParams = useSearchParams();
   const bankId = searchParams.get('bankId');
   const accountId = searchParams.get('accountId');
-  const [statements, setStatements] = useState<Statement[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewStatementId, setPreviewStatementId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'statements' | 'transactions'>('statements');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState('');
   const [bankName, setBankName] = useState("");
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -75,46 +51,20 @@ function StatementsContent() {
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [transactionHeaders, setTransactionHeaders] = useState<string[]>([]);
-  const [uploadTags, setUploadTags] = useState('');
   const [searchField, setSearchField] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('desc');
 
-  // Advanced tag creation features - ADDED
+  // Advanced tag creation features
   const [selection, setSelection] = useState<{ text: string; x: number; y: number; rowIdx?: number } | null>(null);
   const [tagCreateMsg, setTagCreateMsg] = useState<string | null>(null);
   const [pendingTag, setPendingTag] = useState<{ tagName: string; rowIdx: number; selectionText: string } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const [deleteModal, setDeleteModal] = useState<{
-    open: boolean;
-    statementId?: string;
-    s3FileUrl?: string;
-    fileName?: string;
-  }>({ open: false });
-  const [deleting, setDeleting] = useState(false);
-
   // Add state for loading and matching preview
   const [applyingTagToAll, setApplyingTagToAll] = useState(false);
 
   useEffect(() => {
-    const fetchStatements = async () => {
-      if (!accountId) return;
-      try {
-        setError(null);
-        const userId = localStorage.getItem("userId") || "";
-        const res = await fetch(`/api/statements?accountId=${accountId}&userId=${userId}`);
-        if (!res.ok) throw new Error("Failed to fetch statements");
-        const data = await res.json();
-        setStatements(data);
-      } catch {
-        setError("Failed to fetch statements");
-      }
-    };
-    fetchStatements();
-  }, [accountId]);
-
-  useEffect(() => {
-    if (tab === 'transactions' && accountId && bankName) {
+    if (accountId && bankName) {
       setLoadingTransactions(true);
       setTransactionsError(null);
       const userId = localStorage.getItem("userId") || "";
@@ -127,7 +77,7 @@ function StatementsContent() {
         .catch(() => setTransactionsError('Failed to fetch transactions'))
         .finally(() => setLoadingTransactions(false));
     }
-  }, [tab, accountId, bankName]);
+  }, [accountId, bankName]);
 
   useEffect(() => {
     if (bankId) {
@@ -305,121 +255,7 @@ function StatementsContent() {
     }
   }, [tagCreateMsg]);
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bankId || !accountId) return;
-    setIsUploading(true);
-    setError(null);
-    const file = fileInputRef.current?.files?.[0];
-    if (!file) {
-      setError("Please select a CSV file.");
-      setIsUploading(false);
-      toast.error("Please select a CSV file.");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('bankId', bankId);
-      formData.append('accountId', accountId);
-      formData.append('fileName', fileName.trim() ? fileName.trim() : file.name);
-      formData.append('userId', localStorage.getItem("userId") || "");
-      formData.append('tags', uploadTags);
-      const res = await fetch('/api/statement/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        toast.error(errorData.error || 'Failed to upload statement');
-        throw new Error(errorData.error || 'Failed to upload statement');
-      }
-      // Refresh statement list
-      const newStatement = await res.json();
-      setStatements(prev => [...prev, newStatement]);
-      setIsModalOpen(false);
-      setFileName('');
-      setUploadTags('');
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      toast.success('File uploaded successfully!');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload statement');
-      toast.error(err instanceof Error ? err.message : 'Failed to upload statement');
-    } finally {
-      setIsUploading(false);
-    }
-  };
 
-  const handleDeleteStatement = (statementId: string, s3FileUrl: string) => {
-    const statement = statements.find(s => s.id === statementId);
-    setDeleteModal({
-      open: true,
-      statementId,
-      s3FileUrl,
-      fileName: statement?.fileName || 'this file',
-    });
-  };
-
-  const confirmDeleteStatement = async () => {
-    const { statementId, s3FileUrl, fileName } = deleteModal;
-    if (!statementId || !s3FileUrl) return;
-    setDeleting(true);
-    const userId = localStorage.getItem("userId") || "";
-    let attempts = 0;
-    let deleted = false;
-    let lastResult = null;
-    let remainingTransactions = 0;
-    while (attempts < 3 && !deleted) {
-      try {
-        const res = await fetch('/api/statement/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            statementId, 
-            s3FileUrl,
-            userId,
-            bankName
-          }),
-        });
-        if (res.ok) {
-          lastResult = await res.json();
-          // After delete, check for remaining transactions for this statement
-          const checkRes = await fetch(`/api/transactions?accountId=${accountId}&userId=${userId}&bankName=${encodeURIComponent(bankName)}`);
-          let stillLeft = [];
-          if (checkRes.ok) {
-            const txs = await checkRes.json();
-            stillLeft = Array.isArray(txs) ? txs.filter(tx => tx.statementId === statementId) : [];
-          }
-          remainingTransactions = stillLeft.length;
-          // Show per-attempt toast (remove this, only show final toast)
-          toast.success(
-            `Deleted "${fileName}" successfully. Deleted ${lastResult.deletedTransactions || 0} transaction(s) in ${attempts + 1} attempt(s).`
-          );
-          if (remainingTransactions === 0) {
-            setStatements(prev => prev.filter(s => s.id !== statementId));
-            deleted = true;
-          } else {
-            attempts++;
-            continue;
-          }
-        } else {
-          const errorData = await res.json();
-          toast.error(`Failed to delete: ${errorData.error || 'Unknown error'}`);
-          break;
-        }
-      } catch (error) {
-        if (attempts === 2) {
-          toast.error(error instanceof Error ? error.message : 'Failed to delete. Please try again.');
-        }
-      }
-      attempts++;
-    }
-    if (!deleted && remainingTransactions > 0) {
-      toast.error(`Some transactions could not be deleted after 3 tries. Deleted ${lastResult?.deletedTransactions || 0} transaction(s) in 3 attempts. Please try again later.`);
-    }
-    setDeleting(false);
-    setDeleteModal({ open: false });
-  };
 
   const handleRowSelect = (id: string) => {
     setSelectedRows(prev => {
@@ -591,14 +427,14 @@ function StatementsContent() {
   });
 
   useEffect(() => {
-    if (tab === 'transactions' && filteredTransactions.length > 0) {
+    if (filteredTransactions.length > 0) {
       const headers = Array.from(new Set(filteredTransactions.flatMap(tx => Object.keys(tx)))).filter(key => key !== 'id' && key !== 'transactionData');
       if (headers.length !== transactionHeaders.length || headers.some((h, i) => h !== transactionHeaders[i])) {
         setTransactionHeaders(headers);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, filteredTransactions.length]);
+  }, [filteredTransactions.length]);
 
   // Handler for column reordering
   const handleReorderHeaders = (newHeaders: string[]) => {
@@ -655,8 +491,8 @@ function StatementsContent() {
   };
 
   useEffect(() => {
-    // Fetch and set the header order from the bank/account when transactions tab is active
-    if (tab === 'transactions' && bankName) {
+    // Fetch and set the header order from the bank/account
+    if (bankName) {
       fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`)
         .then(res => res.json())
         .then(data => {
@@ -669,7 +505,7 @@ function StatementsContent() {
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, bankName, filteredTransactions.length]);
+  }, [bankName, filteredTransactions.length]);
 
   // Add a handler for the tag menu action
   const handleApplyTagToAllFromMenu = (tagName: string) => {
@@ -708,416 +544,243 @@ function StatementsContent() {
         <span>/</span>
         <span>{accountName || 'Account'}</span>
         <span>/</span>
-        <span className="font-semibold text-blue-700">Files</span>
+        <span className="font-semibold text-blue-700">Transactions</span>
       </nav>
       <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
-        {/* File Migration Banner removed */}
-        
         <div className="flex flex-row justify-between items-center gap-2 sm:gap-4 mb-2">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-xl sm:text-2xl shadow">
-              <RiFileList3Line />
-            </div>
-            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Files</h1>
-          </div>
-          <div className="flex items-center gap-4">
-            {/* Tab Switching */}
-            <div className="flex rounded-lg border border-gray-200 p-1 bg-gray-50">
-              <button
-                onClick={() => setTab('statements')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  tab === 'statements'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Files
-              </button>
-              <button
-                onClick={() => setTab('transactions')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  tab === 'transactions'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Transactions
-              </button>
-            </div>
-            {tab === 'statements' && (
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 sm:px-5 py-2 rounded-lg shadow hover:scale-[1.02] hover:shadow-lg transition-all font-semibold w-auto"
-              >
-                <RiUpload2Line className="text-lg sm:text-xl" />
-                <span className="hidden sm:block">Upload File</span>
-              </button>
-            )}
+            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Transactions</h1>
           </div>
         </div>
-        {error && <div className="text-red-600 mb-2">{error}</div>}
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Upload File">
-          <form onSubmit={handleUpload} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">File Name (optional)</label>
-              <input
-                type="text"
-                value={fileName}
-                onChange={e => setFileName(e.target.value)}
-                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Tags (comma separated)</label>
-              <input
-                type="text"
-                value={uploadTags}
-                onChange={e => setUploadTags(e.target.value)}
-                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-                placeholder="e.g. salary, business"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">CSV File</label>
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept=".csv"
-                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-                required
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isUploading}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-            >
-              {isUploading ? 'Uploading...' : 'Upload File'}
-            </button>
-          </form>
-        </Modal>
 
-        {tab === 'statements' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-            {statements.length === 0 ? (
-              <div className="col-span-full text-center py-8 sm:py-12 text-gray-500">
-                No files uploaded yet. Click &quot;Upload File&quot; to get started.
-              </div>
-            ) : (
-              statements.map((statement) => (
-                <div
-                  key={statement.id}
-                  className="relative bg-white/70 backdrop-blur-lg p-1 sm:p-2 rounded-md shadow border border-blue-100 transition-transform duration-200 hover:scale-[1.01] hover:shadow group overflow-hidden cursor-pointer max-w-[180px] min-w-[120px]"
-                  style={{ minHeight: '60px' }}
-                  onClick={() => {
-                    setPreviewUrl(statement.s3FileUrl);
-                    setPreviewStatementId(statement.id);
-                    setPreviewOpen(true);
-                  }}
-                >
-                  <div className="absolute top-1 right-1 opacity-5 text-blue-400 text-lg sm:text-xl pointer-events-none select-none rotate-12">
-                    <RiFileList3Line />
+        <div className="space-y-6">
+          {/* Transaction Filters */}
+          <TransactionFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            onDownload={() => {}}
+            searchField={searchField}
+            onSearchFieldChange={setSearchField}
+            searchFieldOptions={['all', ...transactionHeaders]}
+            sortOrder={sortOrder}
+            onSortOrderChange={setSortOrder}
+            sortOrderOptions={[
+              { value: 'desc', label: 'Latest First' },
+              { value: 'asc', label: 'Oldest First' },
+              { value: 'tagged', label: 'Tagged Only' },
+              { value: 'untagged', label: 'Untagged Only' }
+            ]}
+          />
+          
+          {/* Tag Filters */}
+          <TagFilterPills
+            allTags={Array.isArray(allTags) ? allTags : []}
+            tagFilters={tagFilters}
+            onToggleTag={tagName => {
+              setTagFilters(prev =>
+                prev.includes(tagName)
+                  ? prev.filter(t => t !== tagName)
+                  : [...prev, tagName]
+              );
+            }}
+            onClear={() => setTagFilters([])}
+            tagStats={tagStats}
+            onApplyTagToAll={handleApplyTagToAllFromMenu}
+            onTagDeleted={handleTagDeleted}
+          />
+
+          {/* Tagging Controls */}
+          {selectedRows.size > 0 && (
+            <TaggingControls
+              allTags={Array.isArray(allTags) ? allTags : []}
+              selectedTagId={selectedTagId}
+              onTagChange={setSelectedTagId}
+              onAddTag={handleAddTag}
+              selectedCount={selectedRows.size}
+              tagging={tagging}
+              tagError={tagError}
+              tagSuccess={tagSuccess}
+              onCreateTag={async (name) => {
+                // Example: create tag in backend and return new tag id
+                const userId = localStorage.getItem('userId');
+                const res = await fetch('/api/tags', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ name, userId }) // color will be auto-assigned
+                });
+                
+                if (res.status === 409) {
+                  // Tag already exists - find the existing tag and use it
+                  const existingTagsRes = await fetch('/api/tags?userId=' + userId);
+                  const existingTags = await existingTagsRes.json();
+                  const existingTag = Array.isArray(existingTags) ? existingTags.find(t => t.name === name) : null;
+                  if (existingTag) {
+                    setSelectedTagId(existingTag.id);
+                    return existingTag.id;
+                  }
+                  throw new Error('Tag already exists');
+                }
+                
+                if (!res.ok) throw new Error('Failed to create tag');
+                const tag = await res.json();
+                setAllTags(prev => [...prev, tag]);
+                setSelectedTagId(tag.id);
+                return tag.id;
+              }}
+            />
+          )}
+
+          {/* Analytics Summary */}
+          {(() => {
+            // Compute summary stats for AnalyticsSummary
+            const amountKey = sortedAndFilteredTransactions.length > 0 ? Object.keys(sortedAndFilteredTransactions[0]).find(k => k.toLowerCase().includes('amount')) : undefined;
+            const totalAmount = amountKey ? sortedAndFilteredTransactions.reduce((sum, tx) => {
+              const val = tx[amountKey];
+              let num = 0;
+              if (typeof val === 'string') num = parseFloat(val.replace(/,/g, '')) || 0;
+              else if (typeof val === 'number') num = val;
+              return sum + num;
+            }, 0).toLocaleString() : undefined;
+            const allBankIds = new Set(sortedAndFilteredTransactions.map(tx => tx.bankId));
+            const allAccountIds = new Set(sortedAndFilteredTransactions.map(tx => tx.accountId));
+            let tagged = 0, untagged = 0;
+            sortedAndFilteredTransactions.forEach(tx => {
+              const tags = (tx.tags || []) as Tag[];
+              if (Array.isArray(tags) && tags.length > 0) tagged++; else untagged++;
+            });
+            const totalTags = new Set(sortedAndFilteredTransactions.flatMap(tx => (Array.isArray(tx.tags) ? tx.tags.map(t => t.name) : []))).size;
+            return (
+              <AnalyticsSummary
+                totalTransactions={sortedAndFilteredTransactions.length}
+                totalAmount={totalAmount}
+                totalBanks={allBankIds.size}
+                totalAccounts={allAccountIds.size}
+                tagged={tagged}
+                untagged={untagged}
+                totalTags={totalTags}
+                showAmount={!!amountKey}
+                showTagStats={true}
+              />
+            );
+          })()}
+
+          {/* Transaction Table with Advanced Tag Creation Features */}
+          <div ref={tableRef} className="overflow-x-auto relative">
+            {/* Floating create tag button */}
+            {selection && (
+              <button
+                style={{ position: 'absolute', left: selection.x, top: selection.y + 8, zIndex: 1000 }}
+                className="px-3 py-1 bg-blue-600 text-white rounded shadow font-semibold text-xs hover:bg-blue-700 transition-all"
+                onClick={handleCreateTagFromSelection}
+              >
+                + Create Tag from Selection
+              </button>
+            )}
+            
+            {/* Prompt to apply tag to transaction */}
+            {pendingTag && (
+              <div style={{ 
+                position: 'absolute', 
+                left: selection?.x, 
+                top: selection?.y !== undefined ? selection.y + 8 : 48, 
+                zIndex: 1001 
+              }} className="bg-white border border-blue-200 rounded shadow-lg px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 sm:gap-3 items-center max-w-md">
+                <span className="text-sm">Apply tag &quot;{pendingTag.tagName}&quot; to:</span>
+                {/* Preview of matching transactions */}
+                <div className="w-full">
+                  <div className="text-xs text-gray-600 mb-2">
+                    Matching transactions with &quot;{pendingTag.selectionText}&quot;:
                   </div>
-                  <h3 className="text-xs sm:text-sm font-semibold text-gray-800 flex items-center gap-1">
-                    <span className="bg-blue-100 p-0.5 rounded-full text-blue-500 text-sm sm:text-base shadow">
-                      <RiFileList3Line />
-                    </span>
-                    {statement.fileName || 'File'}
-                  </h3>
-                  <div className="mt-1 flex flex-wrap gap-0.5 min-h-[18px]">
-                    {statement.tags && statement.tags.length > 0 ? (
-                      statement.tags.map((tagName) => {
-                        const tagObj = allTags.find(t => t.name === tagName);
-                        return (
-                      <span
-                            key={tagName}
-                            className="flex items-center gap-0.5 px-1 py-0.5 text-[10px] rounded-full shadow border font-medium"
-                            style={{
-                              backgroundColor: tagObj?.color || '#3B82F6',
-                              color: '#ffffff',
-                              borderColor: tagObj?.color || '#3B82F6'
-                            }}
-                      >
-                            <RiPriceTag3Line className="text-white text-xs" /> {tagName}
-                      </span>
-                        );
-                      })
-                    ) : (
-                      <span className="text-gray-300 text-[10px] italic">No tags</span>
+                  <div className="max-h-24 overflow-y-auto bg-gray-50 rounded p-2">
+                    {transactions.filter((tx) => {
+                      return Object.entries(tx).some(([key, val]) =>
+                        key !== 'tags' &&
+                        ((typeof val === 'string' && val.toLowerCase().includes(pendingTag.selectionText.toLowerCase())) ||
+                         (typeof val === 'number' && String(val).toLowerCase().includes(pendingTag.selectionText.toLowerCase())))
+                      );
+                    }).slice(0, 3).map((tx) => (
+                      <div key={tx.id} className="text-xs text-gray-600 py-1 border-b border-gray-200 last:border-b-0">
+                        <div className="flex justify-between">
+                          <span className="truncate">
+                            {String(tx.Description || tx.description || tx.Reference || tx.reference || 'Transaction')}
+                          </span>
+                          <span className="text-gray-500 ml-2">
+                            {tx.Amount ? `₹${tx.Amount}` : ''}
+                          </span>
+                        </div>
+                        <div className="text-gray-400 text-xs">
+                          {String(tx.Date || tx.date || '')}
+                        </div>
+                      </div>
+                    ))}
+                    {transactions.filter((tx) => {
+                      return Object.entries(tx).some(([key, val]) =>
+                        key !== 'tags' &&
+                        ((typeof val === 'string' && val.toLowerCase().includes(pendingTag.selectionText.toLowerCase())) ||
+                         (typeof val === 'number' && String(val).toLowerCase().includes(pendingTag.selectionText.toLowerCase())))
+                      );
+                    }).length > 3 && (
+                      <div className="text-xs text-gray-500 text-center py-1">
+                        ... and {transactions.filter((tx) => {
+                          return Object.entries(tx).some(([key, val]) =>
+                            key !== 'tags' &&
+                            ((typeof val === 'string' && val.toLowerCase().includes(pendingTag.selectionText.toLowerCase())) ||
+                             (typeof val === 'number' && String(val).toLowerCase().includes(pendingTag.selectionText.toLowerCase())))
+                          );
+                        }).length - 3} more
+                      </div>
                     )}
-                  </div>
-                  <div className="mt-1 flex justify-end gap-1">
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDeleteStatement(statement.id, statement.s3FileUrl); }}
-                      className="px-1 py-0.5 text-red-600 bg-red-50 rounded hover:bg-red-100"
-                    >
-                      <RiDeleteBin6Line className="text-sm" />
-                    </button>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Transaction Filters */}
-            <TransactionFilterBar
-              search={search}
-              onSearchChange={setSearch}
-              dateRange={dateRange}
-              onDateRangeChange={setDateRange}
-              onDownload={() => {}}
-              searchField={searchField}
-              onSearchFieldChange={setSearchField}
-              searchFieldOptions={['all', ...transactionHeaders]}
-              sortOrder={sortOrder}
-              onSortOrderChange={setSortOrder}
-              sortOrderOptions={[
-                { value: 'desc', label: 'Latest First' },
-                { value: 'asc', label: 'Oldest First' },
-                { value: 'tagged', label: 'Tagged Only' },
-                { value: 'untagged', label: 'Untagged Only' }
-              ]}
-            />
-            
-            {/* Tag Filters */}
-            <TagFilterPills
-              allTags={Array.isArray(allTags) ? allTags : []}
-              tagFilters={tagFilters}
-              onToggleTag={tagName => {
-                setTagFilters(prev =>
-                  prev.includes(tagName)
-                    ? prev.filter(t => t !== tagName)
-                    : [...prev, tagName]
-                );
-              }}
-              onClear={() => setTagFilters([])}
-              tagStats={tagStats}
-              onApplyTagToAll={handleApplyTagToAllFromMenu}
-              onTagDeleted={handleTagDeleted}
-            />
-
-            {/* Tagging Controls */}
-            {selectedRows.size > 0 && (
-              <TaggingControls
-                allTags={Array.isArray(allTags) ? allTags : []}
-                selectedTagId={selectedTagId}
-                onTagChange={setSelectedTagId}
-                onAddTag={handleAddTag}
-                selectedCount={selectedRows.size}
-                tagging={tagging}
-                tagError={tagError}
-                tagSuccess={tagSuccess}
-                onCreateTag={async (name) => {
-                  // Example: create tag in backend and return new tag id
-                  const userId = localStorage.getItem('userId');
-                  const res = await fetch('/api/tags', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, userId }) // color will be auto-assigned
-                  });
-                  
-                  if (res.status === 409) {
-                    // Tag already exists - find the existing tag and use it
-                    const existingTagsRes = await fetch('/api/tags?userId=' + userId);
-                    const existingTags = await existingTagsRes.json();
-                    const existingTag = Array.isArray(existingTags) ? existingTags.find(t => t.name === name) : null;
-                    if (existingTag) {
-                      setSelectedTagId(existingTag.id);
-                      return existingTag.id;
-                    }
-                    throw new Error('Tag already exists');
-                  }
-                  
-                  if (!res.ok) throw new Error('Failed to create tag');
-                  const tag = await res.json();
-                  setAllTags(prev => [...prev, tag]);
-                  setSelectedTagId(tag.id);
-                  return tag.id;
-                }}
-              />
-            )}
-
-            {/* Analytics Summary */}
-            {tab === 'transactions' && (
-              (() => {
-                // Compute summary stats for AnalyticsSummary
-                const amountKey = sortedAndFilteredTransactions.length > 0 ? Object.keys(sortedAndFilteredTransactions[0]).find(k => k.toLowerCase().includes('amount')) : undefined;
-                const totalAmount = amountKey ? sortedAndFilteredTransactions.reduce((sum, tx) => {
-                  const val = tx[amountKey];
-                  let num = 0;
-                  if (typeof val === 'string') num = parseFloat(val.replace(/,/g, '')) || 0;
-                  else if (typeof val === 'number') num = val;
-                  return sum + num;
-                }, 0).toLocaleString() : undefined;
-                const allBankIds = new Set(sortedAndFilteredTransactions.map(tx => tx.bankId));
-                const allAccountIds = new Set(sortedAndFilteredTransactions.map(tx => tx.accountId));
-                let tagged = 0, untagged = 0;
-                sortedAndFilteredTransactions.forEach(tx => {
-                  const tags = (tx.tags || []) as Tag[];
-                  if (Array.isArray(tags) && tags.length > 0) tagged++; else untagged++;
-                });
-                const totalTags = new Set(sortedAndFilteredTransactions.flatMap(tx => (Array.isArray(tx.tags) ? tx.tags.map(t => t.name) : []))).size;
-                return (
-                  <AnalyticsSummary
-                    totalTransactions={sortedAndFilteredTransactions.length}
-                    totalAmount={totalAmount}
-                    totalBanks={allBankIds.size}
-                    totalAccounts={allAccountIds.size}
-                    tagged={tagged}
-                    untagged={untagged}
-                    totalTags={totalTags}
-                    showAmount={!!amountKey}
-                    showTagStats={true}
-                  />
-                );
-              })()
-            )}
-
-            {/* Transaction Table with Advanced Tag Creation Features - ADDED */}
-            {tab === 'transactions' && (
-              <div ref={tableRef} className="overflow-x-auto relative">
-                {/* Floating create tag button - ADDED */}
-                {selection && (
-                  <button
-                    style={{ position: 'absolute', left: selection.x, top: selection.y + 8, zIndex: 1000 }}
-                    className="px-3 py-1 bg-blue-600 text-white rounded shadow font-semibold text-xs hover:bg-blue-700 transition-all"
-                    onClick={handleCreateTagFromSelection}
-                  >
-                    + Create Tag from Selection
-                  </button>
-                )}
-                
-                {/* Prompt to apply tag to transaction - ADDED */}
-                {pendingTag && (
-                  <div style={{ 
-                    position: 'absolute', 
-                    left: selection?.x, 
-                    top: selection?.y !== undefined ? selection.y + 8 : 48, 
-                    zIndex: 1001 
-                  }} className="bg-white border border-blue-200 rounded shadow-lg px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 sm:gap-3 items-center max-w-md">
-                    <span className="text-sm">Apply tag &quot;{pendingTag.tagName}&quot; to:</span>
-                    {/* Preview of matching transactions */}
-                    <div className="w-full">
-                      <div className="text-xs text-gray-600 mb-2">
-                        Matching transactions with &quot;{pendingTag.selectionText}&quot;:
-                      </div>
-                      <div className="max-h-24 overflow-y-auto bg-gray-50 rounded p-2">
-                        {transactions.filter((tx) => {
-                          return Object.entries(tx).some(([key, val]) =>
-                            key !== 'tags' &&
-                            ((typeof val === 'string' && val.toLowerCase().includes(pendingTag.selectionText.toLowerCase())) ||
-                             (typeof val === 'number' && String(val).toLowerCase().includes(pendingTag.selectionText.toLowerCase())))
-                          );
-                        }).slice(0, 3).map((tx) => (
-                          <div key={tx.id} className="text-xs text-gray-600 py-1 border-b border-gray-200 last:border-b-0">
-                            <div className="flex justify-between">
-                              <span className="truncate">
-                                {String(tx.Description || tx.description || tx.Reference || tx.reference || 'Transaction')}
-                              </span>
-                              <span className="text-gray-500 ml-2">
-                                {tx.Amount ? `₹${tx.Amount}` : ''}
-                              </span>
-                            </div>
-                            <div className="text-gray-400 text-xs">
-                              {String(tx.Date || tx.date || '')}
-                            </div>
-                          </div>
-                        ))}
-                        {transactions.filter((tx) => {
-                          return Object.entries(tx).some(([key, val]) =>
-                            key !== 'tags' &&
-                            ((typeof val === 'string' && val.toLowerCase().includes(pendingTag.selectionText.toLowerCase())) ||
-                             (typeof val === 'number' && String(val).toLowerCase().includes(pendingTag.selectionText.toLowerCase())))
-                          );
-                        }).length > 3 && (
-                          <div className="text-xs text-gray-500 text-center py-1">
-                            ... and {transactions.filter((tx) => {
-                              return Object.entries(tx).some(([key, val]) =>
-                                key !== 'tags' &&
-                                ((typeof val === 'string' && val.toLowerCase().includes(pendingTag.selectionText.toLowerCase())) ||
-                                 (typeof val === 'number' && String(val).toLowerCase().includes(pendingTag.selectionText.toLowerCase())))
-                              );
-                            }).length - 3} more
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <button className="px-3 py-1 bg-green-600 text-white rounded font-semibold text-xs hover:bg-green-700" onClick={handleApplyTagToRow} disabled={tagging}>Only this transaction</button>
-                      <button className="px-3 py-1 bg-blue-600 text-white rounded font-semibold text-xs hover:bg-blue-700" onClick={handleApplyTagToAll} disabled={applyingTagToAll}>All transactions with this text</button>
-                      <button className="px-3 py-1 bg-gray-200 text-gray-700 rounded font-semibold text-xs hover:bg-gray-300" onClick={() => setPendingTag(null)}>Cancel</button>
-                    </div>
-                    {/* Loading indicator for bulk apply */}
-                    {applyingTagToAll && (
-                      <div className="w-full flex flex-col items-center mt-2">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
-                        <span className="text-xs text-blue-700">Applying tag to all matching transactions...</span>
-                      </div>
-                    )}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button className="px-3 py-1 bg-green-600 text-white rounded font-semibold text-xs hover:bg-green-700" onClick={handleApplyTagToRow} disabled={tagging}>Only this transaction</button>
+                  <button className="px-3 py-1 bg-blue-600 text-white rounded font-semibold text-xs hover:bg-blue-700" onClick={handleApplyTagToAll} disabled={applyingTagToAll}>All transactions with this text</button>
+                  <button className="px-3 py-1 bg-gray-200 text-gray-700 rounded font-semibold text-xs hover:bg-gray-300" onClick={() => setPendingTag(null)}>Cancel</button>
+                </div>
+                {/* Loading indicator for bulk apply */}
+                {applyingTagToAll && (
+                  <div className="w-full flex flex-col items-center mt-2">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
+                    <span className="text-xs text-blue-700">Applying tag to all matching transactions...</span>
                   </div>
                 )}
-                
-                {/* Success message - ADDED */}
-                {tagCreateMsg && (
-                  <div className="absolute left-1/2 top-2 -translate-x-1/2 bg-green-100 text-green-800 px-3 sm:px-4 py-2 rounded shadow text-xs sm:text-sm z-50">
-                    {tagCreateMsg}
-                  </div>
-                )}
-                
-              <TransactionTable
-                rows={sortedAndFilteredTransactions.map(tx => {
-                  // Remove transactionData property without referencing it directly
-                  const filtered = Object.fromEntries(Object.entries(tx).filter(([key]) => key !== 'transactionData'));
-                  return {
-                    ...filtered,
-                    tags: tx.tags || []
-                  };
-                })}
-                headers={transactionHeaders}
-                selectedRows={new Set(sortedAndFilteredTransactions.map((tx, idx) => selectedRows.has(tx.id) ? idx : -1).filter(i => i !== -1))}
-                onRowSelect={idx => {
-                  const tx = sortedAndFilteredTransactions[idx];
-                  if (tx) handleRowSelect(tx.id);
-                }}
-                onSelectAll={handleSelectAll}
-                selectAll={selectAll}
-                loading={loadingTransactions}
-                error={transactionsError}
-                onReorderHeaders={handleReorderHeaders}
-                  onRemoveTag={handleRemoveTag}
-              />
               </div>
             )}
+            
+            {/* Success message */}
+            {tagCreateMsg && (
+              <div className="absolute left-1/2 top-2 -translate-x-1/2 bg-green-100 text-green-800 px-3 sm:px-4 py-2 rounded shadow text-xs sm:text-sm z-50">
+                {tagCreateMsg}
+              </div>
+            )}
+            
+            <TransactionTable
+              rows={sortedAndFilteredTransactions.map(tx => {
+                // Remove transactionData property without referencing it directly
+                const filtered = Object.fromEntries(Object.entries(tx).filter(([key]) => key !== 'transactionData'));
+                return {
+                  ...filtered,
+                  tags: tx.tags || []
+                };
+              })}
+              headers={transactionHeaders}
+              selectedRows={new Set(sortedAndFilteredTransactions.map((tx, idx) => selectedRows.has(tx.id) ? idx : -1).filter(i => i !== -1))}
+              onRowSelect={idx => {
+                const tx = sortedAndFilteredTransactions[idx];
+                if (tx) handleRowSelect(tx.id);
+              }}
+              onSelectAll={handleSelectAll}
+              selectAll={selectAll}
+              loading={loadingTransactions}
+              error={transactionsError}
+              onReorderHeaders={handleReorderHeaders}
+              onRemoveTag={handleRemoveTag}
+            />
           </div>
-        )}
+        </div>
       </div>
-      <StatementPreviewModal
-        isOpen={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        s3FileUrl={previewUrl}
-        statementId={previewStatementId}
-        bankId={bankId}
-        accountId={accountId}
-        accountNumber={accountNumber}
-        fileName={statements.find(s => s.id === previewStatementId)?.fileName || ''}
-      />
-      <ConfirmDeleteModal
-        isOpen={deleteModal.open}
-        onClose={() => setDeleteModal({ open: false })}
-        onConfirm={confirmDeleteStatement}
-        itemName={deleteModal.fileName || ''}
-        itemType="file"
-        description="This will also delete all related transactions imported from this file. This action cannot be undone."
-        loading={deleting}
-      />
     </div>
   );
 }
