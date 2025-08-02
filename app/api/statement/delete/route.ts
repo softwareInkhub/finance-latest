@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { DeleteCommand, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DeleteCommand, GetCommand, ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { docClient, getBankTransactionTable, s3, S3_BUCKET } from '../../aws-client';
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
 
@@ -55,26 +55,45 @@ export async function POST(request: Request) {
     // Get bank-specific table name
     const tableName = getBankTransactionTable(finalBankName || 'default');
 
-    // First, find and delete all related transactions from the bank-specific table
+    // Find and delete all related transactions from the bank-specific table with pagination
     // Look for transactions with matching statementId, fileName, or s3FileUrl
-    let transactionResult;
-    try {
-      transactionResult = await docClient.send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'statementId = :statementId OR s3FileUrl = :s3FileUrl',
-        ExpressionAttributeValues: {
-          ':statementId': statementId,
-          ':s3FileUrl': s3FileUrl,
-        },
-      })
-    );
-    } catch (error) {
-      console.warn('Failed to scan transactions table, continuing with file deletion:', error);
-      transactionResult = { Items: [] };
+    const relatedTransactions: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+    let hasMoreItems = true;
+    
+    while (hasMoreItems) {
+      try {
+        const params: ScanCommandInput = {
+          TableName: tableName,
+          FilterExpression: 'statementId = :statementId OR s3FileUrl = :s3FileUrl',
+          ExpressionAttributeValues: {
+            ':statementId': statementId,
+            ':s3FileUrl': s3FileUrl,
+          },
+        };
+        
+        if (lastEvaluatedKey) {
+          params.ExclusiveStartKey = lastEvaluatedKey;
+        }
+        
+        const transactionResult = await docClient.send(new ScanCommand(params));
+        const batchTransactions = transactionResult.Items || [];
+        relatedTransactions.push(...batchTransactions);
+        
+        // Check if there are more items to fetch
+        lastEvaluatedKey = transactionResult.LastEvaluatedKey;
+        hasMoreItems = !!lastEvaluatedKey;
+        
+        // Add a small delay to avoid overwhelming DynamoDB
+        if (hasMoreItems) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.warn('Failed to scan transactions table, continuing with file deletion:', error);
+        break;
+      }
     }
 
-    const relatedTransactions = transactionResult.Items || [];
     console.log(`Found ${relatedTransactions.length} related transactions to delete`);
 
     // Handle batch deletion if batchStart and batchEnd are provided

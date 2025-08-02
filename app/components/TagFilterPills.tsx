@@ -92,7 +92,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                   {tag.name}
                   {typeof count === 'number' && (
                     <span 
-                      className="ml-1 bg-white/90 border rounded-full px-1 text-[10px] font-bold align-middle inline-block min-w-[14px] text-center"
+                      className="ml-1 bg-white/90 border rounded-full px-1 text-[10px] font-bold align-middle inline-block min-w-[14px] text-center text-black"
                       style={{
                         borderColor: tag.color || '#6366F1',
                         color: 'black',
@@ -242,7 +242,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                     className={`px-2 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                     style={{
                       backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
-                      color: tagFilters.includes(tag.name) ? '#ffffff' : tag.color || '#6366F1',
+                      color: tagFilters.includes(tag.name) ? '#ffffff' : 'black',
                       borderColor: tag.color || '#6366F1'
                     }}
                     onClick={() => onToggleTag(tag.name)}

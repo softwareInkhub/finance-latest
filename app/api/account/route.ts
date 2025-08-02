@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PutCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES } from '../aws-client';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -37,14 +37,38 @@ export async function GET(request: Request) {
       filterExpression += ' AND userId = :userId';
       expressionAttributeValues[':userId'] = userId;
     }
-    const result = await docClient.send(
-      new ScanCommand({
+    
+    // Fetch all accounts with pagination
+    const allAccounts: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+    let hasMoreItems = true;
+    
+    while (hasMoreItems) {
+      const params: ScanCommandInput = {
         TableName: TABLES.ACCOUNTS,
         FilterExpression: filterExpression,
         ExpressionAttributeValues: expressionAttributeValues,
-      })
-    );
-    return NextResponse.json(result.Items || []);
+      };
+      
+      if (lastEvaluatedKey) {
+        params.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      
+      const result = await docClient.send(new ScanCommand(params));
+      const accounts = result.Items || [];
+      allAccounts.push(...accounts);
+      
+      // Check if there are more items to fetch
+      lastEvaluatedKey = result.LastEvaluatedKey;
+      hasMoreItems = !!lastEvaluatedKey;
+      
+      // Add a small delay to avoid overwhelming DynamoDB
+      if (hasMoreItems) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    return NextResponse.json(allAccounts);
   } catch (error) {
     console.error('Error fetching accounts:', error);
     return NextResponse.json({ error: 'Failed to fetch accounts' }, { status: 500 });

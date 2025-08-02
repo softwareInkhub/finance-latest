@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { docClient, getBankTransactionTable } from '../aws-client';
 
 // GET /api/transactions?accountId=xxx&userId=yyy&bankName=zzz
@@ -23,13 +23,36 @@ export async function GET(request: Request) {
       filterExpression += ' AND userId = :userId';
       expressionAttributeValues[':userId'] = userId;
     }
-    const result = await docClient.send(
-      new ScanCommand({
+
+    // Fetch all transactions with pagination
+    const allTransactions: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+    let hasMoreItems = true;
+    
+    while (hasMoreItems) {
+      const params: ScanCommandInput = {
         TableName: tableName,
         FilterExpression: filterExpression,
         ExpressionAttributeValues: expressionAttributeValues,
-      })
-    );
+      };
+      
+      if (lastEvaluatedKey) {
+        params.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      
+      const result = await docClient.send(new ScanCommand(params));
+      const transactions = result.Items || [];
+      allTransactions.push(...transactions);
+      
+      // Check if there are more items to fetch
+      lastEvaluatedKey = result.LastEvaluatedKey;
+      hasMoreItems = !!lastEvaluatedKey;
+      
+      // Add a small delay to avoid overwhelming DynamoDB
+      if (hasMoreItems) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
 
     // Fetch all tags to populate tag data
     const tagsResult = await docClient.send(
@@ -41,7 +64,7 @@ export async function GET(request: Request) {
     const tagsMap = new Map(allTags.map(tag => [tag.id, tag]));
 
     // Populate tag data for each transaction (handle both string IDs and full objects)
-    const transactions = (result.Items || []).map(transaction => {
+    const transactions = allTransactions.map(transaction => {
       if (Array.isArray(transaction.tags)) {
         transaction.tags = transaction.tags
           .map(tag => typeof tag === 'string' ? tagsMap.get(tag) : tag)
@@ -50,6 +73,7 @@ export async function GET(request: Request) {
       return transaction;
     });
 
+    console.log(`Fetched ${transactions.length} transactions for account ${accountId}`);
     return NextResponse.json(transactions);
   } catch (error) {
     console.error('Error fetching transactions:', error);

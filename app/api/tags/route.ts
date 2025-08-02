@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, PutCommand, UpdateCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { ScanCommand, PutCommand, UpdateCommand, DeleteCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES, getBankTransactionTable } from '../aws-client';
 import { v4 as uuidv4 } from 'uuid';
-import { ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { getUniqueColor, getExistingColors } from '../../utils/colorUtils';
 
 export const runtime = 'nodejs';
@@ -12,14 +11,39 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
-    const params: ScanCommandInput = { TableName: TABLES.TAGS };
-    if (userId) {
-      params.FilterExpression = '#userId = :userId';
-      params.ExpressionAttributeNames = { '#userId': 'userId' };
-      params.ExpressionAttributeValues = { ':userId': userId };
+    
+    // Fetch all tags with pagination
+    const allTags: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+    let hasMoreItems = true;
+    
+    while (hasMoreItems) {
+      const params: ScanCommandInput = { TableName: TABLES.TAGS };
+      if (userId) {
+        params.FilterExpression = '#userId = :userId';
+        params.ExpressionAttributeNames = { '#userId': 'userId' };
+        params.ExpressionAttributeValues = { ':userId': userId };
+      }
+      
+      if (lastEvaluatedKey) {
+        params.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      
+      const result = await docClient.send(new ScanCommand(params));
+      const tags = result.Items || [];
+      allTags.push(...tags);
+      
+      // Check if there are more items to fetch
+      lastEvaluatedKey = result.LastEvaluatedKey;
+      hasMoreItems = !!lastEvaluatedKey;
+      
+      // Add a small delay to avoid overwhelming DynamoDB
+      if (hasMoreItems) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-    const result = await docClient.send(new ScanCommand(params));
-    return NextResponse.json(result.Items || []);
+    
+    return NextResponse.json(allTags);
   } catch (error) {
     console.error('Error fetching tags:', error);
     return NextResponse.json({ error: 'Failed to fetch tags' }, { status: 500 });
@@ -32,19 +56,41 @@ export async function POST(request: Request) {
     const { name, color, userId } = await request.json();
     if (!name || !userId) return NextResponse.json({ error: 'Tag name and userId required' }, { status: 400 });
     
-    // Check if tag with same name already exists for this user (case-insensitive)
-    const existingTagsParams: ScanCommandInput = {
-      TableName: TABLES.TAGS,
-      FilterExpression: '#userId = :userId',
-      ExpressionAttributeNames: { '#userId': 'userId' },
-      ExpressionAttributeValues: { ':userId': userId },
-    };
-    const existingTagsResult = await docClient.send(new ScanCommand(existingTagsParams));
+    // Check if tag with same name already exists for this user (case-insensitive) with pagination
+    const existingTags: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+    let hasMoreItems = true;
+    
+    while (hasMoreItems) {
+      const existingTagsParams: ScanCommandInput = {
+        TableName: TABLES.TAGS,
+        FilterExpression: '#userId = :userId',
+        ExpressionAttributeNames: { '#userId': 'userId' },
+        ExpressionAttributeValues: { ':userId': userId },
+      };
+      
+      if (lastEvaluatedKey) {
+        existingTagsParams.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      
+      const existingTagsResult = await docClient.send(new ScanCommand(existingTagsParams));
+      const batchTags = existingTagsResult.Items || [];
+      existingTags.push(...batchTags);
+      
+      // Check if there are more items to fetch
+      lastEvaluatedKey = existingTagsResult.LastEvaluatedKey;
+      hasMoreItems = !!lastEvaluatedKey;
+      
+      // Add a small delay to avoid overwhelming DynamoDB
+      if (hasMoreItems) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
     
     // Check for case-insensitive duplicate
-    if (existingTagsResult.Items && existingTagsResult.Items.length > 0) {
-      const existingTag = existingTagsResult.Items.find(tag => 
-        tag.name && tag.name.toLowerCase() === name.toLowerCase()
+    if (existingTags.length > 0) {
+      const existingTag = existingTags.find(tag => 
+        typeof tag.name === 'string' && tag.name.toLowerCase() === name.toLowerCase()
       );
       if (existingTag) {
         return NextResponse.json({ error: 'Tag with this name already exists' }, { status: 409 });
@@ -52,7 +98,7 @@ export async function POST(request: Request) {
     }
     
     // Get existing colors to ensure uniqueness
-    const existingColors = getExistingColors(existingTagsResult.Items || []);
+    const existingColors = getExistingColors(existingTags);
     
     // Generate unique color if not provided
     const uniqueColor = color || getUniqueColor(existingColors);
@@ -100,15 +146,60 @@ export async function DELETE(request: Request) {
     await docClient.send(new DeleteCommand({ TableName: TABLES.TAGS, Key: { id } }));
 
     // 2. Remove this tag from all transactions in all bank-specific tables
-    // Get all banks
-    const banksResult = await docClient.send(new ScanCommand({ TableName: TABLES.BANKS }));
-    const banks = banksResult.Items || [];
-    for (const bank of banks) {
-      const tableName = getBankTransactionTable(bank.bankName);
+    // Get all banks with pagination
+    const allBanks: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+    let hasMoreItems = true;
+    
+    while (hasMoreItems) {
+      const banksParams: ScanCommandInput = { TableName: TABLES.BANKS };
+      if (lastEvaluatedKey) {
+        banksParams.ExclusiveStartKey = lastEvaluatedKey;
+      }
+      
+      const banksResult = await docClient.send(new ScanCommand(banksParams));
+      const batchBanks = banksResult.Items || [];
+      allBanks.push(...batchBanks);
+      
+      // Check if there are more items to fetch
+      lastEvaluatedKey = banksResult.LastEvaluatedKey;
+      hasMoreItems = !!lastEvaluatedKey;
+      
+      // Add a small delay to avoid overwhelming DynamoDB
+      if (hasMoreItems) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    for (const bank of allBanks) {
+      const tableName = getBankTransactionTable(typeof bank.bankName === 'string' ? bank.bankName : '');
       try {
-        const txResult = await docClient.send(new ScanCommand({ TableName: tableName }));
-        const transactions = Array.isArray(txResult.Items) ? txResult.Items : [];
-        const updatePromises = transactions.map(async (tx) => {
+        // Fetch all transactions for this bank with pagination
+        const allTransactions: Record<string, unknown>[] = [];
+        let txLastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+        let txHasMoreItems = true;
+        
+        while (txHasMoreItems) {
+          const txParams: ScanCommandInput = { TableName: tableName };
+          if (txLastEvaluatedKey) {
+            txParams.ExclusiveStartKey = txLastEvaluatedKey;
+          }
+          
+          const txResult = await docClient.send(new ScanCommand(txParams));
+          const batchTransactions = txResult.Items || [];
+          allTransactions.push(...batchTransactions);
+          
+          // Check if there are more items to fetch
+          txLastEvaluatedKey = txResult.LastEvaluatedKey;
+          txHasMoreItems = !!txLastEvaluatedKey;
+          
+          // Add a small delay to avoid overwhelming DynamoDB
+          if (txHasMoreItems) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+        
+        const updatePromises = allTransactions.map(async (tx) => {
           if (!Array.isArray(tx.tags) || tx.tags.length === 0) return;
           // Filter out the tag ID to be deleted
           const newTags = tx.tags.filter((tagId) => tagId !== id);
