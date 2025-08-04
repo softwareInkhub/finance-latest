@@ -165,48 +165,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
             />
           </div>
 
-          {/* Quick filters */}
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <FiFilter size={12} />
-              <span>Quick:</span>
-            </div>
-            <div className="flex gap-1">
-              <button
-                onClick={() => {
-                  const tagsWithCounts = allTags.filter(tag => tagStats && tagStats[tag.name] > 0);
-                  tagsWithCounts.forEach(tag => onToggleTag(tag.name));
-                }}
-                className="px-2 py-1 text-xs bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 transition-colors font-medium"
-                title="Select all tags with transactions"
-              >
-                Active
-              </button>
-              <button
-                onClick={() => {
-                  const tagsWithZeroCounts = allTags.filter(tag => !tagStats || tagStats[tag.name] === 0);
-                  tagsWithZeroCounts.forEach(tag => onToggleTag(tag.name));
-                }}
-                className="px-2 py-1 text-xs bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100 transition-colors font-medium"
-                title="Select all tags without transactions"
-              >
-                Inactive
-              </button>
-              <button
-                onClick={() => {
-                  const topTags = allTags
-                    .filter(tag => tagStats && tagStats[tag.name] > 0)
-                    .sort((a, b) => (tagStats?.[b.name] || 0) - (tagStats?.[a.name] || 0))
-                    .slice(0, 3);
-                  topTags.forEach(tag => onToggleTag(tag.name));
-                }}
-                className="px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors font-medium"
-                title="Select top 3 most used tags"
-              >
-                Top 3
-              </button>
-            </div>
-          </div>
+
 
           {/* Controls */}
           <div className="flex items-center gap-1.5">

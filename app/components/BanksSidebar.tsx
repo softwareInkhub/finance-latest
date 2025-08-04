@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { RiBankLine, RiAccountPinCircleLine, RiArrowDownSLine, RiArrowRightSLine } from 'react-icons/ri';
+import { RiBankLine, RiAccountPinCircleLine, RiArrowDownSLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiFileTextLine } from 'react-icons/ri';
 
 interface Bank {
   id: string;
@@ -17,12 +17,14 @@ interface BanksSidebarProps {
   onSuperBankClick?: () => void;
   onBankClick?: (bank: Bank) => void;
   onAccountClick?: (account: { id: string; accountHolderName: string }, bankId: string) => void;
+  onBankSectionClick?: (section: string, bankId: string) => void;
 }
 
-export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountClick }: BanksSidebarProps) {
+export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountClick, onBankSectionClick }: BanksSidebarProps) {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [accounts, setAccounts] = useState<{ [bankId: string]: Account[] }>({});
   const [expandedBank, setExpandedBank] = useState<string | null>(null);
+  const [expandedBankSections, setExpandedBankSections] = useState<{ [bankId: string]: string[] }>({});
   const pathname = usePathname();
 
   useEffect(() => {
@@ -46,6 +48,35 @@ export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountC
     if (onBankClick) {
       onBankClick(bank);
     }
+  };
+
+  const handleBankSectionClick = (section: string, bankId: string) => {
+    setExpandedBankSections(prev => {
+      const currentSections = prev[bankId] || [];
+      const isExpanded = currentSections.includes(section);
+      
+      if (isExpanded) {
+        // Remove section from expanded list
+        return {
+          ...prev,
+          [bankId]: currentSections.filter(s => s !== section)
+        };
+      } else {
+        // Add section to expanded list
+        return {
+          ...prev,
+          [bankId]: [...currentSections, section]
+        };
+      }
+    });
+
+    if (onBankSectionClick) {
+      onBankSectionClick(section, bankId);
+    }
+  };
+
+  const isSectionExpanded = (bankId: string, section: string) => {
+    return (expandedBankSections[bankId] || []).includes(section);
   };
 
   return (
@@ -83,21 +114,67 @@ export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountC
                     <RiBankLine />
                     <span className="flex-1 text-left">{bank.bankName}</span>
                   </button>
-                  {expandedBank === bank.id && accounts[bank.id] && (
+                  {expandedBank === bank.id && (
                     <ul className="ml-8 mt-1 space-y-1">
-                      {accounts[bank.id].length === 0 && (
-                        <li className="text-xs text-gray-400 italic">No accounts</li>
-                      )}
-                      {accounts[bank.id].map(account => (
-                        <li key={account.id}>
-                            <button
-                              className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-100 text-xs w-full text-left ${pathname.includes(`/accounts/${account.id}`) ? 'text-blue-700 font-semibold' : ''}`}
-                            onClick={() => onAccountClick && onAccountClick(account, bank.id)}
-                            >
-                              <RiAccountPinCircleLine /> {account.accountHolderName}
-                            </button>
-                        </li>
-                      ))}
+                      {/* Account Section */}
+                      <li>
+                        <button
+                          className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-100 text-xs w-full text-left ${pathname.includes(`/banks/${bank.id}/accounts`) ? 'text-blue-700 font-semibold' : ''}`}
+                          onClick={() => handleBankSectionClick('accounts', bank.id)}
+                        >
+                          {isSectionExpanded(bank.id, 'accounts') ? <RiArrowDownSLine size={12} /> : <RiArrowRightSLine size={12} />}
+                          <RiAccountPinCircleLine size={14} /> Account
+                        </button>
+                        {isSectionExpanded(bank.id, 'accounts') && accounts[bank.id] && (
+                          <ul className="ml-6 mt-1 space-y-1">
+                            {accounts[bank.id].length === 0 && (
+                              <li className="text-xs text-gray-400 italic ml-4">No accounts</li>
+                            )}
+                            {accounts[bank.id].map(account => (
+                              <li key={account.id}>
+                                <button
+                                  className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-100 text-xs w-full text-left ${pathname.includes(`/accounts/${account.id}`) ? 'text-blue-700 font-semibold' : ''}`}
+                                  onClick={() => onAccountClick && onAccountClick(account, bank.id)}
+                                >
+                                  <RiAccountPinCircleLine size={12} /> {account.accountHolderName}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+
+                      {/* Files Section */}
+                      <li>
+                        <button
+                          className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-100 text-xs w-full text-left ${pathname.includes(`/banks/${bank.id}/files`) ? 'text-blue-700 font-semibold' : ''}`}
+                          onClick={() => handleBankSectionClick('files', bank.id)}
+                        >
+                          {isSectionExpanded(bank.id, 'files') ? <RiArrowDownSLine size={12} /> : <RiArrowRightSLine size={12} />}
+                          <RiFileList3Line size={14} /> Files
+                        </button>
+                      </li>
+
+                      {/* Transaction Section */}
+                      <li>
+                        <button
+                          className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-100 text-xs w-full text-left ${pathname.includes(`/banks/${bank.id}/transactions`) ? 'text-blue-700 font-semibold' : ''}`}
+                          onClick={() => handleBankSectionClick('transactions', bank.id)}
+                        >
+                          <RiTimeLine size={14} /> Transaction
+                        </button>
+                      </li>
+
+                      {/* Statement Section */}
+                      <li>
+                        <button
+                          className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-100 text-xs w-full text-left ${pathname.includes(`/banks/${bank.id}/statements`) ? 'text-blue-700 font-semibold' : ''}`}
+                          onClick={() => handleBankSectionClick('statements', bank.id)}
+                        >
+                          {isSectionExpanded(bank.id, 'statements') ? <RiArrowDownSLine size={12} /> : <RiArrowRightSLine size={12} />}
+                          <RiFileTextLine size={14} /> Statement
+                        </button>
+                      </li>
                     </ul>
                   )}
                 </li>

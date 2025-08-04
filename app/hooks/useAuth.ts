@@ -9,7 +9,17 @@ interface User {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
+  // Initialize user state from localStorage to prevent initial flash
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window !== 'undefined') {
+      const userId = localStorage.getItem('userId');
+      const isLoggedIn = localStorage.getItem('isLoggedIn');
+      if (userId && isLoggedIn === 'true') {
+        return { userId, email: '', name: '' }; // Set initial state to prevent flash
+      }
+    }
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
@@ -24,26 +34,30 @@ export function useAuth() {
         return;
       }
 
-      // Fetch user details
-      fetch(`/api/users?id=${userId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.email) {
-            setUser({
-              userId,
-              email: data.email,
-              name: data.name
-            });
-          } else {
+      // Only fetch user details if we don't have them yet
+      if (!user || !user.email) {
+        fetch(`/api/users?id=${userId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.email) {
+              setUser({
+                userId,
+                email: data.email,
+                name: data.name
+              });
+            } else {
+              setUser(null);
+            }
+          })
+          .catch(() => {
             setUser(null);
-          }
-        })
-        .catch(() => {
-          setUser(null);
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+      } else {
+        setIsLoading(false);
+      }
     };
 
     checkAuth();
@@ -57,7 +71,7 @@ export function useAuth() {
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [user]);
 
   const login = (userData: User) => {
     localStorage.setItem('isLoggedIn', 'true');

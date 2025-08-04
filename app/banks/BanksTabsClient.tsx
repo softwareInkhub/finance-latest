@@ -9,12 +9,13 @@ import { Bank } from '../types/aws';
 import { useRouter, usePathname } from 'next/navigation';
 import BanksSidebar from '../components/BanksSidebar';
 import { useAuth } from '../hooks/useAuth';
+import BankFilesComponent from '../components/BankFilesComponent';
 
 // Define a type for tabs
 interface Tab {
   key: string;
   label: string;
-  type: 'overview' | 'accounts' | 'statements' | 'super-bank';
+  type: 'overview' | 'accounts' | 'statements' | 'super-bank' | 'files' | 'transactions';
   bankId?: string;
   accountId?: string;
   accountName?: string;
@@ -214,6 +215,52 @@ export default function BanksTabsClient() {
           router.push(`${pathname}?bankId=${bank.id}`);
         }}
         onAccountClick={handleAccountClick}
+        onBankSectionClick={(section, bankId) => {
+          const bank = banks.find(b => b.id === bankId);
+          if (!bank) return;
+
+          let tabKey: string;
+          let tabLabel: string;
+          let tabType: Tab['type'];
+
+          switch (section) {
+            case 'accounts':
+              tabKey = `accounts-${bankId}`;
+              tabLabel = `${bank.bankName} - Accounts`;
+              tabType = 'accounts';
+              break;
+            case 'files':
+              tabKey = `files-${bankId}`;
+              tabLabel = `${bank.bankName} - Files`;
+              tabType = 'files';
+              break;
+            case 'transactions':
+              tabKey = `transactions-${bankId}`;
+              tabLabel = `${bank.bankName} - Transactions`;
+              tabType = 'transactions';
+              break;
+            case 'statements':
+              tabKey = `statements-${bankId}`;
+              tabLabel = `${bank.bankName} - Statements`;
+              tabType = 'statements';
+              break;
+            default:
+              return;
+          }
+
+          if (tabs.some(tab => tab.key === tabKey)) {
+            setActiveTab(tabKey);
+            return;
+          }
+
+          setTabs([...tabs, { 
+            key: tabKey, 
+            label: tabLabel, 
+            type: tabType, 
+            bankId: bankId 
+          }]);
+          setActiveTab(tabKey);
+        }}
       />
       <div className="flex-1 flex flex-col">
        
@@ -331,8 +378,19 @@ export default function BanksTabsClient() {
             if (tab?.type === 'accounts' && tab.bankId) {
               return <AccountsClient bankId={tab.bankId} onAccountClick={account => handleAccountClick(account, tab.bankId!)} allTags={allTags} />;
             }
-            if (tab?.type === 'statements' && tab.bankId && tab.accountId) {
+            if (tab?.type === 'statements' && tab.bankId) {
               return <StatementsPage />;
+            }
+            if (tab?.type === 'files' && tab.bankId) {
+              return <BankFilesComponent bankId={tab.bankId} bankName={banks.find(b => b.id === tab.bankId)?.bankName || ''} />;
+            }
+            if (tab?.type === 'transactions' && tab.bankId) {
+              return (
+                <div className="p-6">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Transactions for {banks.find(b => b.id === tab.bankId)?.bankName}</h2>
+                  <p className="text-gray-600">Transactions management interface will be implemented here.</p>
+                </div>
+              );
             }
             if (tab?.type === 'super-bank') {
               return <SuperBankPage />;

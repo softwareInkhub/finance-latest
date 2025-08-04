@@ -2,19 +2,41 @@ import { NextResponse } from 'next/server';
 import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES } from '../aws-client';
 
-// GET /api/statements?accountId=xxx&userId=yyy
+// GET /api/statements?accountId=xxx&userId=yyy&bankId=zzz
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const accountId = searchParams.get('accountId');
   const userId = searchParams.get('userId');
-  if (!accountId) {
-    return NextResponse.json({ error: 'accountId is required' }, { status: 400 });
+  const bankId = searchParams.get('bankId');
+  
+  if (!accountId && !bankId) {
+    return NextResponse.json({ error: 'accountId or bankId is required' }, { status: 400 });
   }
+  
   try {
-    let filterExpression = 'accountId = :accountId';
-    const expressionAttributeValues: Record<string, string> = { ':accountId': accountId };
+    let filterExpression = '';
+    const expressionAttributeValues: Record<string, string> = {};
+    
+    if (accountId) {
+      filterExpression = 'accountId = :accountId';
+      expressionAttributeValues[':accountId'] = accountId;
+    }
+    
+    if (bankId) {
+      if (filterExpression) {
+        filterExpression += ' AND bankId = :bankId';
+      } else {
+        filterExpression = 'bankId = :bankId';
+      }
+      expressionAttributeValues[':bankId'] = bankId;
+    }
+    
     if (userId) {
-      filterExpression += ' AND userId = :userId';
+      if (filterExpression) {
+        filterExpression += ' AND userId = :userId';
+      } else {
+        filterExpression = 'userId = :userId';
+      }
       expressionAttributeValues[':userId'] = userId;
     }
     

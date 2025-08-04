@@ -2,27 +2,16 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Modal from '../../components/Modals/Modal';
-import StatementPreviewModal from '../../components/Modals/StatementPreviewModal';
-import { RiFileList3Line, RiUpload2Line, RiDeleteBin6Line, RiPriceTag3Line } from 'react-icons/ri';
+import { RiFileList3Line } from 'react-icons/ri';
 import TransactionTable from '../../components/TransactionTable';
 import TaggingControls from '../../components/TaggingControls';
 import AnalyticsSummary from '../../components/AnalyticsSummary';
 import TransactionFilterBar from '../../components/TransactionFilterBar';
 import TagFilterPills from '../../components/TagFilterPills';
 import React from 'react';
-import ConfirmDeleteModal from '../../components/Modals/ConfirmDeleteModal';
-import { Toaster, toast } from 'react-hot-toast';
+import { Toaster } from 'react-hot-toast';
 
-interface Statement {
-  id: string;
-  bankId: string;
-  accountId: string;
-  s3FileUrl: string;
-  transactionHeader: string[];
-  tags: string[];
-  fileName?: string;
-}
+
 
 interface Tag {
   id: string;
@@ -48,22 +37,12 @@ function StatementsContent() {
   const searchParams = useSearchParams();
   const bankId = searchParams.get('bankId');
   const accountId = searchParams.get('accountId');
-  const [statements, setStatements] = useState<Statement[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewStatementId, setPreviewStatementId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'statements' | 'transactions'>('statements');
+
+  const [tab] = useState<'transactions'>('transactions');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState('');
   const [bankName, setBankName] = useState("");
-  const [accountName, setAccountName] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -75,7 +54,6 @@ function StatementsContent() {
   const [dateRange, setDateRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [transactionHeaders, setTransactionHeaders] = useState<string[]>([]);
-  const [uploadTags, setUploadTags] = useState('');
   const [searchField, setSearchField] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('desc');
 
@@ -85,33 +63,12 @@ function StatementsContent() {
   const [pendingTag, setPendingTag] = useState<{ tagName: string; rowIdx: number; selectionText: string } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  const [deleteModal, setDeleteModal] = useState<{
-    open: boolean;
-    statementId?: string;
-    s3FileUrl?: string;
-    fileName?: string;
-  }>({ open: false });
-  const [deleting, setDeleting] = useState(false);
+
 
   // Add state for loading and matching preview
   const [applyingTagToAll, setApplyingTagToAll] = useState(false);
 
-  useEffect(() => {
-    const fetchStatements = async () => {
-      if (!accountId) return;
-      try {
-        setError(null);
-        const userId = localStorage.getItem("userId") || "";
-        const res = await fetch(`/api/statements?accountId=${accountId}&userId=${userId}`);
-        if (!res.ok) throw new Error("Failed to fetch statements");
-        const data = await res.json();
-        setStatements(data);
-      } catch {
-        setError("Failed to fetch statements");
-      }
-    };
-    fetchStatements();
-  }, [accountId]);
+
 
   useEffect(() => {
     if (tab === 'transactions' && accountId && bankName) {
@@ -136,13 +93,7 @@ function StatementsContent() {
         setBankName(bank?.bankName || "");
       });
     }
-    if (accountId) {
-      fetch(`/api/account?accountId=${accountId}`).then(res => res.json()).then((account) => {
-        setAccountName(account?.accountHolderName || "");
-        setAccountNumber(account?.accountNumber || "");
-      });
-    }
-  }, [bankId, accountId]);
+  }, [bankId]);
 
   useEffect(() => {
     const userId = localStorage.getItem('userId');
@@ -305,121 +256,9 @@ function StatementsContent() {
     }
   }, [tagCreateMsg]);
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!bankId || !accountId) return;
-    setIsUploading(true);
-    setError(null);
-    const file = fileInputRef.current?.files?.[0];
-    if (!file) {
-      setError("Please select a CSV file.");
-      setIsUploading(false);
-      toast.error("Please select a CSV file.");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('bankId', bankId);
-      formData.append('accountId', accountId);
-      formData.append('fileName', fileName.trim() ? fileName.trim() : file.name);
-      formData.append('userId', localStorage.getItem("userId") || "");
-      formData.append('tags', uploadTags);
-      const res = await fetch('/api/statement/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        toast.error(errorData.error || 'Failed to upload statement');
-        throw new Error(errorData.error || 'Failed to upload statement');
-      }
-      // Refresh statement list
-      const newStatement = await res.json();
-      setStatements(prev => [...prev, newStatement]);
-      setIsModalOpen(false);
-      setFileName('');
-      setUploadTags('');
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      toast.success('File uploaded successfully!');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload statement');
-      toast.error(err instanceof Error ? err.message : 'Failed to upload statement');
-    } finally {
-      setIsUploading(false);
-    }
-  };
 
-  const handleDeleteStatement = (statementId: string, s3FileUrl: string) => {
-    const statement = statements.find(s => s.id === statementId);
-    setDeleteModal({
-      open: true,
-      statementId,
-      s3FileUrl,
-      fileName: statement?.fileName || 'this file',
-    });
-  };
 
-  const confirmDeleteStatement = async () => {
-    const { statementId, s3FileUrl, fileName } = deleteModal;
-    if (!statementId || !s3FileUrl) return;
-    setDeleting(true);
-    const userId = localStorage.getItem("userId") || "";
-    let attempts = 0;
-    let deleted = false;
-    let lastResult = null;
-    let remainingTransactions = 0;
-    while (attempts < 3 && !deleted) {
-      try {
-        const res = await fetch('/api/statement/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            statementId, 
-            s3FileUrl,
-            userId,
-            bankName
-          }),
-        });
-        if (res.ok) {
-          lastResult = await res.json();
-          // After delete, check for remaining transactions for this statement
-          const checkRes = await fetch(`/api/transactions?accountId=${accountId}&userId=${userId}&bankName=${encodeURIComponent(bankName)}`);
-          let stillLeft = [];
-          if (checkRes.ok) {
-            const txs = await checkRes.json();
-            stillLeft = Array.isArray(txs) ? txs.filter(tx => tx.statementId === statementId) : [];
-          }
-          remainingTransactions = stillLeft.length;
-          // Show per-attempt toast (remove this, only show final toast)
-          toast.success(
-            `Deleted "${fileName}" successfully. Deleted ${lastResult.deletedTransactions || 0} transaction(s) in ${attempts + 1} attempt(s).`
-          );
-          if (remainingTransactions === 0) {
-            setStatements(prev => prev.filter(s => s.id !== statementId));
-            deleted = true;
-          } else {
-            attempts++;
-            continue;
-          }
-        } else {
-          const errorData = await res.json();
-          toast.error(`Failed to delete: ${errorData.error || 'Unknown error'}`);
-          break;
-        }
-      } catch (error) {
-        if (attempts === 2) {
-          toast.error(error instanceof Error ? error.message : 'Failed to delete. Please try again.');
-        }
-      }
-      attempts++;
-    }
-    if (!deleted && remainingTransactions > 0) {
-      toast.error(`Some transactions could not be deleted after 3 tries. Deleted ${lastResult?.deletedTransactions || 0} transaction(s) in 3 attempts. Please try again later.`);
-    }
-    setDeleting(false);
-    setDeleteModal({ open: false });
-  };
+
 
   const handleRowSelect = (id: string) => {
     setSelectedRows(prev => {
@@ -698,19 +537,8 @@ function StatementsContent() {
   return (
     <div className="min-h-screen py-6 sm:py-10 px-3 sm:px-4 space-y-6 sm:space-y-8">
       <Toaster position="top-center" />
-      {/* Breadcrumb Navigation */}
-      <nav className="text-sm mb-4 flex items-center gap-2 text-gray-600">
-        <span>Home</span>
-        <span>/</span>
-        <span>Banks</span>
-        <span>/</span>
-        <span>{bankName || 'Bank'}</span>
-        <span>/</span>
-        <span>{accountName || 'Account'}</span>
-        <span>/</span>
-        <span className="font-semibold text-blue-700">Files</span>
-      </nav>
-      <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
+     
+      <div className="w-[70vw] mx-auto space-y-4 sm:space-y-6">
         {/* File Migration Banner removed */}
         
         <div className="flex flex-row justify-between items-center gap-2 sm:gap-4 mb-2">
@@ -718,154 +546,15 @@ function StatementsContent() {
             <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-xl sm:text-2xl shadow">
               <RiFileList3Line />
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Files</h1>
+            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Transactions</h1>
           </div>
           <div className="flex items-center gap-4">
-            {/* Tab Switching */}
-            <div className="flex rounded-lg border border-gray-200 p-1 bg-gray-50">
-              <button
-                onClick={() => setTab('statements')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  tab === 'statements'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Files
-              </button>
-              <button
-                onClick={() => setTab('transactions')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  tab === 'transactions'
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Transactions
-              </button>
-            </div>
-            {tab === 'statements' && (
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 sm:px-5 py-2 rounded-lg shadow hover:scale-[1.02] hover:shadow-lg transition-all font-semibold w-auto"
-              >
-                <RiUpload2Line className="text-lg sm:text-xl" />
-                <span className="hidden sm:block">Upload File</span>
-              </button>
-            )}
+
           </div>
         </div>
-        {error && <div className="text-red-600 mb-2">{error}</div>}
-        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Upload File">
-          <form onSubmit={handleUpload} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">File Name (optional)</label>
-              <input
-                type="text"
-                value={fileName}
-                onChange={e => setFileName(e.target.value)}
-                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Tags (comma separated)</label>
-              <input
-                type="text"
-                value={uploadTags}
-                onChange={e => setUploadTags(e.target.value)}
-                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-                placeholder="e.g. salary, business"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">CSV File</label>
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept=".csv"
-                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-3 py-2"
-                required
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isUploading}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-            >
-              {isUploading ? 'Uploading...' : 'Upload File'}
-            </button>
-          </form>
-        </Modal>
 
-        {tab === 'statements' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
-            {statements.length === 0 ? (
-              <div className="col-span-full text-center py-8 sm:py-12 text-gray-500">
-                No files uploaded yet. Click &quot;Upload File&quot; to get started.
-              </div>
-            ) : (
-              statements.map((statement) => (
-                <div
-                  key={statement.id}
-                  className="relative bg-white/70 backdrop-blur-lg p-1 sm:p-2 rounded-md shadow border border-blue-100 transition-transform duration-200 hover:scale-[1.01] hover:shadow group overflow-hidden cursor-pointer max-w-[180px] min-w-[120px]"
-                  style={{ minHeight: '60px' }}
-                  onClick={() => {
-                    setPreviewUrl(statement.s3FileUrl);
-                    setPreviewStatementId(statement.id);
-                    setPreviewOpen(true);
-                  }}
-                >
-                  <div className="absolute top-1 right-1 opacity-5 text-blue-400 text-lg sm:text-xl pointer-events-none select-none rotate-12">
-                    <RiFileList3Line />
-                  </div>
-                  <h3 className="text-xs sm:text-sm font-semibold text-gray-800 flex items-center gap-1">
-                    <span className="bg-blue-100 p-0.5 rounded-full text-blue-500 text-sm sm:text-base shadow">
-                      <RiFileList3Line />
-                    </span>
-                    {statement.fileName || 'File'}
-                  </h3>
-                  <div className="mt-1 flex flex-wrap gap-0.5 min-h-[18px]">
-                    {statement.tags && statement.tags.length > 0 ? (
-                      statement.tags.map((tagName) => {
-                        const tagObj = allTags.find(t => t.name === tagName);
-                        return (
-                      <span
-                            key={tagName}
-                            className="flex items-center gap-0.5 px-1 py-0.5 text-[10px] rounded-full shadow border font-medium"
-                            style={{
-                              backgroundColor: tagObj?.color || '#3B82F6',
-                              color: '#ffffff',
-                              borderColor: tagObj?.color || '#3B82F6'
-                            }}
-                      >
-                            <RiPriceTag3Line className="text-white text-xs" /> {tagName}
-                      </span>
-                        );
-                      })
-                    ) : (
-                      <span className="text-gray-300 text-[10px] italic">No tags</span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex justify-end gap-1">
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDeleteStatement(statement.id, statement.s3FileUrl); }}
-                      className="px-1 py-0.5 text-red-600 bg-red-50 rounded hover:bg-red-100"
-                    >
-                      <RiDeleteBin6Line className="text-sm" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        ) : (
+
+
           <div className="space-y-6">
             {/* Transaction Filters */}
             <TransactionFilterBar
@@ -946,7 +635,7 @@ function StatementsContent() {
             )}
 
             {/* Analytics Summary */}
-            {tab === 'transactions' && (
+            {(
               (() => {
                 // Compute summary stats for AnalyticsSummary
                 const amountKey = sortedAndFilteredTransactions.length > 0 ? Object.keys(sortedAndFilteredTransactions[0]).find(k => k.toLowerCase().includes('amount')) : undefined;
@@ -982,8 +671,8 @@ function StatementsContent() {
             )}
 
             {/* Transaction Table with Advanced Tag Creation Features - ADDED */}
-            {tab === 'transactions' && (
-              <div ref={tableRef} className="overflow-x-auto relative">
+            {(
+              <div ref={tableRef} className="overflow-x-auto relative h-[52vh]">
                 {/* Floating create tag button - ADDED */}
                 {selection && (
                   <button
@@ -1097,27 +786,8 @@ function StatementsContent() {
               </div>
             )}
           </div>
-        )}
       </div>
-      <StatementPreviewModal
-        isOpen={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        s3FileUrl={previewUrl}
-        statementId={previewStatementId}
-        bankId={bankId}
-        accountId={accountId}
-        accountNumber={accountNumber}
-        fileName={statements.find(s => s.id === previewStatementId)?.fileName || ''}
-      />
-      <ConfirmDeleteModal
-        isOpen={deleteModal.open}
-        onClose={() => setDeleteModal({ open: false })}
-        onConfirm={confirmDeleteStatement}
-        itemName={deleteModal.fileName || ''}
-        itemType="file"
-        description="This will also delete all related transactions imported from this file. This action cannot be undone."
-        loading={deleting}
-      />
+
     </div>
   );
 }

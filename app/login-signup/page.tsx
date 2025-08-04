@@ -26,30 +26,42 @@ export default function LoginSignupPage() {
     setLoading(true);
     setError(null);
     setSuccess(null);
-    const res = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: mode,
-        email,
-        password,
-        name: mode === 'signup' ? name : undefined,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) setError(data.error || "Something went wrong");
-    else {
-      setSuccess(mode === 'signup' ? "Signup successful!" : "Login successful!");
-      if (mode === 'login') {
-        login({
-          userId: data.user?.userId || "",
-          email: data.user?.email || "",
-          name: data.user?.name || ""
-        });
-        setTimeout(() => router.push('/dashboard'), 800);
+    
+    try {
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: mode,
+          email,
+          password,
+          name: mode === 'signup' ? name : undefined,
+        }),
+      });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setError(data.error || "Something went wrong");
+      } else {
+        if (mode === 'login') {
+          // Login immediately without showing success message
+          login({
+            userId: data.user?.userId || "",
+            email: data.user?.email || "",
+            name: data.user?.name || ""
+          });
+          // Navigate immediately without setTimeout
+          router.push('/dashboard');
+        } else {
+          // Only show success for signup
+          setSuccess("Signup successful!");
+        }
       }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

@@ -29,7 +29,7 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
   const [showSuccess, setShowSuccess] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [banks, setBanks] = useState<{ id: string; bankName: string }[]>([]);
-  const [accounts, setAccounts] = useState<{ id: string; accountHolderName: string; accountNumber?: string }[]>([]);
+  const [accounts, setAccounts] = useState<{ id: string; accountHolderName: string; accountNumber?: string; tags?: string[] }[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -155,7 +155,10 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
                 <select className="w-full border rounded px-3 py-2" value={bankAccount} onChange={e => setBankAccount(e.target.value)} required disabled={!bankId || loadingAccounts}>
                   <option value="">{loadingAccounts ? 'Loading...' : 'Select bank account'}</option>
                   {accounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.accountHolderName}</option>
+                    <option key={a.id} value={a.id}>
+                      {a.accountHolderName}
+                      {a.tags && a.tags.length > 0 && ` (${a.tags.join(', ')})`}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -283,7 +286,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
   if (!data.length) return <div>No data to display.</div>;
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4">
+    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[84%]">
       {isStatement && (
         <div className="mb-4 flex items-center gap-4">
           <button
@@ -995,6 +998,34 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
   const [previewData, setPreviewData] = useState<string[][]>(sliceData);
   const [allDuplicatesSelected, setAllDuplicatesSelected] = useState(false);
 
+  // Column resize logic - added for SlicePreviewComponent
+  const resizingCol = useRef<number | null>(null);
+  const startX = useRef<number>(0);
+  const startWidth = useRef<number>(0);
+
+  const handleMouseDown = (e: React.MouseEvent, colIdx: number) => {
+    resizingCol.current = colIdx;
+    startX.current = e.clientX;
+    startWidth.current = colWidths[colIdx] || 160;
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!resizingCol.current) return;
+    const delta = e.clientX - startX.current;
+    setColWidths(widths => widths.map((w, i) => 
+      i === resizingCol.current ? Math.max(60, startWidth.current + delta) : w
+    ));
+  };
+
+  const handleMouseUp = () => {
+    resizingCol.current = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+  };
+
   // Update previewData when sliceData changes
   useEffect(() => {
     setPreviewData(sliceData);
@@ -1571,6 +1602,19 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
                       style={{ width: colWidths[j] || 160, minWidth: 60, maxWidth: 600 }}
                     >
                       {cell}
+                      {isHeader && (
+                        <>
+                          <span
+                            className="absolute right-0 top-0 h-full w-1 bg-gray-300 opacity-60"
+                            style={{ userSelect: 'none' }}
+                          />
+                          <span
+                            className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-20 bg-blue-300 opacity-0 hover:opacity-100 transition-opacity"
+                            onMouseDown={e => handleMouseDown(e, j)}
+                            style={{ userSelect: 'none' }}
+                          />
+                        </>
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -1751,6 +1795,30 @@ const FilesPage: React.FC = () => {
       setFilesLoading(false);
     };
     fetchAllUserFiles();
+  }, []);
+
+  // Check for slice tab data from localStorage
+  useEffect(() => {
+    const sliceTabData = localStorage.getItem('sliceTabData');
+    if (sliceTabData) {
+      try {
+        const data = JSON.parse(sliceTabData);
+        const newTab = {
+          id: data.tabId,
+          name: data.tabName,
+          sliceData: data.sliceData,
+          file: data.file,
+          selectedFields: data.selectedFields,
+        };
+        setOpenSliceTabs(prev => [...prev, newTab]);
+        setActiveTabId(data.tabId);
+        // Clear the localStorage data
+        localStorage.removeItem('sliceTabData');
+      } catch (error) {
+        console.error('Error parsing slice tab data:', error);
+        localStorage.removeItem('sliceTabData');
+      }
+    }
   }, []);
 
   // Add a function to refresh files
