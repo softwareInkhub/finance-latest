@@ -30,6 +30,7 @@ export default function BanksTabsClient() {
   const [error, setError] = useState<string | null>(null);
   const [editBank, setEditBank] = useState<Bank | null>(null);
   const [allTags, setAllTags] = useState<Array<{ id: string; name: string; color?: string }>>([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -194,6 +195,8 @@ export default function BanksTabsClient() {
   return (
     <div className="flex h-screen bg-gray-50">
       <BanksSidebar 
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         onSuperBankClick={() => {
           const tabKey = 'super-bank';
           if (tabs.some(tab => tab.key === tabKey)) {

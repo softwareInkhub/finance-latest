@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import FilesSidebar from '../components/FilesSidebar';
 import { RiCloseLine } from 'react-icons/ri';
 import Papa from 'papaparse';
-import { FiEdit2, FiTrash2, FiGrid, FiList } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiGrid, FiList, FiMoreVertical, FiDownload, FiEye, FiSearch, FiCalendar, FiFile, FiCreditCard, FiClock } from 'react-icons/fi';
 import Modal from '../components/Modals/Modal';
 
 
@@ -286,7 +286,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
   if (!data.length) return <div>No data to display.</div>;
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[84%]">
+    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw]">
       {isStatement && (
         <div className="mb-4 flex items-center gap-4">
           <button
@@ -695,176 +695,426 @@ function FilesTable({ files, onFileClick, selectedIds, onSelect, onSelectAll, on
   );
 }
 
+// Loading skeleton component for files
+function FileCardSkeleton() {
+  return (
+    <div className="bg-white rounded-xl shadow p-4 border border-gray-200 w-full sm:w-80 lg:w-72 xl:w-80 animate-pulse">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+        <div className="flex-1">
+          <div className="h-4 bg-gray-200 rounded mb-2"></div>
+          <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gray-200 rounded"></div>
+          <div className="h-3 bg-gray-200 rounded flex-1"></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gray-200 rounded"></div>
+          <div className="h-3 bg-gray-200 rounded flex-1"></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-gray-200 rounded"></div>
+          <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Enhanced File Card Component
+function FileCard({ file, onFileClick, onEdit, onDelete }: { file: FileData; onFileClick: (file: FileData) => void; onEdit: (file: FileData) => void; onDelete: (file: FileData) => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'Unknown';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getFileIcon = (fileType: string) => {
+    const iconClass = "w-6 h-6 text-white";
+    switch (fileType?.toUpperCase()) {
+      case 'CSV':
+        return <FiFile className={iconClass} />;
+      case 'PDF':
+        return <FiFile className={iconClass} />;
+      case 'XLSX':
+      case 'XLS':
+        return <FiFile className={iconClass} />;
+      default:
+        return <FiFile className={iconClass} />;
+    }
+  };
+
+  return (
+    <div
+      className="bg-white rounded-2xl shadow-md hover:shadow-xl p-6 border border-gray-100 hover:border-blue-200 transition-all duration-300 cursor-pointer group transform hover:scale-105 w-full sm:w-80 lg:w-72 xl:w-80"
+      onClick={() => onFileClick(file)}
+    >
+      {/* Header with file info and menu */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-sm">
+            {getFileIcon(file.fileType)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-gray-900 text-lg truncate" title={file.fileName}>
+              {file.fileName}
+            </h3>
+            <p className="text-sm text-gray-500 font-medium">{file.fileType || 'Statement'}</p>
+          </div>
+        </div>
+        
+        {/* Ellipsis menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen(!menuOpen);
+            }}
+          >
+            <FiMoreVertical className="w-4 h-4 text-gray-600" />
+          </button>
+          
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+              <button
+                className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFileClick(file);
+                  setMenuOpen(false);
+                }}
+              >
+                <FiEye className="w-4 h-4" />
+                View Details
+              </button>
+              <button
+                className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Add download logic here
+                  setMenuOpen(false);
+                }}
+              >
+                <FiDownload className="w-4 h-4" />
+                Download
+              </button>
+              <button
+                className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(file);
+                  setMenuOpen(false);
+                }}
+              >
+                <FiEdit2 className="w-4 h-4" />
+                Edit
+              </button>
+              <hr className="my-1" />
+              <button
+                className="flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(file);
+                  setMenuOpen(false);
+                }}
+              >
+                <FiTrash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* File details */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 text-sm">
+          <FiCreditCard className="w-4 h-4 text-gray-400" />
+          <span className="text-gray-600 font-medium">{file.bankName || 'Unknown Bank'}</span>
+        </div>
+        
+        <div className="flex items-center gap-3 text-sm">
+          <FiCalendar className="w-4 h-4 text-gray-400" />
+          <span className="text-gray-600">
+            {formatDate(file.createdAt || file.uploaded)}
+          </span>
+        </div>
+        
+        {file.accountName && (
+          <div className="flex items-center gap-3 text-sm">
+            <FiClock className="w-4 h-4 text-gray-400" />
+            <span className="text-gray-600 truncate">{file.accountName}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Empty state component
+function EmptyState({ onUpload }: { onUpload: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-8">
+      <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mb-6">
+        <FiFile className="w-12 h-12 text-blue-500" />
+      </div>
+      <h3 className="text-xl font-semibold text-gray-900 mb-2">No files uploaded yet</h3>
+      <p className="text-gray-500 text-center mb-6 max-w-md">
+        Get started by uploading your first statement or financial document. 
+        We support CSV, PDF, and Excel formats.
+      </p>
+      <button
+        onClick={onUpload}
+        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors shadow-sm"
+      >
+        Upload Your First File
+      </button>
+    </div>
+  );
+}
+
 function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMode, setViewMode }: { files: FileData[]; onUpload: () => void; onEdit: (file: FileData) => void; onDelete: (file: FileData | FileData[]) => void; onFileClick: (file: FileData) => void; viewMode: 'grid' | 'row'; setViewMode: (mode: 'grid' | 'row') => void }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [search, setSearch] = React.useState('');
-  const [searchField, setSearchField] = React.useState<'fileName' | 'bankName' | 'fileType'>('fileName');
+  const [sortBy, setSortBy] = React.useState<'name' | 'date' | 'bank'>('date');
+  const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
+  const [loading, setLoading] = React.useState(false);
+  
   const handleSelect = (id: string) => {
     setSelectedIds(ids => ids.includes(id) ? ids.filter(i => i !== id) : [...ids, id]);
   };
   const handleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? files.map(f => f.id) : []);
+    setSelectedIds(checked ? filteredFiles.map(f => f.id) : []);
   };
   const selectedFiles = files.filter(f => selectedIds.includes(f.id));
 
-  // Filter files based on search
-  const filteredFiles = files.filter(file => {
-    const value = (file[searchField] || '').toString().toLowerCase();
-    return value.includes(search.toLowerCase());
-  });
+  // Filter and sort files
+  const filteredFiles = files
+    .filter(file => {
+      if (!search) return true;
+      const searchLower = search.toLowerCase();
+      return (
+        file.fileName?.toLowerCase().includes(searchLower) ||
+        file.bankName?.toLowerCase().includes(searchLower) ||
+        file.fileType?.toLowerCase().includes(searchLower)
+      );
+    })
+    .sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case 'name':
+          aValue = a.fileName?.toLowerCase() || '';
+          bValue = b.fileName?.toLowerCase() || '';
+          break;
+        case 'bank':
+          aValue = a.bankName?.toLowerCase() || '';
+          bValue = b.bankName?.toLowerCase() || '';
+          break;
+        case 'date':
+        default:
+          aValue = new Date(a.createdAt || a.uploaded || 0).getTime();
+          bValue = new Date(b.createdAt || b.uploaded || 0).getTime();
+          break;
+      }
+      
+      if (sortOrder === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
+
+  // Simulate loading for demonstration
+  useEffect(() => {
+    if (files.length === 0) {
+      setLoading(true);
+      const timer = setTimeout(() => setLoading(false), 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setLoading(false);
+    }
+  }, [files.length]);
 
   return (
-    <div className='p-8 relative w-[70vw] overflow-x-auto'>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-blue-800">Files</h1>
-        <div className="flex gap-2 items-center ">
-          {/* Search bar and field selector */}
-          <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-2 py-1 shadow-sm">
-            <input
-              type="text"
-              className="px-2 py-1 outline-none text-sm bg-transparent"
-              placeholder={`Search by ${searchField === 'fileName' ? 'File Name' : searchField === 'bankName' ? 'Bank Name' : 'File Type'}`}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ minWidth: 120 }}
-            />
+    <div className='min-h-screen bg-gray-50'>
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Files</h1>
+            <p className="text-gray-600 mt-1">
+              {filteredFiles.length} {filteredFiles.length === 1 ? 'file' : 'files'} total
+            </p>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+            {/* Search bar */}
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full sm:w-64"
+                placeholder="Search files..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            
+            {/* Sort dropdown */}
             <select
-              className="bg-transparent text-blue-700 font-semibold text-sm outline-none"
-              value={searchField}
-              onChange={e => setSearchField(e.target.value as 'fileName' | 'fileType' | 'bankName')}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={`${sortBy}-${sortOrder}`}
+              onChange={e => {
+                const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder];
+                setSortBy(newSortBy);
+                setSortOrder(newSortOrder);
+              }}
             >
-              <option value="fileName">File Name</option>
-              <option value="bankName">Bank Name</option>
-              <option value="fileType">File Type</option>
+              <option value="date-desc">Latest First</option>
+              <option value="date-asc">Oldest First</option>
+              <option value="name-asc">Name A-Z</option>
+              <option value="name-desc">Name Z-A</option>
+              <option value="bank-asc">Bank A-Z</option>
+              <option value="bank-desc">Bank Z-A</option>
             </select>
-          </div>
-          <div className="relative">
-            <button className="bg-gray-100 hover:bg-gray-200 text-blue-800 font-semibold px-4 py-2 rounded-lg shadow flex items-center gap-2" onClick={e => { e.stopPropagation(); setShowDropdown(v => !v); }}>
-              <span>View</span>
-              {viewMode === 'grid' ? <FiGrid /> : <FiList />}
+            
+            {/* View toggle */}
+            <div className="relative">
+              <button 
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                onClick={() => setShowDropdown(!showDropdown)}
+              >
+                {viewMode === 'grid' ? <FiGrid className="w-4 h-4" /> : <FiList className="w-4 h-4" />}
+                <span className="hidden sm:inline">View</span>
+              </button>
+              
+              {showDropdown && (
+                <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <button
+                    className={`flex items-center gap-3 px-4 py-2 text-sm w-full text-left hover:bg-gray-50 ${viewMode === 'grid' ? 'text-blue-600 bg-blue-50' : 'text-gray-700'}`}
+                    onClick={() => { setViewMode('grid'); setShowDropdown(false); }}
+                  >
+                    <FiGrid className="w-4 h-4" />
+                    Grid View
+                  </button>
+                  <button
+                    className={`flex items-center gap-3 px-4 py-2 text-sm w-full text-left hover:bg-gray-50 ${viewMode === 'row' ? 'text-blue-600 bg-blue-50' : 'text-gray-700'}`}
+                    onClick={() => { setViewMode('row'); setShowDropdown(false); }}
+                  >
+                    <FiList className="w-4 h-4" />
+                    List View
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            <button 
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors shadow-sm"
+              onClick={onUpload}
+            >
+              Upload File
             </button>
-            {showDropdown && (
-              <div className="absolute right-0 mt-2 w-32 bg-white border rounded shadow z-[100]" style={{ zIndex: 100 }}>
-                <button className={`w-full px-4 py-2 text-left hover:bg-blue-50 ${viewMode === 'grid' ? 'font-bold text-blue-700' : ''}`} onClick={() => { setViewMode('grid'); setShowDropdown(false); }}><FiGrid className="inline mr-2" />Grid</button>
-                <button className={`w-full px-4 py-2 text-left hover:bg-blue-50 ${viewMode === 'row' ? 'font-bold text-blue-700' : ''}`} onClick={() => { setViewMode('row'); setShowDropdown(false); }}><FiList className="inline mr-2" />Row</button>
-              </div>
-            )}
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg shadow transition-all" onClick={onUpload}>Upload</button>
         </div>
       </div>
+
+      {/* Selected items actions */}
       {viewMode === 'row' && selectedIds.length > 0 && (
-        <div className="flex gap-2 mb-2">
-          <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-1 rounded" onClick={() => onDelete(selectedFiles)}>Delete</button>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1 rounded" onClick={() => onEdit(selectedFiles[0])}>Edit</button>
-        </div>
-      )}
-      {viewMode === 'grid' ? (
-        <div className="flex flex-wrap gap-6 p-6">
-          {filteredFiles.length === 0 ? (
-            <div className="text-gray-400 text-lg mt-16 w-full text-center">No files found. Try a different search or upload a new file!</div>
-          ) : (
-            filteredFiles.map((file) => (
-            <div
-              key={file.id}
-                className="bg-white rounded-xl shadow-lg p-4 flex flex-col items-start border border-gray-200 w-64 relative group cursor-pointer transition-all hover:shadow-xl hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                tabIndex={0}
-                aria-label={`File: ${file.fileName}`}
-              onClick={() => onFileClick(file)}
-                onKeyDown={e => { if (e.key === 'Enter') onFileClick(file); }}
+        <div className="bg-blue-50 border-b border-blue-200 px-6 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-blue-800 font-medium">
+              {selectedIds.length} item{selectedIds.length !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+              onClick={() => onEdit(selectedFiles[0])}
             >
-                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                  <button className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50" title="Edit" onClick={e => { e.stopPropagation(); onEdit(file); }}>
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M15.232 5.232a2.5 2.5 0 1 1 3.536 3.536l-9.193 9.193a2 2 0 0 1-.707.464l-3.11 1.037a.5.5 0 0 1-.632-.632l1.037-3.11a2 2 0 0 1 .464-.707l9.193-9.193Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </button>
-                  <button className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50" title="Delete" onClick={e => { e.stopPropagation(); onDelete(file); }}>
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M6 7h12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7h12Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </button>
-              </div>
-              
-              {/* File icon with better styling */}
-              <div className="flex items-center gap-2 mb-3 w-full">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
-                                          {file.fileType === 'PDF' ? (
-                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M9 13h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                          <path d="M9 17h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                          <path d="M9 9h1" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                        </svg>
-                      ) : file.fileType === 'CSV' ? (
-                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M8 13l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      ) : file.fileType === 'XLSX' ? (
-                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M8 13l3 3 5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M8 17l3-3 5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      ) : (
-                        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          <path d="M14 2v6h6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-gray-900 truncate" title={file.fileName}>{file.fileName}</h3>
-                  <p className="text-sm text-gray-500">{file.fileType || 'File'}</p>
-                </div>
-              </div>
-              
-                             {/* File details with icons */}
-               <div className="space-y-1.5 w-full">
-                <div className="flex items-center gap-2 text-sm">
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
-                    <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M8 5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2H8V5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span className="text-gray-600">{file.bankName || 'Unknown Bank'}</span>
-                </div>
-                
-                <div className="flex items-center gap-2 text-sm">
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
-                    <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span className="text-gray-600">{file.fileType || 'Statement'}</span>
-                </div>
-                
-                {file.size && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <span className="text-gray-600">{file.size}</span>
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2 text-sm">
-                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="text-gray-400">
-                    <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <span className="text-gray-600">
-                    Created at: {file.createdAt ? new Date(file.createdAt).toLocaleString() : file.uploaded ? new Date(file.uploaded).toLocaleString() : 'Unknown'}
-                  </span>
-                </div>
-              </div>
-            </div>
-            ))
-          )}
+              Edit
+            </button>
+            <button
+              className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+              onClick={() => onDelete(selectedFiles)}
+            >
+              Delete
+            </button>
+          </div>
         </div>
-      ) : (
-        <FilesTable files={files} onFileClick={onFileClick} selectedIds={selectedIds} onSelect={handleSelect} onSelectAll={handleSelectAll} onEdit={onEdit} onDelete={onDelete} />
       )}
+      
+      {/* Content */}
+      <div className="p-6">
+        {loading ? (
+          // Loading skeletons
+          <div className={viewMode === 'grid' 
+            ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6"
+            : "space-y-4"
+          }>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <FileCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : filteredFiles.length === 0 ? (
+          // Empty state
+          search ? (
+            <div className="text-center py-16">
+              <FiSearch className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No files found</h3>
+              <p className="text-gray-500">Try adjusting your search criteria</p>
+            </div>
+          ) : (
+            <EmptyState onUpload={onUpload} />
+          )
+        ) : viewMode === 'grid' ? (
+          // Grid view
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+            {filteredFiles.map((file) => (
+              <FileCard
+                key={file.id}
+                file={file}
+                onFileClick={onFileClick}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        ) : (
+          // List view
+          <FilesTable 
+            files={filteredFiles} 
+            onFileClick={onFileClick} 
+            selectedIds={selectedIds} 
+            onSelect={handleSelect} 
+            onSelectAll={handleSelectAll} 
+            onEdit={onEdit} 
+            onDelete={onDelete} 
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -1459,7 +1709,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
   };
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4">
+    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw]">
       {/* Duplicate check field selection UI */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3">
         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -2298,7 +2548,7 @@ const FilesPage: React.FC = () => {
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-gray-50">
       <FilesSidebar
         files={banks}
         selectedFileId={selectedFileId}
@@ -2308,30 +2558,40 @@ const FilesPage: React.FC = () => {
         onExpand={handleExpand}
         statements={files}
       />
-      <main className="flex-1 ">
-        {/* Tabs */}
-        <div className="flex mb-6 border-b border-blue-100">
-          {[...openTabs, ...openSliceTabs.map(tab => ({ id: tab.id, name: tab.name }))].map((tab) => (
-            <div
-              key={tab.id}
-              className={`flex items-center px-4 py-2 mr-2 rounded-t-lg cursor-pointer border-b-2 ${activeTabId === tab.id ? 'border-blue-500 bg-white font-bold text-blue-700' : 'border-transparent bg-blue-50 text-blue-800'}`}
-              onClick={() => handleTabClick(tab.id)}
-            >
-              <span>{tab.name}</span>
-              {tab.id !== 'all' && (
-                <button
-                  className="ml-2 text-gray-400 hover:text-red-500 focus:outline-none"
-                  onClick={(e) => handleCloseTab(tab.id, e)}
-                  title="Close tab"
+      <main className="flex-1">
+        {/* Only show tabs if there are multiple tabs or non-all tabs */}
+        {([...openTabs, ...openSliceTabs].length > 1 || activeTabId !== 'all') && (
+          <div className="bg-white border-b border-gray-200">
+            <div className="flex overflow-x-auto">
+              {[...openTabs, ...openSliceTabs.map(tab => ({ id: tab.id, name: tab.name }))].map((tab) => (
+                <div
+                  key={tab.id}
+                  className={`flex items-center px-6 py-3 cursor-pointer border-b-2 whitespace-nowrap ${
+                    activeTabId === tab.id 
+                      ? 'border-blue-500 bg-white text-blue-700 font-semibold' 
+                      : 'border-transparent bg-gray-50 text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                  onClick={() => handleTabClick(tab.id)}
                 >
-                  <RiCloseLine />
-                </button>
-              )}
+                  <span>{tab.name}</span>
+                  {tab.id !== 'all' && (
+                    <button
+                      className="ml-3 text-gray-400 hover:text-red-500 focus:outline-none"
+                      onClick={(e) => handleCloseTab(tab.id, e)}
+                      title="Close tab"
+                    >
+                      <RiCloseLine className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
+        
         {/* Main content */}
         {mainContent}
+        
         <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} onSuccess={refreshFiles} />
         <EditFileModal isOpen={editModalOpen} file={editFile} onClose={() => setEditModalOpen(false)} onSave={handleEditSave} />
         <DeleteFileModal 

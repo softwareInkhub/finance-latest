@@ -1,148 +1,421 @@
 import React, { useState } from 'react';
 
-interface BankAccount {
-  id: string;
-  name: string;
-}
-interface Bank {
-  id: string;
-  name: string;
-  accounts: BankAccount[];
-}
-
 interface AnalyticsSummaryProps {
+  totalAmount: number;
+  totalCredit: number;
+  totalDebit: number;
   totalTransactions: number;
-  totalAmount?: string | number;
-  totalCredit?: string | number;
-  totalDebit?: string | number;
   totalBanks: number;
   totalAccounts: number;
-  tagged?: number;
-  untagged?: number;
-  totalTags?: number;
-  showAmount?: boolean;
-  showTagStats?: boolean;
   showBalance?: boolean;
-  banks?: Bank[];
   onShowUntagged?: () => void;
 }
 
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}
+
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+          >
+            ×
+          </button>
+        </div>
+        <div className="text-sm text-gray-600">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
-  totalTransactions,
   totalAmount,
   totalCredit,
   totalDebit,
+  totalTransactions,
   totalBanks,
   totalAccounts,
-  tagged,
-  untagged,
-  totalTags,
-  showAmount = true,
-  showTagStats = false,
-  showBalance = true,
-  banks = [],
+  showBalance = false,
   onShowUntagged,
 }) => {
-  const [expandedBanks, setExpandedBanks] = useState<string[]>([]);
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    content: React.ReactNode;
+  }>({
+    isOpen: false,
+    title: '',
+    content: null,
+  });
 
-  const toggleBank = (bankId: string) => {
-    setExpandedBanks((prev) =>
-      prev.includes(bankId) ? prev.filter((id) => id !== bankId) : [...prev, bankId]
-    );
+  const balance = totalCredit - totalDebit;
+
+  const openModal = (title: string, content: React.ReactNode) => {
+    setModalState({
+      isOpen: true,
+      title,
+      content,
+    });
   };
 
-  return (
-    <div className="flex flex-wrap gap-2 sm:gap-4 justify-center mb-4">
-      <div className="px-3 sm:px-4 py-2 bg-blue-100 text-blue-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-        Total Tranx: {totalTransactions}
+  const closeModal = () => {
+    setModalState({
+      isOpen: false,
+      title: '',
+      content: null,
+    });
+  };
+
+  const getTransactionDetails = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Total Transactions</div>
+          <div className="text-2xl font-bold text-blue-600">{totalTransactions}</div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Average per Transaction</div>
+          <div className="text-lg font-semibold text-gray-700">
+            ₹{(totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
       </div>
-      {showAmount && (
-        <>
-          <div className="px-3 sm:px-4 py-2 bg-green-100 text-green-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-            Total Amt.: {typeof totalAmount === 'number' ? totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : totalAmount}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Credit Transactions</div>
+          <div className="text-lg font-semibold text-green-600">
+            {Math.round((totalCredit / totalAmount) * totalTransactions)} ({((totalCredit / totalAmount) * 100).toFixed(1)}%)
           </div>
-          {typeof totalCredit !== 'undefined' && (
-            <div className="px-3 sm:px-4 py-2 bg-cyan-100 text-cyan-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-              Cr.: {typeof totalCredit === 'number' ? totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(totalCredit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
-            </div>
-          )}
-          {typeof totalDebit !== 'undefined' && (
-            <div className="px-3 sm:px-4 py-2 bg-rose-100 text-rose-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-              Dr.: {typeof totalDebit === 'number' ? totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
-            </div>
-          )}
-          {showBalance && typeof totalCredit !== 'undefined' && typeof totalDebit !== 'undefined' && (
-            <div className={`px-3 sm:px-4 py-2 rounded-lg font-semibold shadow text-xs sm:text-sm ${
-              (typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) > (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit))
-                ? 'bg-emerald-100 text-emerald-800'
-                : 'bg-amber-100 text-amber-800'
-            }`}>
-              Bal.: {(typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) - (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit)) > 0 ? '+' : ''}
-              {((typeof totalCredit === 'number' ? totalCredit : Number(totalCredit)) - (typeof totalDebit === 'number' ? totalDebit : Number(totalDebit))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-          )}
-        </>
-      )}
-      <div className="relative">
-        <button
-          className="px-3 sm:px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg font-semibold shadow text-xs sm:text-sm focus:outline-none"
-          onClick={() => setExpandedBanks((prev) => (prev.length ? [] : banks.map(b => b.id)))}
-          type="button"
-        >
-          Total Banks: {totalBanks}
-        </button>
-        {banks.length > 0 && expandedBanks.length > 0 && (
-          <div className="absolute left-0 mt-2 z-10 bg-white border border-gray-200 rounded shadow-lg min-w-[180px] p-2">
-            {banks.map((bank) => (
-              <div key={bank.id} className="mb-1">
-                <button
-                  className="w-full text-left px-2 py-1 rounded hover:bg-blue-50 font-semibold text-blue-700 flex items-center gap-2"
-                  onClick={() => toggleBank(bank.id)}
-                  type="button"
-                >
-                  <span>{expandedBanks.includes(bank.id) ? '▼' : '►'}</span>
-                  {bank.name}
-                </button>
-                {expandedBanks.includes(bank.id) && bank.accounts.length > 0 && (
-                  <div className="ml-6 mt-1">
-                    {bank.accounts.map((acc) => (
-                      <button
-                        key={acc.id}
-                        className="block w-full text-left px-2 py-1 rounded hover:bg-purple-50 text-xs text-purple-700"
-                        // Add onClick for account-specific stats if needed
-                        type="button"
-                      >
-                        {acc.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Debit Transactions</div>
+          <div className="text-lg font-semibold text-red-600">
+            {Math.round((totalDebit / totalAmount) * totalTransactions)} ({((totalDebit / totalAmount) * 100).toFixed(1)}%)
           </div>
-        )}
+        </div>
       </div>
-      <div className="px-3 sm:px-4 py-2 bg-pink-100 text-pink-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-        Total Acc.: {totalAccounts}
+      <div className="border-t pt-3">
+        <div className="text-sm text-gray-500 space-y-2">
+          <div>This represents the total number of financial transactions processed across all banks and accounts.</div>
+          <div><strong>Transaction Distribution:</strong> Based on amount distribution, approximately {Math.round((totalCredit / totalAmount) * totalTransactions)} transactions are credits and {Math.round((totalDebit / totalAmount) * totalTransactions)} are debits.</div>
+          <div><strong>Average Transaction Value:</strong> ₹{(totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per transaction.</div>
+        </div>
       </div>
-      {showTagStats && (
-        <>
-          <div className="px-3 sm:px-4 py-2 bg-purple-100 text-purple-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-            Tagged: {tagged}
-          </div>
-          <button
-            className="px-3 sm:px-4 py-2 bg-orange-100 text-orange-800 rounded-lg font-semibold shadow text-xs sm:text-sm focus:outline-none hover:bg-orange-200"
-            onClick={onShowUntagged}
-            type="button"
-          >
-            Untagged: {untagged}
-          </button>
-          <div className="px-3 sm:px-4 py-2 bg-indigo-100 text-indigo-800 rounded-lg font-semibold shadow text-xs sm:text-sm">
-            Total Tags: {totalTags}
-          </div>
-        </>
-      )}
     </div>
+  );
+
+  const getAmountDetails = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Total Amount</div>
+          <div className="text-2xl font-bold text-green-600">
+            ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Transaction Count</div>
+          <div className="text-lg font-semibold text-gray-700">{totalTransactions}</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Largest Transaction</div>
+          <div className="text-lg font-semibold text-gray-700">
+            ₹{(totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Smallest Transaction</div>
+          <div className="text-lg font-semibold text-gray-700">
+            ₹{(totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+      </div>
+      <div className="border-t pt-3">
+        <div className="text-sm text-gray-500 space-y-2">
+          <div>Total value of all transactions combined, including both credits and debits.</div>
+          <div><strong>Amount Range:</strong> Transactions range from approximately ₹{(totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} to ₹{(totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.</div>
+          <div><strong>Transaction Volume:</strong> High volume of transactions indicates active financial activity across all accounts.</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const getCreditDetails = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Total Credits</div>
+          <div className="text-2xl font-bold text-blue-600">
+            ₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Percentage of Total</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {((totalCredit / totalAmount) * 100).toFixed(1)}%
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Average Credit</div>
+          <div className="text-lg font-semibold text-gray-700">
+            ₹{(totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Credit Transactions</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {Math.round((totalCredit / totalAmount) * totalTransactions)}
+          </div>
+        </div>
+      </div>
+      <div className="border-t pt-3">
+        <div className="text-sm text-gray-500 space-y-2">
+          <div>Total incoming funds across all accounts. Credits represent money received or deposited.</div>
+          <div><strong>Credit Analysis:</strong> {((totalCredit / totalAmount) * 100).toFixed(1)}% of total transaction value comes from credits.</div>
+          <div><strong>Average Credit Size:</strong> ₹{(totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per credit transaction.</div>
+          <div><strong>Financial Health:</strong> {totalCredit > totalDebit ? 'Positive cash flow with more incoming than outgoing funds.' : 'Higher outgoing than incoming funds.'}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const getDebitDetails = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Total Debits</div>
+          <div className="text-2xl font-bold text-red-600">
+            ₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Percentage of Total</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {((totalDebit / totalAmount) * 100).toFixed(1)}%
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Average Debit</div>
+          <div className="text-lg font-semibold text-gray-700">
+            ₹{(totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Debit Transactions</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {Math.round((totalDebit / totalAmount) * totalTransactions)}
+          </div>
+        </div>
+      </div>
+      <div className="border-t pt-3">
+        <div className="text-sm text-gray-500 space-y-2">
+          <div>Total outgoing funds across all accounts. Debits represent money spent or withdrawn.</div>
+          <div><strong>Debit Analysis:</strong> {((totalDebit / totalAmount) * 100).toFixed(1)}% of total transaction value goes to debits.</div>
+          <div><strong>Average Debit Size:</strong> ₹{(totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per debit transaction.</div>
+          <div><strong>Spending Pattern:</strong> {totalDebit > totalCredit ? 'Higher spending than income.' : 'Income exceeds spending.'}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const getBalanceDetails = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Net Balance</div>
+          <div className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Balance Type</div>
+          <div className={`text-lg font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {balance >= 0 ? 'Surplus' : 'Deficit'}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Balance Ratio</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {((balance / totalAmount) * 100).toFixed(1)}%
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Cash Flow</div>
+          <div className={`text-lg font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            {balance >= 0 ? 'Positive' : 'Negative'}
+          </div>
+        </div>
+      </div>
+      <div className="border-t pt-3">
+        <div className="text-sm text-gray-500 space-y-2">
+          <div>Net financial position (Credits - Debits). Positive values indicate surplus, negative values indicate deficit.</div>
+          <div><strong>Balance Analysis:</strong> {balance >= 0 ? 'You have a surplus of ₹' + Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' indicating positive cash flow.' : 'You have a deficit of ₹' + Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' indicating negative cash flow.'}</div>
+          <div><strong>Financial Health:</strong> {balance >= 0 ? 'Strong financial position with more income than expenses.' : 'Consider reviewing spending patterns to improve financial position.'}</div>
+          <div><strong>Balance Ratio:</strong> {((balance / totalAmount) * 100).toFixed(1)}% of total transaction value represents your net position.</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const getBanksDetails = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Total Banks</div>
+          <div className="text-2xl font-bold text-yellow-600">{totalBanks}</div>
+            </div>
+        <div>
+          <div className="font-semibold text-gray-800">Total Accounts</div>
+          <div className="text-lg font-semibold text-gray-700">{totalAccounts}</div>
+            </div>
+            </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Accounts per Bank</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {(totalAccounts / totalBanks).toFixed(1)}
+                  </div>
+              </div>
+        <div>
+          <div className="font-semibold text-gray-800">Banking Diversity</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {totalBanks === 1 ? 'Single Bank' : totalBanks <= 3 ? 'Moderate' : 'High'}
+          </div>
+        </div>
+      </div>
+      <div className="border-t pt-3">
+        <div className="text-sm text-gray-500 space-y-2">
+          <div>Number of different banking institutions connected to your account. Each bank may have multiple accounts.</div>
+          <div><strong>Banking Structure:</strong> You have {totalBanks} bank{totalBanks > 1 ? 's' : ''} with {totalAccounts} total account{totalAccounts > 1 ? 's' : ''}.</div>
+          <div><strong>Account Distribution:</strong> Average of {(totalAccounts / totalBanks).toFixed(1)} accounts per bank.</div>
+          <div><strong>Diversification:</strong> {totalBanks === 1 ? 'Single bank setup - consider diversifying for better risk management.' : totalBanks <= 3 ? 'Moderate banking diversity provides good balance.' : 'High banking diversity offers maximum risk distribution.'}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const getAccountsDetails = () => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Total Accounts</div>
+          <div className="text-2xl font-bold text-purple-600">{totalAccounts}</div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Average per Bank</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {(totalAccounts / totalBanks).toFixed(1)}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="font-semibold text-gray-800">Account Complexity</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {totalAccounts <= 2 ? 'Simple' : totalAccounts <= 5 ? 'Moderate' : 'Complex'}
+          </div>
+        </div>
+        <div>
+          <div className="font-semibold text-gray-800">Account Management</div>
+          <div className="text-lg font-semibold text-gray-700">
+            {totalAccounts <= 2 ? 'Easy' : totalAccounts <= 5 ? 'Manageable' : 'Requires Attention'}
+          </div>
+        </div>
+      </div>
+      <div className="border-t pt-3">
+        <div className="text-sm text-gray-500 space-y-2">
+          <div>Total number of bank accounts across all connected banking institutions.</div>
+          <div><strong>Account Structure:</strong> You manage {totalAccounts} account{totalAccounts > 1 ? 's' : ''} across {totalBanks} bank{totalBanks > 1 ? 's' : ''}.</div>
+          <div><strong>Account Distribution:</strong> Average of {(totalAccounts / totalBanks).toFixed(1)} accounts per banking institution.</div>
+          <div><strong>Management Level:</strong> {totalAccounts <= 2 ? 'Simple account structure with minimal management overhead.' : totalAccounts <= 5 ? 'Moderate account complexity requiring regular monitoring.' : 'Complex account structure requiring dedicated management attention.'}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-2">
+        <div className="flex items-center p-1 border-b border-gray-100">
+          {/* Summary Statistics Row */}
+          <div className="flex-1 flex items-center gap-1.5">
+            <button
+              onClick={() => openModal('Transaction Details', getTransactionDetails())}
+              className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
+            >
+              Total Tranx: {totalTransactions}
+            </button>
+            <button
+              onClick={() => openModal('Amount Details', getAmountDetails())}
+              className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs font-semibold hover:bg-green-200 transition-colors cursor-pointer"
+            >
+              Total Amt.: ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </button>
+            <button
+              onClick={() => openModal('Credit Details', getCreditDetails())}
+              className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
+            >
+              Cr.: ₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </button>
+            <button
+              onClick={() => openModal('Debit Details', getDebitDetails())}
+              className="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-xs font-semibold hover:bg-red-200 transition-colors cursor-pointer"
+            >
+              Dr.: ₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </button>
+            {showBalance && (
+              <button
+                onClick={() => openModal('Balance Details', getBalanceDetails())}
+                className={`px-1.5 py-0.5 rounded text-xs font-semibold hover:transition-colors cursor-pointer ${balance >= 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}
+              >
+                Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </button>
+            )}
+            <button
+              onClick={() => openModal('Bank Details', getBanksDetails())}
+              className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs font-semibold hover:bg-yellow-200 transition-colors cursor-pointer"
+            >
+              Total Banks: {totalBanks}
+            </button>
+            <button
+              onClick={() => openModal('Account Details', getAccountsDetails())}
+              className="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-semibold hover:bg-purple-200 transition-colors cursor-pointer"
+            >
+              Total Acc.: {totalAccounts}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <Modal
+        isOpen={modalState.isOpen}
+        onClose={closeModal}
+        title={modalState.title}
+      >
+        {modalState.content}
+      </Modal>
+    </>
   );
 };
 

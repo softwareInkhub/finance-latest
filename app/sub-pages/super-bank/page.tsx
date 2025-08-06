@@ -8,10 +8,360 @@ import React from 'react';
 import AnalyticsSummary from '../../components/AnalyticsSummary';
 import TransactionFilterBar from '../../components/TransactionFilterBar';
 import TagFilterPills from '../../components/TagFilterPills';
-import TaggingControls from '../../components/TaggingControls';
+
 import TransactionTable from '../../components/TransactionTable';
 import { Transaction, TransactionRow, Tag } from '../../types/transaction';
 import Modal from '../../components/Modals/Modal';
+
+// Compact Reports Component
+function CompactReports({ 
+  transactions, 
+  bankIdNameMap, 
+  tagFilters 
+}: { 
+  transactions: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[];
+  bankIdNameMap: { [id: string]: string };
+  tagFilters: string[];
+}) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const totalPages = 3;
+
+  // Calculate per-bank statistics
+  const bankStats = useMemo(() => {
+    const stats: { [bankId: string]: {
+      bankName: string;
+      totalTransactions: number;
+      totalAmount: number;
+      totalCredit: number;
+      totalDebit: number;
+      tagged: number;
+      untagged: number;
+    } } = {};
+
+    transactions.forEach(tx => {
+      const bankId = tx.bankId;
+      if (!stats[bankId]) {
+        stats[bankId] = {
+          bankName: bankIdNameMap[bankId] || bankId,
+          totalTransactions: 0,
+          totalAmount: 0,
+          totalCredit: 0,
+          totalDebit: 0,
+          tagged: 0,
+          untagged: 0
+        };
+      }
+
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      
+      stats[bankId].totalTransactions++;
+      stats[bankId].totalAmount += amount;
+      
+      if (crdr === 'CR') {
+        stats[bankId].totalCredit += Math.abs(amount);
+      } else if (crdr === 'DR') {
+        stats[bankId].totalDebit += Math.abs(amount);
+      }
+
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      if (tags.length > 0) {
+        stats[bankId].tagged++;
+      } else {
+        stats[bankId].untagged++;
+      }
+    });
+
+    return stats;
+  }, [transactions, bankIdNameMap]);
+
+  // Calculate per-bank per-account breakdown
+  const accountBreakdown = useMemo(() => {
+    const breakdown: { [bankId: string]: { [accountId: string]: {
+      accountId: string;
+      totalTransactions: number;
+      totalAmount: number;
+      totalCredit: number;
+      totalDebit: number;
+      tags: { [tagName: string]: number };
+    } } } = {};
+
+    transactions.forEach(tx => {
+      const bankId = tx.bankId;
+      const accountId = tx.accountId;
+      
+      if (!breakdown[bankId]) breakdown[bankId] = {};
+      if (!breakdown[bankId][accountId]) {
+        breakdown[bankId][accountId] = {
+          accountId,
+          totalTransactions: 0,
+          totalAmount: 0,
+          totalCredit: 0,
+          totalDebit: 0,
+          tags: {}
+        };
+      }
+
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      
+      breakdown[bankId][accountId].totalTransactions++;
+      breakdown[bankId][accountId].totalAmount += amount;
+      
+      if (crdr === 'CR') {
+        breakdown[bankId][accountId].totalCredit += Math.abs(amount);
+      } else if (crdr === 'DR') {
+        breakdown[bankId][accountId].totalDebit += Math.abs(amount);
+      }
+
+      // Count tags
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      tags.forEach(tag => {
+        if (tag && tag.name) {
+          breakdown[bankId][accountId].tags[tag.name] = 
+            (breakdown[bankId][accountId].tags[tag.name] || 0) + 1;
+        }
+      });
+    });
+
+    return breakdown;
+  }, [transactions]);
+
+  // Calculate tag statistics
+  const tagStats = useMemo(() => {
+    const stats: { [tagName: string]: {
+      totalTransactions: number;
+      totalAmount: number;
+      totalCredit: number;
+      totalDebit: number;
+    } } = {};
+
+    transactions.forEach(tx => {
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+
+      tags.forEach(tag => {
+        if (tag && tag.name) {
+          if (!stats[tag.name]) {
+            stats[tag.name] = {
+              totalTransactions: 0,
+              totalAmount: 0,
+              totalCredit: 0,
+              totalDebit: 0
+            };
+          }
+
+          stats[tag.name].totalTransactions++;
+          stats[tag.name].totalAmount += amount;
+          
+          if (crdr === 'CR') {
+            stats[tag.name].totalCredit += Math.abs(amount);
+          } else if (crdr === 'DR') {
+            stats[tag.name].totalDebit += Math.abs(amount);
+          }
+        }
+      });
+    });
+
+    return stats;
+  }, [transactions]);
+
+  const renderPage1 = () => (
+    <div className="overflow-x-auto w-full">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50">
+            <th className="px-2 py-1 text-left font-medium text-gray-700">Bank</th>
+            <th className="px-2 py-1 text-center font-medium text-gray-700">Txns</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Amount</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Cr</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Dr</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Balance</th>
+            <th className="px-2 py-1 text-center font-medium text-gray-700">Tagged</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(bankStats).map(([bankId, stats]) => (
+            <tr key={bankId} className="border-b border-gray-100 hover:bg-gray-50">
+                                  <td className="px-2 py-1 text-gray-900 font-medium truncate max-w-20">{stats.bankName}</td>
+              <td className="px-2 py-1 text-center text-gray-600">{stats.totalTransactions}</td>
+              <td className="px-2 py-1 text-right text-gray-600">
+                ₹{stats.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-right text-green-600 font-medium">
+                ₹{stats.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-right text-red-600 font-medium">
+                ₹{stats.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className={`px-2 py-1 text-right font-medium ${
+                stats.totalCredit > stats.totalDebit ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {stats.totalCredit - stats.totalDebit > 0 ? '+' : ''}
+                ₹{(stats.totalCredit - stats.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-center text-blue-600">{stats.tagged}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderPage2 = () => (
+    <div className="space-y-1">
+      {Object.entries(accountBreakdown).map(([bankId, accounts]) => (
+        <div key={bankId} className="border border-gray-200 rounded">
+          <div className="bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700">
+            {bankIdNameMap[bankId] || bankId}
+          </div>
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-2 py-1 text-left font-medium text-gray-700">Account</th>
+                  <th className="px-2 py-1 text-center font-medium text-gray-700">Txns</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Amount</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Cr</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Dr</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Balance</th>
+                  <th className="px-2 py-1 text-center font-medium text-gray-700">Tags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(accounts).map(([accountId, stats]) => (
+                  <tr key={accountId} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-2 py-1 text-gray-900 font-mono text-xs truncate max-w-16">{accountId}</td>
+                    <td className="px-2 py-1 text-center text-gray-600">{stats.totalTransactions}</td>
+                    <td className="px-2 py-1 text-right text-gray-600">
+                      ₹{stats.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-2 py-1 text-right text-green-600 font-medium">
+                      ₹{stats.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-2 py-1 text-right text-red-600 font-medium">
+                      ₹{stats.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className={`px-2 py-1 text-right font-medium ${
+                      stats.totalCredit > stats.totalDebit ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {stats.totalCredit - stats.totalDebit > 0 ? '+' : ''}
+                      ₹{(stats.totalCredit - stats.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-2 py-1 text-center text-blue-600">
+                      {Object.keys(stats.tags).length}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderPage3 = () => (
+    <div className="overflow-x-auto w-full">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50">
+            <th className="px-2 py-1 text-left font-medium text-gray-700">Tag</th>
+            <th className="px-2 py-1 text-center font-medium text-gray-700">Txns</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Amount</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Cr</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Dr</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(tagStats).map(([tagName, stats]) => (
+            <tr key={tagName} className="border-b border-gray-100 hover:bg-gray-50">
+              <td className="px-2 py-1 text-gray-900 font-medium truncate max-w-24">{tagName}</td>
+              <td className="px-2 py-1 text-center text-gray-600">{stats.totalTransactions}</td>
+              <td className="px-2 py-1 text-right text-gray-600">
+                ₹{stats.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-right text-green-600 font-medium">
+                ₹{stats.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-right text-red-600 font-medium">
+                ₹{stats.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className={`px-2 py-1 text-right font-medium ${
+                stats.totalCredit > stats.totalDebit ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {stats.totalCredit - stats.totalDebit > 0 ? '+' : ''}
+                ₹{(stats.totalCredit - stats.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const getPageContent = () => {
+    switch (currentPage) {
+      case 0:
+        return renderPage1();
+      case 1:
+        return renderPage2();
+      case 2:
+        return renderPage3();
+      default:
+        return renderPage1();
+    }
+  };
+
+  const getPageTitle = () => {
+    switch (currentPage) {
+      case 0:
+        return 'Per-Bank Summary';
+      case 1:
+        return 'Per-Bank Per-Account Breakdown';
+      case 2:
+        return 'Tag Transactions Summary';
+      default:
+        return 'Per-Bank Summary';
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-4 h-60 overflow-hidden">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900">Reports</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+              disabled={currentPage === 0}
+              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              ◀
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+              disabled={currentPage === totalPages - 1}
+              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="h-48 overflow-y-auto overflow-x-auto max-h-48">
+        {getPageContent()}
+      </div>
+    </div>
+  );
+}
 
 interface Condition {
   if: {
@@ -1361,6 +1711,29 @@ export default function SuperBankPage() {
     return () => document.removeEventListener("mouseup", handleMouseUp);
   }, []);
 
+  // Hide selection button on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (selection) {
+        setSelection(null);
+      }
+    };
+
+    // Add scroll listeners to table container and window
+    const tableElement = tableRef.current;
+    if (tableElement) {
+      tableElement.addEventListener('scroll', handleScroll);
+    }
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      if (tableElement) {
+        tableElement.removeEventListener('scroll', handleScroll);
+      }
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [selection]);
+
   // Create tag from selection
   const handleCreateTagFromSelection = async () => {
     if (!selection?.text) return;
@@ -2272,13 +2645,13 @@ export default function SuperBankPage() {
   };
 
   return (
-    <div className="h-screen overflow-hidden">
-      <div className="h-full py-4 sm:py-6 px-2 sm:px-4">
-        <div className="max-w-full mx-auto h-full flex flex-col">
+    <div className="min-h-screen">
+      <div className="py-4 sm:py-6 px-2 sm:px-4">
+        <div className="max-w-full mx-auto flex flex-col">
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
-          <h1 className="text-base sm:text-2xl font-bold text-blue-700 truncate">Super Bank: All Transactions</h1>
+          <h3 className="font-bold text-blue-700 truncate">Super Bank: All Transactions</h3> 
           <button
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded shadow font-semibold text-sm sm:text-base whitespace-nowrap"
+            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow font-semibold text-xs whitespace-nowrap"
             onClick={() => setShowHeaderSection(true)}
           >
             Header
@@ -2415,15 +2788,20 @@ export default function SuperBankPage() {
             totalTransactions={filteredRows.length}
             totalBanks={totalBanks}
             totalAccounts={totalAccounts}
-            totalTags={filteredTotalTags}
-            tagged={tagged}
-            untagged={untagged}
-            showTagStats={true}
             showBalance={true}
             onShowUntagged={() => {
               // Filter to show only untagged transactions
               setSortOrder('untagged');
             }}
+          />
+        )}
+
+        {/* Compact Reports Container */}
+        {filteredRows.length > 0 && (
+          <CompactReports
+            transactions={filteredRows}
+            bankIdNameMap={bankIdNameMap}
+            tagFilters={tagFilters}
           />
         )}
 
@@ -2436,6 +2814,17 @@ export default function SuperBankPage() {
           onTagDeleted={() => handleTagDeleted()}
           onApplyTagToAll={handleApplyTagToAllFromMenu}
           tagStats={filteredTagStats}
+          tagged={tagged}
+          untagged={untagged}
+          totalTags={allTags.length}
+          selectedCount={sortedAndFilteredRows.filter(tx => selectedRows.has(tx.id)).length}
+          selectedTagId={selectedTagId}
+          onTagChange={setSelectedTagId}
+          onAddTag={handleAddTag}
+          tagging={tagging}
+          tagError={tagError}
+          tagSuccess={tagSuccess}
+          onCreateTag={handleCreateTag}
         />
 
 
@@ -2459,20 +2848,7 @@ export default function SuperBankPage() {
             { value: 'untagged', label: 'Untagged Only' },
           ]}
         />
-        {/* Tagging controls above table */}
-        {sortedAndFilteredRows.filter(tx => selectedRows.has(tx.id)).length > 0 && (
-          <TaggingControls
-            allTags={allTags}
-            selectedTagId={selectedTagId}
-            onTagChange={setSelectedTagId}
-            onAddTag={handleAddTag}
-            selectedCount={sortedAndFilteredRows.filter(tx => selectedRows.has(tx.id)).length}
-            tagging={tagging}
-            tagError={tagError}
-            tagSuccess={tagSuccess}
-            onCreateTag={handleCreateTag}
-          />
-        )}
+
         {/* Table and selection logic */}
         <div ref={tableRef} className="overflow-x-auto relative">
           {/* Global loading overlay for tag operations */}
@@ -2606,7 +2982,7 @@ export default function SuperBankPage() {
               </button>
             </div>
           )}
-          <div className="flex-1 min-h-0" style={{ height: 'calc(100vh - 200px)' }}>
+          <div className="flex-1 min-h-0" style={{ height: 'calc(100vh - 400px)' }}>
           <TransactionTable
             rows={sortedAndFilteredRows}
             headers={superHeader}

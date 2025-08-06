@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { RiBankLine, RiAccountPinCircleLine, RiArrowDownSLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiFileTextLine } from 'react-icons/ri';
+import { RiBankLine, RiAccountPinCircleLine, RiArrowDownSLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiFileTextLine, RiMenuLine } from 'react-icons/ri';
 
 interface Bank {
   id: string;
@@ -18,9 +18,18 @@ interface BanksSidebarProps {
   onBankClick?: (bank: Bank) => void;
   onAccountClick?: (account: { id: string; accountHolderName: string }, bankId: string) => void;
   onBankSectionClick?: (section: string, bankId: string) => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountClick, onBankSectionClick }: BanksSidebarProps) {
+export default function BanksSidebar({ 
+  onSuperBankClick, 
+  onBankClick, 
+  onAccountClick, 
+  onBankSectionClick,
+  isCollapsed = false,
+  onToggleCollapse
+}: BanksSidebarProps) {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [accounts, setAccounts] = useState<{ [bankId: string]: Account[] }>({});
   const [expandedBank, setExpandedBank] = useState<string | null>(null);
@@ -80,26 +89,51 @@ export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountC
   };
 
   return (
-    <aside className="w-64 min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2 ">
-      <div className="mb-6">
-        <input
-          type="text"
-          placeholder="Search"
-          className="w-full px-3 py-2 rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        />
+    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2 transition-all duration-300`}>
+      {/* Toggle Button */}
+      <div className="flex justify-end items-center mb-4">
+        <button
+          onClick={onToggleCollapse}
+          className="p-1 hover:bg-gray-100 rounded transition-colors"
+          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isCollapsed ? (
+            <RiMenuLine className="text-gray-600" size={20} />
+          ) : (
+            <div className="flex items-center gap-1">
+              <span className="text-gray-400">&lt;</span>
+              <RiMenuLine className="text-gray-600" size={16} />
+            </div>
+          )}
+        </button>
       </div>
+
+      {/* Search Bar */}
+      {!isCollapsed && (
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Search"
+            className="w-full px-3 py-2 rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          />
+        </div>
+      )}
+
+      {/* Navigation */}
       <nav className="flex-1">
         <ul className="space-y-2 text-gray-700 text-sm">
           <li>
             <button
               className={`flex items-center gap-2 px-2 py-2 rounded hover:bg-blue-50 w-full text-left ${typeof window !== 'undefined' && window.location.pathname === '/super-bank' ? 'font-bold text-blue-700' : ''}`}
               onClick={onSuperBankClick}
+              title="Super Bank"
             >
-              <RiBankLine /> Super Bank
+              <RiBankLine /> 
+              {!isCollapsed && <span>Super Bank</span>}
             </button>
           </li>
           <li>
-            <div className="px-2 py-2 text-xs text-gray-400 uppercase tracking-wider">Banks</div>
+            {!isCollapsed && <div className="px-2 py-2 text-xs text-gray-400 uppercase tracking-wider">Banks</div>}
             <ul>
               {banks.map(bank => (
                 <li key={bank.id}>
@@ -109,12 +143,13 @@ export default function BanksSidebar({ onSuperBankClick, onBankClick, onAccountC
                       handleExpand(bank.id);
                       handleBankClick(bank);
                     }}
+                    title={bank.bankName}
                   >
-                    {expandedBank === bank.id ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
+                    {!isCollapsed && (expandedBank === bank.id ? <RiArrowDownSLine /> : <RiArrowRightSLine />)}
                     <RiBankLine />
-                    <span className="flex-1 text-left">{bank.bankName}</span>
+                    {!isCollapsed && <span className="flex-1 text-left">{bank.bankName}</span>}
                   </button>
-                  {expandedBank === bank.id && (
+                  {!isCollapsed && expandedBank === bank.id && (
                     <ul className="ml-8 mt-1 space-y-1">
                       {/* Account Section */}
                       <li>
