@@ -78,39 +78,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   // Drag and drop state for headers
   const [draggedHeader, setDraggedHeader] = useState<string | null>(null);
 
-  // Double scroll logic
+  // Table scroll logic
   const tableScrollRef = useRef<HTMLDivElement>(null);
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const [tableWidth, setTableWidth] = useState(0);
 
-  useEffect(() => {
-    // Set the width of the top scroll bar to match the table
-    if (tableScrollRef.current) {
-      setTableWidth(tableScrollRef.current.scrollWidth);
-    }
-  }, [headers, columnWidths, rows.length]);
 
-  // Sync scroll positions
-  useEffect(() => {
-    const handleTopScroll = () => {
-      if (tableScrollRef.current && topScrollRef.current) {
-        tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
-      }
-    };
-    const handleTableScroll = () => {
-      if (tableScrollRef.current && topScrollRef.current) {
-        topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
-      }
-    };
-    const top = topScrollRef.current;
-    const table = tableScrollRef.current;
-    if (top) top.addEventListener('scroll', handleTopScroll);
-    if (table) table.addEventListener('scroll', handleTableScroll);
-    return () => {
-      if (top) top.removeEventListener('scroll', handleTopScroll);
-      if (table) table.removeEventListener('scroll', handleTableScroll);
-    };
-  }, [rows.length, headers.length, columnWidths]);
 
   // Mouse event handlers for resizing
   const handleMouseDown = (e: React.MouseEvent, header: string) => {
@@ -165,21 +136,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 
   return (
     <div className="h-[48vh] flex flex-col" style={{ minHeight: 0 }}>
-      {/* Top horizontal scrollbar */}
-      <div
-        ref={topScrollRef}
-        style={{
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          height: 16,
-          width: '100%',
-          marginBottom: 2,
-        }}
-      >
-        <div style={{ width: tableWidth, height: 1 }} />
-      </div>
-      {/* Table container with vertical scroll */}
-      <div ref={tableScrollRef} className="flex-1 overflow-auto" style={{ minHeight: 0 }}>
+      {/* Table container with vertical scroll only */}
+      <div ref={tableScrollRef} className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
       {loading ? (
         <div className="text-gray-500 text-sm">Loading transactions...</div>
       ) : error ? (
@@ -187,7 +145,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       ) : rows.length === 0 ? (
         <div className="text-gray-500 text-sm">No mapped transactions found.</div>
       ) : (
-        <table className="min-w-full border text-xs sm:text-sm bg-white/80 rounded-xl shadow" style={{ tableLayout: 'fixed', height: 'fit-content' }}>
+        <table className="w-full border text-xs sm:text-sm bg-white/80 rounded-xl shadow" style={{ height: 'fit-content' }}>
           <colgroup>
             <col style={{ width: 40 }} />
             <col style={{ width: 40 }} />

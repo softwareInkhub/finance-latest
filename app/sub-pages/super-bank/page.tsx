@@ -12,8 +12,211 @@ import TagFilterPills from '../../components/TagFilterPills';
 import TransactionTable from '../../components/TransactionTable';
 import { Transaction, TransactionRow, Tag } from '../../types/transaction';
 import Modal from '../../components/Modals/Modal';
+import GridLayout, { Layout } from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
 
 // Compact Reports Component
+function CompactAnalytics({ 
+  transactions, 
+  totalAmount, 
+  totalCredit, 
+  totalDebit, 
+  totalBanks, 
+  totalAccounts 
+}: { 
+  transactions: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[];
+  totalAmount: number;
+  totalCredit: number;
+  totalDebit: number;
+  totalBanks: number;
+  totalAccounts: number;
+}) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const totalPages = 3;
+
+  const balance = totalCredit - totalDebit;
+
+  // Memoized calculations for performance
+  const analyticsData = useMemo(() => {
+    const monthlyStats = transactions.reduce((acc, tx) => {
+      const dateStr = String(tx.Date || tx.createdAt || '');
+      const date = new Date(dateStr);
+      const month = date.toLocaleString('default', { month: 'short' });
+      if (!acc[month]) {
+        acc[month] = { credit: 0, debit: 0, count: 0 };
+      }
+      const amount = parseFloat(String(tx.Amount || 0));
+      if (tx['Dr./Cr.'] === 'Cr') {
+        acc[month].credit += amount;
+      } else {
+        acc[month].debit += amount;
+      }
+      acc[month].count += 1;
+      return acc;
+    }, {} as { [key: string]: { credit: number; debit: number; count: number } });
+
+    const topCategories = transactions.reduce((acc, tx) => {
+      const description = String(tx.Description || '');
+      const category = description.split(' ')[0] || 'Other';
+      if (!acc[category]) {
+        acc[category] = { amount: 0, count: 0 };
+      }
+      acc[category].amount += parseFloat(String(tx.Amount || 0));
+      acc[category].count += 1;
+      return acc;
+    }, {} as { [key: string]: { amount: number; count: number } });
+
+    const avgTransaction = totalAmount / transactions.length;
+    const largestTransaction = Math.max(...transactions.map(tx => parseFloat(String(tx.Amount || 0))));
+    const smallestTransaction = Math.min(...transactions.map(tx => parseFloat(String(tx.Amount || 0))));
+
+    return {
+      monthlyStats,
+      topCategories: Object.entries(topCategories)
+        .sort(([,a], [,b]) => b.amount - a.amount)
+        .slice(0, 5),
+      avgTransaction,
+      largestTransaction,
+      smallestTransaction
+    };
+  }, [transactions, totalAmount]);
+
+  const renderPage1 = () => (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-gray-700 mb-2">Monthly Overview</div>
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className="px-2 py-1 text-left">Month</th>
+              <th className="px-2 py-1 text-right">Txns</th>
+              <th className="px-2 py-1 text-right">Credit</th>
+              <th className="px-2 py-1 text-right">Debit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(analyticsData.monthlyStats).map(([month, stats]) => (
+              <tr key={month} className="border-b border-gray-100">
+                <td className="px-2 py-1 truncate max-w-16">{month}</td>
+                <td className="px-2 py-1 text-right">{stats.count}</td>
+                <td className="px-2 py-1 text-right text-green-600">
+                  ₹{stats.credit.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </td>
+                <td className="px-2 py-1 text-right text-red-600">
+                  ₹{stats.debit.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderPage2 = () => (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-gray-700 mb-2">Top Categories</div>
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className="px-2 py-1 text-left">Category</th>
+              <th className="px-2 py-1 text-right">Txns</th>
+              <th className="px-2 py-1 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {analyticsData.topCategories.map(([category, stats]) => (
+              <tr key={category} className="border-b border-gray-100">
+                <td className="px-2 py-1 truncate max-w-20">{category}</td>
+                <td className="px-2 py-1 text-right">{stats.count}</td>
+                <td className="px-2 py-1 text-right">
+                  ₹{stats.amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderPage3 = () => (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-gray-700 mb-2">Transaction Stats</div>
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span>Average Transaction:</span>
+          <span className="font-semibold">₹{analyticsData.avgTransaction.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Largest Transaction:</span>
+          <span className="font-semibold text-green-600">₹{analyticsData.largestTransaction.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Smallest Transaction:</span>
+          <span className="font-semibold text-red-600">₹{analyticsData.smallestTransaction.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Total Balance:</span>
+          <span className={`font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Credit Ratio:</span>
+          <span className="font-semibold">{((totalCredit / totalAmount) * 100).toFixed(1)}%</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Debit Ratio:</span>
+          <span className="font-semibold">{((totalDebit / totalAmount) * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const getPageContent = () => {
+    switch (currentPage) {
+      case 0: return renderPage1();
+      case 1: return renderPage2();
+      case 2: return renderPage3();
+      default: return renderPage1();
+    }
+  };
+
+  return (
+    <div className="w-full h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+            disabled={currentPage === 0}
+            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            ◀
+          </button>
+          <span className="text-xs text-gray-500">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+            disabled={currentPage === totalPages - 1}
+            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            ▶
+          </button>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="overflow-y-auto overflow-x-auto" style={{ height: 'calc(100% - 60px)', maxHeight: '150px' }}>
+        {getPageContent()}
+      </div>
+    </div>
+  );
+}
+
 function CompactReports({ 
   transactions, 
   bankIdNameMap, 
@@ -329,11 +532,8 @@ function CompactReports({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 mb-4 h-60 overflow-hidden">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-gray-900">Reports</h3>
-        </div>
+    <div className="w-full h-full">
+      <div className="flex items-center justify-end mb-3">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">
             Page {currentPage + 1} of {totalPages}
@@ -356,7 +556,7 @@ function CompactReports({
           </div>
         </div>
       </div>
-      <div className="h-48 overflow-y-auto overflow-x-auto max-h-48">
+      <div className="overflow-y-auto overflow-x-auto" style={{ height: 'calc(100% - 60px)', maxHeight: '150px' }}>
         {getPageContent()}
       </div>
     </div>
@@ -1554,6 +1754,25 @@ export default function SuperBankPage() {
   const [matchingTransactions, setMatchingTransactions] = useState<Transaction[]>([]);
   const [failedTransactions, setFailedTransactions] = useState<{ id: string; error: string; description?: string }[]>([]);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  
+  // Grid Layout State
+  const [layout, setLayout] = useState<Layout[]>([
+    { i: 'reports', x: 0, y: 0, w: 5, h: 4, minW: 4, minH: 3, maxW: 12, maxH: 8 },
+    { i: 'analytics', x: 7, y: 0, w: 5, h: 4, minW: 4, minH: 3, maxW: 12, maxH: 8 }
+  ]);
+  
+  // Dynamic width calculation for grid
+  const [gridWidth, setGridWidth] = useState(1200);
+  
+  useEffect(() => {
+    const updateWidth = () => {
+      setGridWidth(Math.max(800, window.innerWidth - 100));
+    };
+    
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   // Helper function to extract tag IDs for API calls
   const extractTagIds = (tags: Tag[]): string[] => {
@@ -2796,13 +3015,47 @@ export default function SuperBankPage() {
           />
         )}
 
-        {/* Compact Reports Container */}
+        {/* Compact Reports and Analytics Containers */}
         {filteredRows.length > 0 && (
-          <CompactReports
-            transactions={filteredRows}
-            bankIdNameMap={bankIdNameMap}
-            tagFilters={tagFilters}
-          />
+          <div className="mb-4" style={{ height: '250px', width: '100%' }}>
+            <GridLayout
+              className="layout"
+              layout={layout}
+              cols={12}
+              rowHeight={50}
+              width={gridWidth}
+              onLayoutChange={(newLayout) => setLayout(newLayout)}
+              isDraggable={true}
+              isResizable={true}
+              draggableHandle=".drag-handle"
+              useCSSTransforms={true}
+              compactType={null}
+            >
+              <div key="reports" className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 overflow-hidden">
+                <div className="drag-handle cursor-move mb-2 pb-2 border-b border-gray-200 bg-gray-50 px-2 py-1 rounded-t hover:bg-gray-100 transition-colors">
+                  <span className="text-sm font-semibold text-gray-800">📊 Reports</span>
+                </div>
+                <CompactReports
+                  transactions={filteredRows}
+                  bankIdNameMap={bankIdNameMap}
+                  tagFilters={tagFilters}
+                />
+              </div>
+              <div key="analytics" className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 overflow-hidden">
+                <div className="drag-handle cursor-move mb-2 pb-2 border-b border-gray-200 bg-gray-50 px-2 py-1 rounded-t hover:bg-gray-100 transition-colors">
+                  <span className="text-sm font-semibold text-gray-800">📈 Analytics</span>
+                </div>
+                <CompactAnalytics
+                  transactions={filteredRows}
+                  totalAmount={totalAmount}
+                  totalCredit={totalCredit}
+                  totalDebit={totalDebit}
+                  totalBanks={totalBanks}
+                  totalAccounts={totalAccounts}
+                />
+              </div>
+            </GridLayout>
+          </div>
         )}
 
         {/* Tag filter pills section below controls */}

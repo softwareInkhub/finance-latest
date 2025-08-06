@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { RiBankLine, RiAccountPinCircleLine, RiArrowDownSLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiFileTextLine, RiMenuLine } from 'react-icons/ri';
 
@@ -22,7 +22,7 @@ interface BanksSidebarProps {
   onToggleCollapse?: () => void;
 }
 
-export default function BanksSidebar({ 
+function BanksSidebar({ 
   onSuperBankClick, 
   onBankClick, 
   onAccountClick, 
@@ -89,7 +89,7 @@ export default function BanksSidebar({
   };
 
   return (
-    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2 transition-all duration-300`}>
+    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2 transition-all duration-150 ease-out will-change-transform`}>
       {/* Toggle Button */}
       <div className="flex justify-end items-center mb-4">
         <button
@@ -220,4 +220,6 @@ export default function BanksSidebar({
       </nav>
     </aside>
   );
-} 
+}
+
+export default React.memo(BanksSidebar);

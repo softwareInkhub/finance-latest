@@ -89,7 +89,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Average per Transaction</div>
           <div className="text-lg font-semibold text-gray-700">
-            ₹{(totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
         </div>
       </div>
@@ -111,7 +111,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div className="text-sm text-gray-500 space-y-2">
           <div>This represents the total number of financial transactions processed across all banks and accounts.</div>
           <div><strong>Transaction Distribution:</strong> Based on amount distribution, approximately {Math.round((totalCredit / totalAmount) * totalTransactions)} transactions are credits and {Math.round((totalDebit / totalAmount) * totalTransactions)} are debits.</div>
-          <div><strong>Average Transaction Value:</strong> ₹{(totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per transaction.</div>
+          <div><strong>Average Transaction Value:</strong> ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} per transaction.</div>
         </div>
       </div>
     </div>
@@ -135,20 +135,20 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Largest Transaction</div>
           <div className="text-lg font-semibold text-gray-700">
-            ₹{(totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
         </div>
         <div>
           <div className="font-semibold text-gray-800">Smallest Transaction</div>
           <div className="text-lg font-semibold text-gray-700">
-            ₹{(totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
         </div>
       </div>
       <div className="border-t pt-3">
         <div className="text-sm text-gray-500 space-y-2">
           <div>Total value of all transactions combined, including both credits and debits.</div>
-          <div><strong>Amount Range:</strong> Transactions range from approximately ₹{(totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} to ₹{(totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.</div>
+          <div><strong>Amount Range:</strong> Transactions range from approximately ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} to ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}.</div>
           <div><strong>Transaction Volume:</strong> High volume of transactions indicates active financial activity across all accounts.</div>
         </div>
       </div>
@@ -175,7 +175,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Average Credit</div>
           <div className="text-lg font-semibold text-gray-700">
-            ₹{(totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{typeof totalCredit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
         </div>
         <div>
@@ -189,7 +189,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div className="text-sm text-gray-500 space-y-2">
           <div>Total incoming funds across all accounts. Credits represent money received or deposited.</div>
           <div><strong>Credit Analysis:</strong> {((totalCredit / totalAmount) * 100).toFixed(1)}% of total transaction value comes from credits.</div>
-          <div><strong>Average Credit Size:</strong> ₹{(totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per credit transaction.</div>
+          <div><strong>Average Credit Size:</strong> ₹{typeof totalCredit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} per credit transaction.</div>
           <div><strong>Financial Health:</strong> {totalCredit > totalDebit ? 'Positive cash flow with more incoming than outgoing funds.' : 'Higher outgoing than incoming funds.'}</div>
         </div>
       </div>
@@ -216,7 +216,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Average Debit</div>
           <div className="text-lg font-semibold text-gray-700">
-            ₹{(totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{typeof totalDebit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
         </div>
         <div>
@@ -230,7 +230,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div className="text-sm text-gray-500 space-y-2">
           <div>Total outgoing funds across all accounts. Debits represent money spent or withdrawn.</div>
           <div><strong>Debit Analysis:</strong> {((totalDebit / totalAmount) * 100).toFixed(1)}% of total transaction value goes to debits.</div>
-          <div><strong>Average Debit Size:</strong> ₹{(totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per debit transaction.</div>
+          <div><strong>Average Debit Size:</strong> ₹{typeof totalDebit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} per debit transaction.</div>
           <div><strong>Spending Pattern:</strong> {totalDebit > totalCredit ? 'Higher spending than income.' : 'Income exceeds spending.'}</div>
         </div>
       </div>
@@ -243,7 +243,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Net Balance</div>
           <div className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{typeof balance === 'number' ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
         </div>
         <div>
@@ -270,7 +270,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       <div className="border-t pt-3">
         <div className="text-sm text-gray-500 space-y-2">
           <div>Net financial position (Credits - Debits). Positive values indicate surplus, negative values indicate deficit.</div>
-          <div><strong>Balance Analysis:</strong> {balance >= 0 ? 'You have a surplus of ₹' + Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' indicating positive cash flow.' : 'You have a deficit of ₹' + Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' indicating negative cash flow.'}</div>
+          <div><strong>Balance Analysis:</strong> {balance >= 0 ? 'You have a surplus of ₹' + (typeof balance === 'number' ? Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00') + ' indicating positive cash flow.' : 'You have a deficit of ₹' + (typeof balance === 'number' ? Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00') + ' indicating negative cash flow.'}</div>
           <div><strong>Financial Health:</strong> {balance >= 0 ? 'Strong financial position with more income than expenses.' : 'Consider reviewing spending patterns to improve financial position.'}</div>
           <div><strong>Balance Ratio:</strong> {((balance / totalAmount) * 100).toFixed(1)}% of total transaction value represents your net position.</div>
         </div>
@@ -370,26 +370,26 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
               onClick={() => openModal('Amount Details', getAmountDetails())}
               className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs font-semibold hover:bg-green-200 transition-colors cursor-pointer"
             >
-              Total Amt.: ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              Total Amt.: ₹{typeof totalAmount === 'number' ? totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
             </button>
             <button
               onClick={() => openModal('Credit Details', getCreditDetails())}
               className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
             >
-              Cr.: ₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              Cr.: ₹{typeof totalCredit === 'number' ? totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
             </button>
             <button
               onClick={() => openModal('Debit Details', getDebitDetails())}
               className="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-xs font-semibold hover:bg-red-200 transition-colors cursor-pointer"
             >
-              Dr.: ₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              Dr.: ₹{typeof totalDebit === 'number' ? totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
             </button>
             {showBalance && (
               <button
                 onClick={() => openModal('Balance Details', getBalanceDetails())}
                 className={`px-1.5 py-0.5 rounded text-xs font-semibold hover:transition-colors cursor-pointer ${balance >= 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}
               >
-                Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Bal.: ₹{typeof balance === 'number' ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
               </button>
             )}
             <button

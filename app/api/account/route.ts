@@ -25,17 +25,27 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch account' }, { status: 500 });
     }
   }
-  if (!bankId) {
+  if (!bankId && bankId !== 'all') {
     return NextResponse.json({ error: 'bankId is required' }, { status: 400 });
   }
   try {
-    let filterExpression = 'bankId = :bankId';
-    const expressionAttributeValues: Record<string, string | number> = {
-      ':bankId': bankId
-    };
-    if (userId) {
-      filterExpression += ' AND userId = :userId';
-      expressionAttributeValues[':userId'] = userId;
+    let filterExpression = '';
+    const expressionAttributeValues: Record<string, string | number> = {};
+    
+    if (bankId === 'all') {
+      // Fetch all accounts for the user
+      if (userId) {
+        filterExpression = 'userId = :userId';
+        expressionAttributeValues[':userId'] = userId;
+      }
+    } else {
+      // Fetch accounts for specific bank
+      filterExpression = 'bankId = :bankId';
+      expressionAttributeValues[':bankId'] = bankId;
+      if (userId) {
+        filterExpression += ' AND userId = :userId';
+        expressionAttributeValues[':userId'] = userId;
+      }
     }
     
     // Fetch all accounts with pagination
