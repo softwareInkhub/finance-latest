@@ -11,9 +11,9 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   return (
     <AuthWrapper>
       {isLoginPage ? children : (
-        <div className="flex">
+        <div className="flex h-[100vh] overflow-y-hidden">
           <Sidebar />
-          <div className="flex-1 flex flex-col min-h-screen">
+          <div className="flex-1 flex flex-col min-h-screen ">
             <Navbar />
             <div className="flex-1">{children}</div>
           </div>

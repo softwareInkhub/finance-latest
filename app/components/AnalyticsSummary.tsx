@@ -8,7 +8,6 @@ interface AnalyticsSummaryProps {
   totalBanks: number;
   totalAccounts: number;
   showBalance?: boolean;
-  onShowUntagged?: () => void;
 }
 
 interface ModalProps {
@@ -49,7 +48,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   totalBanks,
   totalAccounts,
   showBalance = false,
-  onShowUntagged,
 }) => {
   const [modalState, setModalState] = useState<{
     isOpen: boolean;

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch, FiFilter, FiTag } from 'react-icons/fi';
+import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch } from 'react-icons/fi';
 
 interface Tag {
   id: string;
@@ -156,27 +156,25 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
     )
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-  // Show first 5 tags in first row, rest in second row when expanded
-  const firstRowTags = filteredTags.slice(0, 5);
-  const secondRowTags = filteredTags.slice(5);
-  const hasMoreTags = filteredTags.length > 5;
+  // Show first 6 tags in first row, rest in second row when expanded
+  const firstRowTags = filteredTags.slice(0, 6);
+  const secondRowTags = filteredTags.slice(6);
+  const hasMoreTags = filteredTags.length > 6;
 
   // Calculate tag statistics
-  const totalTagsCount = allTags.length;
-  const activeFilters = tagFilters.length;
-  const tagsWithCounts = allTags.filter(tag => tagStats && tagStats[tag.name] > 0).length;
+  // Note: These variables were calculated but not used in the component
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-2 max-h-20 overflow-y-auto">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-2 relative">
       {/* First row: Tags on left, controls on right */}
-      <div className="flex items-center p-1 border-b border-gray-100">
+      <div className="flex items-center p-1 border-b border-gray-100 flex-wrap gap-2">
         {/* Left half - First 6 tag pills */}
-        <div className="flex-1 flex items-center gap-1.5">
+        <div className="flex-1 flex items-center gap-1.5 min-w-0">
           {firstRowTags.map(tag => {
             const btnRef = React.createRef<HTMLButtonElement>();
             const count = tagStats ? tagStats[tag.name] : undefined;
             return (
-              <span key={tag.id} className="relative inline-flex items-center group">
+              <span key={tag.id} className="relative inline-flex items-center group flex-shrink-0">
                 <button
                   className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                   style={{
@@ -221,20 +219,20 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
           {!isExpanded && hasMoreTags && (
             <button
               onClick={() => setIsExpanded(true)}
-              className="px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer"
+              className="px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer flex-shrink-0"
               title="Click to show more tags"
             >
-              +{filteredTags.length - 5} more
+              +{filteredTags.length - 6} more
             </button>
           )}
         </div>
 
-                  {/* Right half - Controls and statistics */}
-          <div className="flex items-center gap-2 ml-2">
+        {/* Right half - Controls and statistics */}
+        <div className="flex items-center gap-2 flex-wrap">
           
           {/* Tag Statistics */}
           {typeof tagged !== 'undefined' && typeof untagged !== 'undefined' && typeof totalTags !== 'undefined' && (
-            <div className="flex items-center gap-2 text-xs text-gray-600">
+            <div className="flex items-center gap-2 text-xs text-gray-600 flex-shrink-0">
               <span>Tagged: {tagged}</span>
               <span>Untagged: {untagged}</span>
               <span>Total Tags: {totalTags}</span>
@@ -243,7 +241,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
 
           {/* Tagging Controls - Only show if props are provided */}
           {selectedCount !== undefined && onTagChange && onAddTag && (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               <div className="flex gap-1 items-center relative">
                 <div className="relative" ref={dropdownRef}>
                   <button
@@ -256,7 +254,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   </button>
                   
                   {showDropdown && (
-                    <div className="absolute top-full left-0 bg-white border border-gray-300 rounded shadow-lg z-50 max-h-60 overflow-y-auto min-w-64 w-80">
+                    <div className="absolute top-full left-0 bg-white border border-gray-300 rounded shadow-lg z-[9999] max-h-60 overflow-y-auto min-w-64 w-80">
                       {/* Search Input */}
                       <div className="p-2 border-b border-gray-200">
                         <input
@@ -340,11 +338,11 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
           )}
 
           {/* Search bar */}
-          <div className="relative">
+          <div className="relative flex-shrink-0">
             <FiSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
             <input
               type="text"
-              placeholder="Search tags..."
+              placeholder="Q Search tags..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-32 pl-6 pr-2 py-0.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
@@ -352,7 +350,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
           </div>
 
           {/* Controls */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {tagFilters.length > 0 && onClear && (
               <button
                 className="px-1.5 py-0.5 text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md"

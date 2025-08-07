@@ -31,7 +31,6 @@ export default function BanksTabsClient() {
   const [editBank, setEditBank] = useState<Bank | null>(null);
   const [allTags, setAllTags] = useState<Array<{ id: string; name: string; color?: string }>>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isToggling, setIsToggling] = useState(false);
   const [bankStats, setBankStats] = useState<{ [bankId: string]: { accounts: number; transactions: number } }>({});
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const router = useRouter();
@@ -103,18 +102,18 @@ export default function BanksTabsClient() {
           
           banks.forEach(bank => {
             const bankAccounts = Array.isArray(allAccounts) 
-              ? allAccounts.filter((acc: any) => acc.bankId === bank.id)
+              ? allAccounts.filter((acc: { bankId: string }) => acc.bankId === bank.id)
               : [];
             
             const bankTransactions = Array.isArray(allTransactions) 
-              ? allTransactions.filter((tx: any) => tx.bankId === bank.id)
+              ? allTransactions.filter((tx: { bankId: string }) => tx.bankId === bank.id)
               : [];
             
             console.log(`Bank ${bank.bankName} (${bank.id}):`, {
               accounts: bankAccounts.length,
               transactions: bankTransactions.length,
-              accountIds: bankAccounts.map((acc: any) => acc.id),
-              transactionIds: bankTransactions.slice(0, 3).map((tx: any) => tx.id)
+              accountIds: bankAccounts.map((acc: { id: string }) => acc.id),
+              transactionIds: bankTransactions.slice(0, 3).map((tx: { id: string }) => tx.id)
             });
             
             stats[bank.id] = {
@@ -258,15 +257,8 @@ export default function BanksTabsClient() {
       <BanksSidebar 
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => {
-          if (isToggling) return; // Prevent multiple rapid toggles
-          
-          setIsToggling(true);
-          setIsSidebarCollapsed(!isSidebarCollapsed);
-          
-          // Reset toggle flag after transition
-          setTimeout(() => {
-            setIsToggling(false);
-          }, 300); // Match the transition duration
+          // Prevent rapid toggles with immediate state update
+          setIsSidebarCollapsed(prev => !prev);
         }}
         onSuperBankClick={() => {
           const tabKey = 'super-bank';

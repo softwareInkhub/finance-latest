@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import { RiBankLine, RiAccountPinCircleLine, RiArrowDownSLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiFileTextLine, RiMenuLine } from 'react-icons/ri';
 
@@ -43,23 +43,23 @@ function BanksSidebar({
   }, []);
 
   // Fetch accounts for a bank when expanded
-  const handleExpand = (bankId: string) => {
-    setExpandedBank(expandedBank === bankId ? null : bankId);
+  const handleExpand = useCallback((bankId: string) => {
+    setExpandedBank(prev => prev === bankId ? null : bankId);
     const userId = typeof window !== "undefined" ? localStorage.getItem('userId') : null;
     if (!accounts[bankId] && userId) {
       fetch(`/api/account?bankId=${bankId}&userId=${userId}`)
         .then(res => res.json())
         .then(data => setAccounts(prev => ({ ...prev, [bankId]: Array.isArray(data) ? data : [] })));
     }
-  };
+  }, [accounts]);
 
-  const handleBankClick = (bank: Bank) => {
+  const handleBankClick = useCallback((bank: Bank) => {
     if (onBankClick) {
       onBankClick(bank);
     }
-  };
+  }, [onBankClick]);
 
-  const handleBankSectionClick = (section: string, bankId: string) => {
+  const handleBankSectionClick = useCallback((section: string, bankId: string) => {
     setExpandedBankSections(prev => {
       const currentSections = prev[bankId] || [];
       const isExpanded = currentSections.includes(section);
@@ -82,19 +82,19 @@ function BanksSidebar({
     if (onBankSectionClick) {
       onBankSectionClick(section, bankId);
     }
-  };
+  }, [onBankSectionClick]);
 
-  const isSectionExpanded = (bankId: string, section: string) => {
+  const isSectionExpanded = useCallback((bankId: string, section: string) => {
     return (expandedBankSections[bankId] || []).includes(section);
-  };
+  }, [expandedBankSections]);
 
   return (
-    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2 transition-all duration-150 ease-out will-change-transform`}>
+    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} min-h-screen bg-white border-r border-gray-200 flex flex-col py-4 px-2 transition-all duration-100 ease-out`}>
       {/* Toggle Button */}
       <div className="flex justify-end items-center mb-4">
         <button
           onClick={onToggleCollapse}
-          className="p-1 hover:bg-gray-100 rounded transition-colors"
+          className="p-1 hover:bg-gray-100 rounded transition-colors duration-75"
           title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
           {isCollapsed ? (

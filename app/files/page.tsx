@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import FilesSidebar from '../components/FilesSidebar';
 import { RiCloseLine } from 'react-icons/ri';
 import Papa from 'papaparse';
-import { FiEdit2, FiTrash2, FiGrid, FiList, FiMoreVertical, FiDownload, FiEye, FiSearch, FiCalendar, FiFile, FiCreditCard, FiClock } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiGrid, FiList, FiMoreVertical, FiSearch, FiCalendar, FiFile, FiCreditCard, FiClock } from 'react-icons/fi';
 import Modal from '../components/Modals/Modal';
 
 
@@ -799,28 +799,6 @@ function FileCard({ file, onFileClick, onEdit, onDelete }: { file: FileData; onF
           
           {menuOpen && (
             <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-              <button
-                className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onFileClick(file);
-                  setMenuOpen(false);
-                }}
-              >
-                <FiEye className="w-4 h-4" />
-                View Details
-              </button>
-              <button
-                className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Add download logic here
-                  setMenuOpen(false);
-                }}
-              >
-                <FiDownload className="w-4 h-4" />
-                Download
-              </button>
               <button
                 className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 w-full text-left"
                 onClick={(e) => {
@@ -1709,9 +1687,9 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
   };
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw]">
+    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw] h-[73vh] ">
       {/* Duplicate check field selection UI */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3">
+      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3 ">
         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
           <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1719,7 +1697,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
           Select fields to check for duplicate transactions
         </h3>
         
-        <div className="grid grid-cols-10 gap-2 mb-4">
+        <div className="grid grid-cols-10 gap-2 mb-4 " >
           {previewData[0]?.filter(header => header && header.trim() !== '').map((header, idx) => (
             <label key={idx} className="flex items-center space-x-1 p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
               <input
@@ -1791,8 +1769,8 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
           )}
         </div>
       </div>
-      <div className="overflow-auto" style={{ maxHeight: 600 }}>
-        <table ref={tableRef} className="border-collapse min-w-full text-xs select-none" style={{ tableLayout: 'fixed' }}>
+      <div className="overflow-auto h-[32vh]" >
+        <table ref={tableRef} className="border-collapse min-w-full text-xs select-none " style={{ tableLayout: 'fixed' }}>
           <tbody>
             {previewData.map((row, i) => {
               const isHeader = i === 0;
@@ -2470,7 +2448,7 @@ const FilesPage: React.FC = () => {
           <div className="mb-4">
             <h2 className="text-xl font-bold text-blue-800">{sliceTab.name}</h2>
             {/* Account Information Header */}
-            <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
               <div className="flex flex-wrap gap-4 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-blue-900">Bank:</span>

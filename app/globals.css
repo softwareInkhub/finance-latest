@@ -19,3 +19,81 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Grid Layout Styles */
+.react-grid-layout {
+  position: relative;
+  transition: height 200ms ease;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+
+.react-grid-item.resizing {
+  z-index: 1;
+  will-change: width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: red;
+  opacity: 0.2;
+  transition-duration: 100ms;
+  z-index: 2;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+  z-index: 10;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 2px solid rgba(0, 0, 0, 0.4);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.4);
+}
+
+/* Ensure grid containers don't overflow */
+.layout {
+  overflow: hidden !important;
+}
+
+/* Compact table styles */
+.compact-table {
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.compact-table th,
+.compact-table td {
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
