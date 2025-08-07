@@ -514,7 +514,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
   };
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4">
+    <div className="bg-blue rounded-xl border border-blue-100 p-4 mt-4">
       {/* Duplicate check field selection UI */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3">
         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -862,7 +862,7 @@ export default function BankFilesComponent({ bankId, bankName }: BankFilesCompon
   if (error) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="bg-red-500 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
           <p className="font-medium">Error</p>
           <p className="text-sm">{error}</p>
         </div>

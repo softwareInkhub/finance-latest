@@ -8,10 +8,715 @@ import React from 'react';
 import AnalyticsSummary from '../../components/AnalyticsSummary';
 import TransactionFilterBar from '../../components/TransactionFilterBar';
 import TagFilterPills from '../../components/TagFilterPills';
-import TaggingControls from '../../components/TaggingControls';
+
 import TransactionTable from '../../components/TransactionTable';
 import { Transaction, TransactionRow, Tag } from '../../types/transaction';
 import Modal from '../../components/Modals/Modal';
+
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function CompactAnalytics({ 
+  transactions, 
+  totalAmount, 
+  totalCredit, 
+  totalDebit, 
+  selectedTagData,
+  onClearSelection
+}: { 
+  transactions: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[];
+  totalAmount: number;
+  totalCredit: number;
+  totalDebit: number;
+  selectedTagData?: {
+    tagName: string;
+    bankId: string;
+    accountId: string;
+    transactions: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[];
+  };
+  onClearSelection?: () => void;
+}) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const totalPages = 3;
+
+  const balance = totalCredit - totalDebit;
+
+  // Memoized calculations for performance
+  const analyticsData = useMemo(() => {
+    const monthlyStats = transactions.reduce((acc, tx) => {
+      const dateStr = String(tx.Date || tx.createdAt || '');
+      const date = new Date(dateStr);
+      const month = date.toLocaleString('default', { month: 'short' });
+      if (!acc[month]) {
+        acc[month] = { credit: 0, debit: 0, count: 0 };
+      }
+      const amount = parseFloat(String(tx.Amount || 0));
+      if (tx['Dr./Cr.'] === 'Cr') {
+        acc[month].credit += amount;
+      } else {
+        acc[month].debit += amount;
+      }
+      acc[month].count += 1;
+      return acc;
+    }, {} as { [key: string]: { credit: number; debit: number; count: number } });
+
+    const topCategories = transactions.reduce((acc, tx) => {
+      const description = String(tx.Description || '');
+      const category = description.split(' ')[0] || 'Other';
+      if (!acc[category]) {
+        acc[category] = { amount: 0, count: 0 };
+      }
+      acc[category].amount += parseFloat(String(tx.Amount || 0));
+      acc[category].count += 1;
+      return acc;
+    }, {} as { [key: string]: { amount: number; count: number } });
+
+    const avgTransaction = totalAmount / transactions.length;
+    const largestTransaction = Math.max(...transactions.map(tx => parseFloat(String(tx.Amount || 0))));
+    const smallestTransaction = Math.min(...transactions.map(tx => parseFloat(String(tx.Amount || 0))));
+
+    return {
+      monthlyStats,
+      topCategories: Object.entries(topCategories)
+        .sort(([,a], [,b]) => b.amount - a.amount)
+        .slice(0, 5),
+      avgTransaction,
+      largestTransaction,
+      smallestTransaction
+    };
+  }, [transactions, totalAmount]);
+
+  const renderPage1 = () => {
+    if (selectedTagData) {
+      // Show selected tag transactions
+      const tagTransactions = selectedTagData.transactions;
+
+      // Calculate summary stats for the selected tag
+      const totalCredit = tagTransactions.reduce((sum, tx) => {
+        const amount = parseFloat(String(tx.Amount || 0));
+        const drCr = String(tx['Dr./Cr.'] || '').toUpperCase();
+        return drCr === 'CR' ? sum + Math.abs(amount) : sum;
+      }, 0);
+      
+      const totalDebit = tagTransactions.reduce((sum, tx) => {
+        const amount = parseFloat(String(tx.Amount || 0));
+        const drCr = String(tx['Dr./Cr.'] || '').toUpperCase();
+        return drCr === 'DR' ? sum + Math.abs(amount) : sum;
+      }, 0);
+      
+      const balance = totalCredit - totalDebit;
+
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-semibold text-gray-700">
+              📊 {selectedTagData.tagName} Transactions
+              <div className="text-xs text-gray-500 font-normal">
+                {selectedTagData.bankId} - {selectedTagData.accountId}
+              </div>
+            </div>
+            <button
+              onClick={onClearSelection}
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+            >
+              ✕ Clear
+            </button>
+          </div>
+          
+          {/* Summary Box */}
+          <div className="bg-green-50 border border-green-200 rounded p-2 mb-2">
+            <div className="text-xs font-semibold text-green-800 mb-1">
+              Summary for Tag: {selectedTagData.tagName}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="text-green-600">Total Credit: ₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <div className="text-red-600">Total Debit: ₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <div className={`${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                Balance: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+              <div className="text-blue-600">Total Transactions: {tagTransactions.length}</div>
+            </div>
+          </div>
+          <div className="overflow-y-auto overflow-x-auto w-full max-w-full" style={{ maxHeight: '180px' }}>
+            {tagTransactions.length > 0 ? (
+              <table className="w-full text-xs min-w-0 compact-table">
+                <thead className="sticky top-0 bg-gray-50 z-10">
+                  <tr>
+                    <th className="px-1 py-1 text-left text-xs">Date</th>
+                    <th className="px-1 py-1 text-left text-xs">Description</th>
+                    <th className="px-1 py-1 text-right text-xs">Amount</th>
+                    <th className="px-1 py-1 text-center text-xs">Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tagTransactions.map((tx, idx) => (
+                    <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-1 py-1 truncate text-xs">
+                        {String(tx.Date || tx.createdAt || 'N/A').substring(0, 10)}
+                      </td>
+                      <td className="px-1 py-1 truncate text-xs max-w-24">
+                        {String(tx.Description || 'N/A').substring(0, 25)}
+                      </td>
+                      <td className={`px-1 py-1 text-right text-xs font-medium ${
+                        parseFloat(String(tx.Amount || 0)) > 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        ₹{parseFloat(String(tx.Amount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                      </td>
+                      <td className="px-1 py-1 text-center text-xs">
+                        <span className={`px-1 py-0.5 rounded text-xs ${
+                          String(tx['Dr./Cr.'] || '').toUpperCase() === 'CR' 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {String(tx['Dr./Cr.'] || 'DR')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="flex items-center justify-center h-32 text-gray-500">
+                <div className="text-center">
+                  <div className="text-lg mb-2">📊</div>
+                  <div className="text-xs">No transactions found for this tag</div>
+                  <div className="text-xs text-gray-400 mt-1">Try selecting a different tag</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Show general analytics
+    return (
+      <div className="space-y-2">
+        <div className="text-xs font-semibold text-gray-700 mb-2">Monthly Overview</div>
+        <div className="overflow-x-auto w-full max-w-full">
+          <table className="w-full text-xs min-w-0 compact-table">
+            <thead>
+              <tr className="bg-gray-50">
+                <th className="px-1 py-1 text-left w-1/3 text-xs">Month</th>
+                <th className="px-1 py-1 text-right w-1/3 text-xs">Txns</th>
+                <th className="px-1 py-1 text-right w-1/3 text-xs">Credit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(analyticsData.monthlyStats)
+                .sort(([a], [b]) => {
+                  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                  return months.indexOf(a) - months.indexOf(b);
+                })
+                .map(([month, stats]) => (
+                <tr key={month} className="border-b border-gray-100">
+                  <td className="px-1 py-1 truncate text-xs">{month}</td>
+                  <td className="px-1 py-1 text-right text-xs">{stats.count}</td>
+                  <td className="px-1 py-1 text-right text-xs text-green-600">
+                    ₹{stats.credit.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPage2 = () => (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-gray-700 mb-2">Top Categories</div>
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className="px-2 py-1 text-left">Category</th>
+              <th className="px-2 py-1 text-right">Txns</th>
+              <th className="px-2 py-1 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {analyticsData.topCategories.map(([category, stats]) => (
+              <tr key={category} className="border-b border-gray-100">
+                <td className="px-2 py-1 truncate max-w-20">{category}</td>
+                <td className="px-2 py-1 text-right">{stats.count}</td>
+                <td className="px-2 py-1 text-right">
+                  ₹{stats.amount.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderPage3 = () => (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-gray-700 mb-2">Transaction Stats</div>
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span>Average Transaction:</span>
+          <span className="font-semibold">₹{analyticsData.avgTransaction.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Largest Transaction:</span>
+          <span className="font-semibold text-green-600">₹{analyticsData.largestTransaction.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Smallest Transaction:</span>
+          <span className="font-semibold text-red-600">₹{analyticsData.smallestTransaction.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Total Balance:</span>
+          <span className={`font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Credit Ratio:</span>
+          <span className="font-semibold">{((totalCredit / totalAmount) * 100).toFixed(1)}%</span>
+        </div>
+        <div className="flex justify-between text-xs">
+          <span>Debit Ratio:</span>
+          <span className="font-semibold">{((totalDebit / totalAmount) * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const getPageContent = () => {
+    switch (currentPage) {
+      case 0: return renderPage1();
+      case 1: return renderPage2();
+      case 2: return renderPage3();
+      default: return renderPage1();
+    }
+  };
+
+  return (
+    <div className="w-full h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+            disabled={currentPage === 0}
+            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            ◀
+          </button>
+          <span className="text-xs text-gray-500">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+            disabled={currentPage === totalPages - 1}
+            className="p-1 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            ▶
+          </button>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="overflow-y-auto overflow-x-auto" style={{ height: 'calc(100% - 60px)', maxHeight: '150px' }}>
+        {getPageContent()}
+      </div>
+    </div>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function CompactReports({ 
+  transactions, 
+  bankIdNameMap, 
+  onTagClick
+}: { 
+  transactions: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[];
+  bankIdNameMap: { [id: string]: string };
+  onTagClick?: (tagName: string, bankId: string, accountId: string) => void;
+}) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const totalPages = 3;
+
+  // Calculate per-bank statistics
+  const bankStats = useMemo(() => {
+    const stats: { [bankId: string]: {
+      bankName: string;
+      totalTransactions: number;
+      totalAmount: number;
+      totalCredit: number;
+      totalDebit: number;
+      tagged: number;
+      untagged: number;
+    } } = {};
+
+    transactions.forEach(tx => {
+      const bankId = tx.bankId;
+      if (!stats[bankId]) {
+        stats[bankId] = {
+          bankName: bankIdNameMap[bankId] || bankId,
+          totalTransactions: 0,
+          totalAmount: 0,
+          totalCredit: 0,
+          totalDebit: 0,
+          tagged: 0,
+          untagged: 0
+        };
+      }
+
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      
+      stats[bankId].totalTransactions++;
+      stats[bankId].totalAmount += amount;
+      
+      if (crdr === 'CR') {
+        stats[bankId].totalCredit += Math.abs(amount);
+      } else if (crdr === 'DR') {
+        stats[bankId].totalDebit += Math.abs(amount);
+      }
+
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      if (tags.length > 0) {
+        stats[bankId].tagged++;
+      } else {
+        stats[bankId].untagged++;
+      }
+    });
+
+    return stats;
+  }, [transactions, bankIdNameMap]);
+
+  // Calculate per-bank per-account breakdown
+  const accountBreakdown = useMemo(() => {
+    const breakdown: { [bankId: string]: { [accountId: string]: {
+      accountId: string;
+      totalTransactions: number;
+      totalAmount: number;
+      totalCredit: number;
+      totalDebit: number;
+      tags: { [tagName: string]: number };
+    } } } = {};
+
+    transactions.forEach(tx => {
+      const bankId = tx.bankId;
+      const accountId = tx.accountId;
+      
+      if (!breakdown[bankId]) breakdown[bankId] = {};
+      if (!breakdown[bankId][accountId]) {
+        breakdown[bankId][accountId] = {
+          accountId,
+          totalTransactions: 0,
+          totalAmount: 0,
+          totalCredit: 0,
+          totalDebit: 0,
+          tags: {}
+        };
+      }
+
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      
+      breakdown[bankId][accountId].totalTransactions++;
+      breakdown[bankId][accountId].totalAmount += amount;
+      
+      if (crdr === 'CR') {
+        breakdown[bankId][accountId].totalCredit += Math.abs(amount);
+      } else if (crdr === 'DR') {
+        breakdown[bankId][accountId].totalDebit += Math.abs(amount);
+      }
+
+      // Count tags
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      tags.forEach(tag => {
+        if (tag && tag.name) {
+          breakdown[bankId][accountId].tags[tag.name] = 
+            (breakdown[bankId][accountId].tags[tag.name] || 0) + 1;
+        }
+      });
+    });
+
+    return breakdown;
+  }, [transactions]);
+
+  // Calculate tag statistics with bank and account breakdown
+  const tagStatsWithBreakdown = useMemo(() => {
+    const breakdown: { [bankId: string]: { [accountId: string]: { [tagName: string]: {
+      totalTransactions: number;
+      totalAmount: number;
+      totalCredit: number;
+      totalDebit: number;
+    } } } } = {};
+
+    transactions.forEach(tx => {
+      const bankId = tx.bankId;
+      const accountId = tx.accountId;
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+
+      if (!breakdown[bankId]) breakdown[bankId] = {};
+      if (!breakdown[bankId][accountId]) breakdown[bankId][accountId] = {};
+
+      tags.forEach(tag => {
+        if (tag && tag.name) {
+          if (!breakdown[bankId][accountId][tag.name]) {
+            breakdown[bankId][accountId][tag.name] = {
+              totalTransactions: 0,
+              totalAmount: 0,
+              totalCredit: 0,
+              totalDebit: 0
+            };
+          }
+
+          breakdown[bankId][accountId][tag.name].totalTransactions++;
+          breakdown[bankId][accountId][tag.name].totalAmount += amount;
+          
+          if (crdr === 'CR') {
+            breakdown[bankId][accountId][tag.name].totalCredit += Math.abs(amount);
+          } else if (crdr === 'DR') {
+            breakdown[bankId][accountId][tag.name].totalDebit += Math.abs(amount);
+          }
+        }
+      });
+    });
+
+    return breakdown;
+  }, [transactions]);
+
+  // Calculate overall tag statistics (for backward compatibility)
+  // Note: tagStats was calculated but not used in the component
+
+  const renderPage1 = () => (
+    <div className="overflow-x-auto w-full">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50">
+            <th className="px-2 py-1 text-left font-medium text-gray-700">Bank</th>
+            <th className="px-2 py-1 text-center font-medium text-gray-700">Txns</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Amount</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Cr</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Dr</th>
+            <th className="px-2 py-1 text-right font-medium text-gray-700">Balance</th>
+            <th className="px-2 py-1 text-center font-medium text-gray-700">Tagged</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(bankStats).map(([bankId, stats]) => (
+            <tr key={bankId} className="border-b border-gray-100 hover:bg-gray-50">
+                                  <td className="px-2 py-1 text-gray-900 font-medium truncate max-w-20">{stats.bankName}</td>
+              <td className="px-2 py-1 text-center text-gray-600">{stats.totalTransactions}</td>
+              <td className="px-2 py-1 text-right text-gray-600">
+                ₹{stats.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-right text-green-600 font-medium">
+                ₹{stats.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-right text-red-600 font-medium">
+                ₹{stats.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className={`px-2 py-1 text-right font-medium ${
+                stats.totalCredit > stats.totalDebit ? 'text-green-600' : 'text-red-600'
+              }`}>
+                {stats.totalCredit - stats.totalDebit > 0 ? '+' : ''}
+                ₹{(stats.totalCredit - stats.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </td>
+              <td className="px-2 py-1 text-center text-blue-600">{stats.tagged}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderPage2 = () => (
+    <div className="space-y-1">
+      {Object.entries(accountBreakdown).map(([bankId, accounts]) => (
+        <div key={bankId} className="border border-gray-200 rounded">
+          <div className="bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700">
+            {bankIdNameMap[bankId] || bankId}
+          </div>
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="px-2 py-1 text-left font-medium text-gray-700">Account</th>
+                  <th className="px-2 py-1 text-center font-medium text-gray-700">Txns</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Amount</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Cr</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Dr</th>
+                  <th className="px-2 py-1 text-right font-medium text-gray-700">Balance</th>
+                  <th className="px-2 py-1 text-center font-medium text-gray-700">Tags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(accounts).map(([accountId, stats]) => (
+                  <tr key={accountId} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-2 py-1 text-gray-900 font-mono text-xs truncate max-w-16">{accountId}</td>
+                    <td className="px-2 py-1 text-center text-gray-600">{stats.totalTransactions}</td>
+                    <td className="px-2 py-1 text-right text-gray-600">
+                      ₹{stats.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-2 py-1 text-right text-green-600 font-medium">
+                      ₹{stats.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-2 py-1 text-right text-red-600 font-medium">
+                      ₹{stats.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className={`px-2 py-1 text-right font-medium ${
+                      stats.totalCredit > stats.totalDebit ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {stats.totalCredit - stats.totalDebit > 0 ? '+' : ''}
+                      ₹{(stats.totalCredit - stats.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-2 py-1 text-center text-blue-600">
+                      {Object.keys(stats.tags).length}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderPage3 = () => (
+    <div className="overflow-x-auto w-full">
+      <table className="w-full text-xs compact-table">
+        <thead>
+          <tr className="bg-gray-50">
+            <th className="px-1 py-1 text-left font-medium text-gray-700 text-xs">Bank/Account/Tag</th>
+            <th className="px-1 py-1 text-center font-medium text-gray-700 text-xs">Txns</th>
+            <th className="px-1 py-1 text-right font-medium text-gray-700 text-xs">Amount</th>
+            <th className="px-1 py-1 text-right font-medium text-gray-700 text-xs">Cr</th>
+            <th className="px-1 py-1 text-right font-medium text-gray-700 text-xs">Dr</th>
+            <th className="px-1 py-1 text-right font-medium text-gray-700 text-xs">Balance</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(tagStatsWithBreakdown).map(([bankId, accounts]) => (
+            <React.Fragment key={bankId}>
+              {/* Bank Header Row */}
+              <tr className="border-b border-gray-200 bg-blue-50">
+                <td className="px-1 py-1 text-blue-800 font-semibold text-xs" colSpan={6}>
+                  {bankIdNameMap[bankId] || bankId}
+                </td>
+              </tr>
+              {Object.entries(accounts).map(([accountId, tags]) => (
+                <React.Fragment key={accountId}>
+                  {/* Account Row */}
+                  <tr className="border-b border-gray-150 bg-gray-50">
+                    <td className="px-1 py-1 text-gray-700 font-medium text-xs pl-4">
+                      Account: {accountId}
+                    </td>
+                    <td className="px-1 py-1 text-center text-gray-600 text-xs">
+                      {Object.values(tags).reduce((sum, tag) => sum + tag.totalTransactions, 0)}
+                    </td>
+                    <td className="px-1 py-1 text-right text-gray-600 text-xs">
+                      ₹{Object.values(tags).reduce((sum, tag) => sum + tag.totalAmount, 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                    </td>
+                    <td className="px-1 py-1 text-right text-green-600 font-medium text-xs">
+                      ₹{Object.values(tags).reduce((sum, tag) => sum + tag.totalCredit, 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                    </td>
+                    <td className="px-1 py-1 text-right text-red-600 font-medium text-xs">
+                      ₹{Object.values(tags).reduce((sum, tag) => sum + tag.totalDebit, 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                    </td>
+                    <td className="px-1 py-1 text-right text-gray-600 text-xs">
+                      ₹{Object.values(tags).reduce((sum, tag) => sum + (tag.totalCredit - tag.totalDebit), 0).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                    </td>
+                  </tr>
+                  {/* Tag Rows */}
+                  {Object.entries(tags).map(([tagName, stats]) => (
+                    <tr 
+                      key={`${bankId}-${accountId}-${tagName}`} 
+                      className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer"
+                      onClick={() => {
+                        console.log('Tag row clicked:', { tagName, bankId, accountId });
+                        onTagClick?.(tagName, bankId, accountId);
+                      }}
+                    >
+                      <td className="px-1 py-1 text-gray-600 text-xs pl-8">
+                        🏷️ {tagName}
+                      </td>
+                      <td className="px-1 py-1 text-center text-gray-600 text-xs">
+                        {stats.totalTransactions}
+                      </td>
+                      <td className="px-1 py-1 text-right text-gray-600 text-xs">
+                        ₹{stats.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                      </td>
+                      <td className="px-1 py-1 text-right text-green-600 font-medium text-xs">
+                        ₹{stats.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                      </td>
+                      <td className="px-1 py-1 text-right text-red-600 font-medium text-xs">
+                        ₹{stats.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                      </td>
+                      <td className={`px-1 py-1 text-right font-medium text-xs ${
+                        stats.totalCredit > stats.totalDebit ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {stats.totalCredit - stats.totalDebit > 0 ? '+' : ''}
+                        ₹{(stats.totalCredit - stats.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const getPageContent = () => {
+    switch (currentPage) {
+      case 0:
+        return renderPage1();
+      case 1:
+        return renderPage2();
+      case 2:
+        return renderPage3();
+      default:
+        return renderPage1();
+    }
+  };
+
+  // Note: getPageTitle function was defined but not used in the component
+
+  return (
+    <div className="w-full h-full">
+      <div className="flex items-center justify-end mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+              disabled={currentPage === 0}
+              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              ◀
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+              disabled={currentPage === totalPages - 1}
+              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="overflow-y-auto overflow-x-auto" style={{ height: 'calc(100% - 60px)', maxHeight: '150px' }}>
+        {getPageContent()}
+      </div>
+    </div>
+  );
+}
 
 interface Condition {
   if: {
@@ -1188,6 +1893,10 @@ export default function SuperBankPage() {
   // Add state
   const [searchField, setSearchField] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('desc');
+  
+  // Table sorting state
+  const [tableSortColumn, setTableSortColumn] = useState<string>('');
+  const [tableSortDirection, setTableSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -1204,6 +1913,8 @@ export default function SuperBankPage() {
   const [matchingTransactions, setMatchingTransactions] = useState<Transaction[]>([]);
   const [failedTransactions, setFailedTransactions] = useState<{ id: string; error: string; description?: string }[]>([]);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  
+
 
   // Helper function to extract tag IDs for API calls
   const extractTagIds = (tags: Tag[]): string[] => {
@@ -1298,7 +2009,7 @@ export default function SuperBankPage() {
     fetch(`/api/bank`)
       .then(res => res.json())
       .then(async (banks: { id: string; bankName: string }[]) => {
-        console.log('BANKS FETCHED:', banks); // Debug log
+
         if (!Array.isArray(banks)) return;
         const mappings: { [bankId: string]: BankHeaderMapping & { bankName: string } } = {};
         const idNameMap: { [id: string]: string } = {};
@@ -1360,6 +2071,29 @@ export default function SuperBankPage() {
     document.addEventListener("mouseup", handleMouseUp);
     return () => document.removeEventListener("mouseup", handleMouseUp);
   }, []);
+
+  // Hide selection button on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (selection) {
+        setSelection(null);
+      }
+    };
+
+    // Add scroll listeners to table container and window
+    const tableElement = tableRef.current;
+    if (tableElement) {
+      tableElement.addEventListener('scroll', handleScroll);
+    }
+    window.addEventListener('scroll', handleScroll);
+
+    return () => {
+      if (tableElement) {
+        tableElement.removeEventListener('scroll', handleScroll);
+      }
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [selection]);
 
   // Create tag from selection
   const handleCreateTagFromSelection = async () => {
@@ -1609,11 +2343,13 @@ export default function SuperBankPage() {
     });
     mappedRow.id = tx.id;
     mappedRow.statementId = tx.statementId;
-    mappedRow.bankId = tx.bankId;
-    mappedRow.accountId = tx.accountId;
-    // Apply conditions for Dr./Cr.
-    mappedRow['Dr./Cr.'] = getValueForColumn(tx, String(tx.bankId), 'Dr./Cr.');
-    return mappedRow as Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string };
+          mappedRow.bankId = tx.bankId;
+      mappedRow.accountId = tx.accountId;
+      // Add bank name for searching
+      mappedRow.bankName = bankIdNameMap[tx.bankId] || tx.bankId;
+      // Apply conditions for Dr./Cr.
+      mappedRow['Dr./Cr.'] = getValueForColumn(tx, String(tx.bankId), 'Dr./Cr.');
+      return mappedRow as Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string; bankName?: string };
   });
 
   // Tag filter logic: filter mappedRowsWithConditions by selected tags first
@@ -1627,6 +2363,8 @@ export default function SuperBankPage() {
         );
       })
     : mappedRowsWithConditions;
+
+
 
   // Then apply search, date, and tag/untagged filters to tagFilteredRows
   const filteredRows = tagFilteredRows.filter((row) => {
@@ -1650,7 +2388,7 @@ export default function SuperBankPage() {
         }
         return false;
           })
-        : String(row[searchField] || '')
+        : String(row[searchField === 'Bank Name' ? 'bankName' : searchField] || '')
             .toLowerCase()
             .includes(search.toLowerCase()));
     // Date range (try to find a date column)
@@ -1658,15 +2396,38 @@ export default function SuperBankPage() {
     const dateCol = superHeader.find((h) => h.toLowerCase().includes('date'));
     if (dateCol && (dateRange.from || dateRange.to)) {
       const rowDate = row[dateCol];
-      if (typeof rowDate === 'string') {
-        // Try to parse as yyyy-mm-dd or dd/mm/yyyy
-        let d = rowDate;
-        if (/\d{2}\/\d{2}\/\d{4}/.test(d)) {
-          const [dd, mm, origYyyy] = d.split("/");
-          d = `${origYyyy}-${mm}-${dd}`;
+      if (typeof rowDate === 'string' && rowDate.trim()) {
+        // Try to parse various date formats
+        let normalizedDate = rowDate.trim();
+        
+        // Handle dd/mm/yyyy format
+        if (/\d{2}\/\d{2}\/\d{4}/.test(normalizedDate)) {
+          const [dd, mm, yyyy] = normalizedDate.split("/");
+          normalizedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
         }
-        if (dateRange.from && d < dateRange.from) dateMatch = false;
-        if (dateRange.to && d > dateRange.to) dateMatch = false;
+        // Handle dd-mm-yyyy format
+        else if (/\d{2}-\d{2}-\d{4}/.test(normalizedDate)) {
+          const [dd, mm, yyyy] = normalizedDate.split("-");
+          normalizedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+        }
+        // Handle yyyy/mm/dd format
+        else if (/\d{4}\/\d{2}\/\d{2}/.test(normalizedDate)) {
+          const [yyyy, mm, dd] = normalizedDate.split("/");
+          normalizedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+        }
+        // If already in yyyy-mm-dd format, use as is
+        else if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+          // If none of the above formats match, skip date filtering for this row
+          console.warn(`Unrecognized date format: ${rowDate} in column ${dateCol}`);
+        }
+        
+        // Apply date range filtering
+        if (dateRange.from && normalizedDate < dateRange.from) {
+          dateMatch = false;
+        }
+        if (dateRange.to && normalizedDate > dateRange.to) {
+          dateMatch = false;
+        }
       }
     }
     // Tagged/Untagged filter
@@ -1680,6 +2441,8 @@ export default function SuperBankPage() {
     }
     return searchMatch && dateMatch;
   });
+
+
 
   // Calculate stats from filtered transactions
   const stats = useMemo(() => {
@@ -1704,8 +2467,23 @@ export default function SuperBankPage() {
     setTotalAccounts(stats.totalAccounts);
   }, [stats]);
 
-  // Filtered and searched rows (already present as filteredRows)
+  // Filtered and searched rows with table sorting
   const sortedAndFilteredRows = [...filteredRows].sort((a, b) => {
+    // If table sorting is active, use that instead of date sorting
+    if (tableSortColumn && tableSortDirection) {
+      if (tableSortColumn.toLowerCase() === 'amount') {
+        const amountA = parseIndianAmount(a['Amount'] as string | number);
+        const amountB = parseIndianAmount(b['Amount'] as string | number);
+        
+        if (tableSortDirection === 'asc') {
+          return amountA - amountB;
+        } else {
+          return amountB - amountA;
+        }
+      }
+    }
+    
+    // Default to date sorting
     const dateA = parseDate(a['Date'] as string);
     const dateB = parseDate(b['Date'] as string);
     if (sortOrder === 'desc') {
@@ -1912,6 +2690,13 @@ export default function SuperBankPage() {
     setSuperHeader(newHeaders);
   };
 
+  // Handle table column sorting
+  const handleTableSort = (column: string, direction: 'asc' | 'desc') => {
+    console.log('Table sort triggered:', column, direction);
+    setTableSortColumn(column);
+    setTableSortDirection(direction);
+  };
+
   // Handler to apply tag to all matching transactions from context menu
   const handleApplyTagToAllFromMenu = (tagName: string) => {
     setPendingTag({ tagName, rowIdx: -1, selectionText: tagName });
@@ -1935,7 +2720,7 @@ export default function SuperBankPage() {
       filteredTagStats[tag.name] = 0;
     }
   });
-  const filteredTotalTags = Object.keys(filteredTagStats).length;
+  // Note: filteredTotalTags was calculated but not used in the component
 
   // Sort allTags by usage count descending (use filteredTagStats for current view)
   const sortedTags = [...allTags].sort((a, b) => (filteredTagStats[b.name] || 0) - (filteredTagStats[a.name] || 0));
@@ -2272,13 +3057,13 @@ export default function SuperBankPage() {
   };
 
   return (
-    <div className="h-screen overflow-hidden">
-      <div className="h-full py-4 sm:py-6 px-2 sm:px-4">
-        <div className="max-w-full mx-auto h-full flex flex-col">
+    <div className="h-full overflow-y-auto">
+      <div className="py-4 sm:py-6 px-2 sm:px-4">
+        <div className="max-w-full mx-auto flex flex-col">
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
-          <h1 className="text-base sm:text-2xl font-bold text-blue-700 truncate">Super Bank: All Transactions</h1>
+          <h3 className="font-bold text-blue-700 truncate">Super Bank: All Transactions</h3> 
           <button
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded shadow font-semibold text-sm sm:text-base whitespace-nowrap"
+            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow font-semibold text-xs whitespace-nowrap"
             onClick={() => setShowHeaderSection(true)}
           >
             Header
@@ -2415,28 +3200,35 @@ export default function SuperBankPage() {
             totalTransactions={filteredRows.length}
             totalBanks={totalBanks}
             totalAccounts={totalAccounts}
-            totalTags={filteredTotalTags}
-            tagged={tagged}
-            untagged={untagged}
-            showTagStats={true}
             showBalance={true}
-            onShowUntagged={() => {
-              // Filter to show only untagged transactions
-              setSortOrder('untagged');
-            }}
           />
         )}
 
+
+
         {/* Tag filter pills section below controls */}
-        <TagFilterPills
-          allTags={sortedTags}
-          tagFilters={tagFilters}
-          onToggleTag={tagName => setTagFilters(filters => filters.includes(tagName) ? filters.filter(t => t !== tagName) : [...filters, tagName])}
-          onClear={() => setTagFilters([])}
-          onTagDeleted={() => handleTagDeleted()}
-          onApplyTagToAll={handleApplyTagToAllFromMenu}
-          tagStats={filteredTagStats}
-        />
+        <div className="w-full overflow-visible relative">
+          <TagFilterPills
+            allTags={sortedTags}
+            tagFilters={tagFilters}
+            onToggleTag={tagName => setTagFilters(filters => filters.includes(tagName) ? filters.filter(t => t !== tagName) : [...filters, tagName])}
+            onClear={() => setTagFilters([])}
+            onTagDeleted={() => handleTagDeleted()}
+            onApplyTagToAll={handleApplyTagToAllFromMenu}
+            tagStats={filteredTagStats}
+            tagged={tagged}
+            untagged={untagged}
+            totalTags={allTags.length}
+            selectedCount={sortedAndFilteredRows.filter(tx => selectedRows.has(tx.id)).length}
+            selectedTagId={selectedTagId}
+            onTagChange={setSelectedTagId}
+            onAddTag={handleAddTag}
+            tagging={tagging}
+            tagError={tagError}
+            tagSuccess={tagSuccess}
+            onCreateTag={handleCreateTag}
+          />
+        </div>
 
 
                 {/* Filter box below stats, wider on PC */}
@@ -2449,7 +3241,7 @@ export default function SuperBankPage() {
           downloadDisabled={selectedRows.size === 0}
           searchField={searchField}
           onSearchFieldChange={setSearchField}
-          searchFieldOptions={['all', ...superHeader]}
+          searchFieldOptions={['all', 'Bank Name', ...superHeader.filter(header => header !== 'Bank Name')]}
           sortOrder={sortOrder}
           onSortOrderChange={setSortOrder}
           sortOrderOptions={[
@@ -2459,22 +3251,9 @@ export default function SuperBankPage() {
             { value: 'untagged', label: 'Untagged Only' },
           ]}
         />
-        {/* Tagging controls above table */}
-        {sortedAndFilteredRows.filter(tx => selectedRows.has(tx.id)).length > 0 && (
-          <TaggingControls
-            allTags={allTags}
-            selectedTagId={selectedTagId}
-            onTagChange={setSelectedTagId}
-            onAddTag={handleAddTag}
-            selectedCount={sortedAndFilteredRows.filter(tx => selectedRows.has(tx.id)).length}
-            tagging={tagging}
-            tagError={tagError}
-            tagSuccess={tagSuccess}
-            onCreateTag={handleCreateTag}
-          />
-        )}
+
         {/* Table and selection logic */}
-        <div ref={tableRef} className="overflow-x-auto relative">
+        <div ref={tableRef} className="overflow-x-auto relative h-[80vh]">
           {/* Global loading overlay for tag operations */}
           {(applyingTagToRow || applyingTagToAll || removingTag || creatingTag || tagging) && (
             <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -2606,7 +3385,7 @@ export default function SuperBankPage() {
               </button>
             </div>
           )}
-          <div className="flex-1 min-h-0" style={{ height: 'calc(100vh - 200px)' }}>
+          <div className="flex-1 min-h-0"style={{ minHeight: '600px',}}>
           <TransactionTable
             rows={sortedAndFilteredRows}
             headers={superHeader}
@@ -2627,6 +3406,9 @@ export default function SuperBankPage() {
               const value = getValueForColumn(tx, bankId, sh);
               return value;
             }}
+            onSort={handleTableSort}
+            sortColumn={tableSortColumn}
+            sortDirection={tableSortDirection}
           />
           </div>
         </div>

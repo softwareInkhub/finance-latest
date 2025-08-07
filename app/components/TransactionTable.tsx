@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { RiPriceTag3Line } from 'react-icons/ri';
+import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { Transaction, TransactionRow, Tag } from '../types/transaction';
 
 interface BankMapping {
@@ -27,6 +28,9 @@ interface TransactionTableProps {
   transactions?: Transaction[];
   bankMappings?: { [bankId: string]: BankMapping };
   getValueForColumn?: (tx: Transaction, bankId: string, columnName: string) => string | number | undefined;
+  onSort?: (column: string, direction: 'asc' | 'desc') => void;
+  sortColumn?: string;
+  sortDirection?: 'asc' | 'desc';
 }
 
 const DEFAULT_WIDTH = 140;
@@ -66,6 +70,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   onReorderHeaders,
   transactions,
   getValueForColumn,
+  onSort,
+  sortColumn,
+  sortDirection,
 }) => {
   // Column widths state
   const [columnWidths, setColumnWidths] = useState<{ [header: string]: number }>(
@@ -78,39 +85,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   // Drag and drop state for headers
   const [draggedHeader, setDraggedHeader] = useState<string | null>(null);
 
-  // Double scroll logic
+  // Table scroll logic
   const tableScrollRef = useRef<HTMLDivElement>(null);
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const [tableWidth, setTableWidth] = useState(0);
 
-  useEffect(() => {
-    // Set the width of the top scroll bar to match the table
-    if (tableScrollRef.current) {
-      setTableWidth(tableScrollRef.current.scrollWidth);
-    }
-  }, [headers, columnWidths, rows.length]);
-
-  // Sync scroll positions
-  useEffect(() => {
-    const handleTopScroll = () => {
-      if (tableScrollRef.current && topScrollRef.current) {
-        tableScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
-      }
-    };
-    const handleTableScroll = () => {
-      if (tableScrollRef.current && topScrollRef.current) {
-        topScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
-      }
-    };
-    const top = topScrollRef.current;
-    const table = tableScrollRef.current;
-    if (top) top.addEventListener('scroll', handleTopScroll);
-    if (table) table.addEventListener('scroll', handleTableScroll);
-    return () => {
-      if (top) top.removeEventListener('scroll', handleTopScroll);
-      if (table) table.removeEventListener('scroll', handleTableScroll);
-    };
-  }, [rows.length, headers.length, columnWidths]);
+  // Sort dropdown state
+  const [sortDropdownOpen, setSortDropdownOpen] = useState<string | null>(null);
 
   // Mouse event handlers for resizing
   const handleMouseDown = (e: React.MouseEvent, header: string) => {
@@ -163,23 +142,36 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     setDraggedHeader(null);
   };
 
+  // Sort handlers
+  const handleSortDropdownToggle = (column: string) => {
+    console.log('Toggle dropdown for column:', column, 'Current state:', sortDropdownOpen);
+    const newState = sortDropdownOpen === column ? null : column;
+    console.log('Setting new state to:', newState);
+    setSortDropdownOpen(newState);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      // Don't close if clicking on the sort button or dropdown
+      if (target.closest('.sort-dropdown') || target.closest('.sort-button')) {
+        return;
+      }
+      if (sortDropdownOpen) {
+        console.log('Closing dropdown due to outside click');
+        setSortDropdownOpen(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [sortDropdownOpen]);
+
   return (
-    <div className="h-full flex flex-col" style={{ minHeight: 0 }}>
-      {/* Top horizontal scrollbar */}
-      <div
-        ref={topScrollRef}
-        style={{
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          height: 16,
-          width: '100%',
-          marginBottom: 2,
-        }}
-      >
-        <div style={{ width: tableWidth, height: 1 }} />
-      </div>
-      {/* Table container with vertical scroll */}
-      <div ref={tableScrollRef} className="flex-1 overflow-auto" style={{ minHeight: 0, maxHeight: 'calc(100vh - 250px)' }}>
+    <div className="flex flex-col h-[60vh]" style={{ minHeight: '500px' }}>
+      {/* Table container with vertical scroll only */}
+      <div ref={tableScrollRef} className="flex-1 overflow-y-auto border border-gray-200 rounded">
       {loading ? (
         <div className="text-gray-500 text-sm">Loading transactions...</div>
       ) : error ? (
@@ -187,8 +179,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       ) : rows.length === 0 ? (
         <div className="text-gray-500 text-sm">No mapped transactions found.</div>
       ) : (
-          <div className="h-full overflow-auto">
-        <table className="min-w-full border text-xs sm:text-sm bg-white/80 rounded-xl shadow" style={{ tableLayout: 'fixed' }}>
+        <table className="w-full border text-xs sm:text-sm bg-white/80 rounded-xl shadow" style={{ height: 'fit-content' }}>
           <colgroup>
             <col style={{ width: 40 }} />
             <col style={{ width: 40 }} />
@@ -205,7 +196,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               {headers.map((sh) => (
                 <th
                   key={sh}
-                  className="border px-2 py-1 font-bold bg-gray-100 group relative select-none whitespace-nowrap overflow-hidden text-ellipsis"
+                  className="border px-2 py-1 font-bold bg-gray-100 group relative select-none whitespace-nowrap text-ellipsis"
                   style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}
                   draggable
                   onDragStart={() => handleDragStart(sh)}
@@ -215,13 +206,77 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <span className="truncate block w-full">{sh}</span>
-                    <span
-                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize z-10 group-hover:bg-blue-100"
-                      onMouseDown={e => handleMouseDown(e, sh)}
-                      style={{ userSelect: 'none' }}
-                    >
-                      <span className="block h-full w-1 mx-auto bg-gray-400 rounded" style={{ opacity: 0.6 }}></span>
-                    </span>
+                    <div className="flex items-center gap-1">
+                      {/* Sort dropdown for Amount column */}
+                      {sh.toLowerCase() === 'amount' && onSort && (
+                        <div className="relative sort-dropdown">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              console.log('Sort button clicked for:', sh);
+                              handleSortDropdownToggle(sh);
+                            }}
+                            className="sort-button p-1 hover:bg-gray-200 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300"
+                            title="Sort by amount"
+                          >
+                            {sortColumn === sh ? (
+                              sortDirection === 'asc' ? (
+                                <FiChevronUp className="w-3 h-3 text-blue-600" />
+                              ) : (
+                                <FiChevronDown className="w-3 h-3 text-blue-600" />
+                              )
+                            ) : (
+                              <FiChevronDown className="w-3 h-3 text-gray-400" />
+                            )}
+                          </button>
+                          
+                          {/* Sort dropdown menu */}
+                          {sortDropdownOpen === sh && (
+                            <div className="sort-dropdown absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-[9999] min-w-[140px]">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  console.log('Sort ascending clicked');
+                                  if (onSort) onSort(sh, 'asc');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                <FiChevronUp className="w-3 h-3" />
+                                Sort Ascending
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  console.log('Sort descending clicked');
+                                  if (onSort) onSort(sh, 'desc');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                <FiChevronDown className="w-3 h-3" />
+                                Sort Descending
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Resize handle */}
+                      <span
+                        className="absolute right-0 top-0 h-full w-2 cursor-col-resize z-10 group-hover:bg-blue-100"
+                        onMouseDown={e => handleMouseDown(e, sh)}
+                        style={{ userSelect: 'none' }}
+                      >
+                        <span className="block h-full w-1 mx-auto bg-gray-400 rounded" style={{ opacity: 0.6 }}></span>
+                      </span>
+                    </div>
                   </div>
                 </th>
               ))}
@@ -295,7 +350,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             })}
           </tbody>
         </table>
-          </div>
       )}
       </div>
     </div>

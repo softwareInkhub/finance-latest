@@ -90,7 +90,7 @@ const SlicedPreviewModal: React.FC<{
   return (
   <Modal isOpen={isOpen} onClose={onClose} title="Sliced Transactions Preview">
       <div className="mb-2">
-        <div className="font-semibold mb-1">Select fields to check for duplicate transactions:</div>
+        <div className="font-semibold mb-1">Select fields to check for duplicate transaction:</div>
         <div className="flex flex-wrap gap-2 mb-2">
           {previewData.length > 0 && previewData[0].map((header, idx) => (
             <label key={header + '-' + idx} className="flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded cursor-pointer">
@@ -119,7 +119,7 @@ const SlicedPreviewModal: React.FC<{
         </button>
       </div>
     <div className="overflow-x-auto max-h-[70vh]">
-      <table className="min-w-full border text-sm">
+      <table className="min-w-full border text-sm bg-blue-50">
           {previewData.length > 0 && (
             <thead>
               <tr>

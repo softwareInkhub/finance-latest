@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch, FiFilter, FiTag } from 'react-icons/fi';
+import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch } from 'react-icons/fi';
 
 interface Tag {
   id: string;
@@ -15,9 +15,40 @@ interface TagFilterPillsProps {
   onTagDeleted?: () => void; // optional callback to refresh tags
   onApplyTagToAll?: (tagName: string) => void; // new prop for bulk apply
   tagStats?: Record<string, number>; // tag name to count
+  tagged?: number; // number of tagged transactions
+  untagged?: number; // number of untagged transactions
+  totalTags?: number; // total number of tags
+  // New props for tagging functionality
+  selectedCount?: number;
+  selectedTagId?: string;
+  onTagChange?: (tagId: string) => void;
+  onAddTag?: () => void;
+  tagging?: boolean;
+  tagError?: string | null;
+  tagSuccess?: string | null;
+  onCreateTag?: (name: string) => Promise<string>;
 }
 
-const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, onToggleTag, onClear, onTagDeleted, onApplyTagToAll, tagStats }) => {
+const TagFilterPills: React.FC<TagFilterPillsProps> = ({ 
+  allTags, 
+  tagFilters, 
+  onToggleTag, 
+  onClear, 
+  onTagDeleted, 
+  onApplyTagToAll, 
+  tagStats, 
+  tagged, 
+  untagged, 
+  totalTags,
+  selectedCount = 0,
+  selectedTagId = '',
+  onTagChange,
+  onAddTag,
+  tagging = false,
+  tagError,
+  tagSuccess,
+  onCreateTag
+}) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tag: Tag } | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ tag: Tag } | null>(null);
   const [deleteInput, setDeleteInput] = useState('');
@@ -25,6 +56,15 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Tagging controls state
+  const [creating, setCreating] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [creatingTag, setCreatingTag] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close context menu on click outside
   React.useEffect(() => {
@@ -34,6 +74,24 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
     if (contextMenu) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [contextMenu]);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+        setSearchTerm('');
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
 
   const handleDelete = async () => {
     if (!deleteModal) return;
@@ -54,10 +112,49 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
     }
   };
 
+  const handleTagSelect = (tagId: string) => {
+    if (tagId === '__create__') {
+      setCreating(true);
+      setNewTagName('');
+      if (onTagChange) onTagChange('');
+    } else {
+      setCreating(false);
+      if (onTagChange) onTagChange(tagId);
+    }
+    setShowDropdown(false);
+    setSearchTerm('');
+  };
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim() || !onCreateTag) {
+      setCreateError('Enter tag name');
+      return;
+    }
+    setCreateError(null);
+    setCreatingTag(true);
+    try {
+      const newTagId = await onCreateTag(newTagName.trim());
+      setCreating(false);
+      setNewTagName('');
+      if (onTagChange) onTagChange(newTagId);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create tag');
+    } finally {
+      setCreatingTag(false);
+    }
+  };
+
   // Filter tags based on search query
   const filteredTags = allTags.filter(tag =>
     tag.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Sort tags for dropdown
+  const sortedAndFilteredTags = allTags
+    .filter(tag => 
+      tag.name.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
   // Show first 6 tags in first row, rest in second row when expanded
   const firstRowTags = filteredTags.slice(0, 6);
@@ -65,23 +162,21 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
   const hasMoreTags = filteredTags.length > 6;
 
   // Calculate tag statistics
-  const totalTags = allTags.length;
-  const activeFilters = tagFilters.length;
-  const tagsWithCounts = allTags.filter(tag => tagStats && tagStats[tag.name] > 0).length;
+  // Note: These variables were calculated but not used in the component
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-4">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-2 relative">
       {/* First row: Tags on left, controls on right */}
-      <div className="flex items-center p-2 border-b border-gray-100">
+      <div className="flex items-center p-1 border-b border-gray-100 flex-wrap gap-2">
         {/* Left half - First 6 tag pills */}
-        <div className="flex-1 flex items-center gap-1.5">
+        <div className="flex-1 flex items-center gap-1.5 min-w-0">
           {firstRowTags.map(tag => {
             const btnRef = React.createRef<HTMLButtonElement>();
             const count = tagStats ? tagStats[tag.name] : undefined;
             return (
-              <span key={tag.id} className="relative inline-flex items-center group">
+              <span key={tag.id} className="relative inline-flex items-center group flex-shrink-0">
                 <button
-                  className={`px-2 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
+                  className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                   style={{
                     backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
                     color: tagFilters.includes(tag.name) ? '#ffffff' : 'black',
@@ -92,7 +187,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                   {tag.name}
                   {typeof count === 'number' && (
                     <span 
-                      className="ml-1 bg-white/90 border rounded-full px-1 text-[10px] font-bold align-middle inline-block min-w-[14px] text-center text-black"
+                      className="ml-1 bg-white/90 border rounded-full px-0.5 text-[9px] font-bold align-middle inline-block min-w-[12px] text-center text-black"
                       style={{
                         borderColor: tag.color || '#6366F1',
                         color: 'black',
@@ -124,7 +219,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
           {!isExpanded && hasMoreTags && (
             <button
               onClick={() => setIsExpanded(true)}
-              className="px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer"
+              className="px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer flex-shrink-0"
               title="Click to show more tags"
             >
               +{filteredTags.length - 6} more
@@ -133,45 +228,132 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
         </div>
 
         {/* Right half - Controls and statistics */}
-        <div className="flex items-center gap-3 ml-3">
-          {/* Tag statistics */}
-          <div className="flex items-center gap-2 text-xs text-gray-600">
-            <div className="flex items-center gap-1">
-              <FiTag size={12} />
-              <span>{totalTags} tags</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          
+          {/* Tag Statistics */}
+          {typeof tagged !== 'undefined' && typeof untagged !== 'undefined' && typeof totalTags !== 'undefined' && (
+            <div className="flex items-center gap-2 text-xs text-gray-600 flex-shrink-0">
+              <span>Tagged: {tagged}</span>
+              <span>Untagged: {untagged}</span>
+              <span>Total Tags: {totalTags}</span>
             </div>
-            {tagStats && (
-              <div className="flex items-center gap-1">
-                <FiFilter size={12} />
-                <span>{tagsWithCounts} active</span>
+          )}
+
+          {/* Tagging Controls - Only show if props are provided */}
+          {selectedCount !== undefined && onTagChange && onAddTag && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <div className="flex gap-1 items-center relative">
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    className="border px-1.5 py-0.5 rounded text-xs w-full sm:w-auto bg-white flex items-center justify-between min-w-[100px]"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                  >
+                    <span>{selectedTagId ? allTags.find(t => t.id === selectedTagId)?.name || 'Add tag...' : 'Add tag...'}</span>
+                    <span className="ml-2">▼</span>
+                  </button>
+                  
+                  {showDropdown && (
+                    <div className="absolute top-full left-0 bg-white border border-gray-300 rounded shadow-lg z-[9999] max-h-60 overflow-y-auto min-w-64 w-80">
+                      {/* Search Input */}
+                      <div className="p-2 border-b border-gray-200">
+                        <input
+                          type="text"
+                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                          placeholder="Search tags..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      
+                      {/* Create New Tag Option - Pinned at Bottom */}
+                      <div className="border-b border-gray-200">
+                        <button
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-blue-600 font-medium"
+                          onClick={() => handleTagSelect('__create__')}
+                        >
+                          + Create new tag...
+                        </button>
+                      </div>
+                      
+                      {/* Tag Options */}
+                      <div className="max-h-40 overflow-y-auto">
+                        {sortedAndFilteredTags.length > 0 ? (
+                          sortedAndFilteredTags.map(tag => (
+                            <button
+                              key={tag.id}
+                              className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                              onClick={() => handleTagSelect(tag.id)}
+                            >
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: tag.color || '#3B82F6' }}
+                              ></div>
+                              {tag.name}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-xs text-gray-500">
+                            {searchTerm ? 'No tags found' : 'No tags available'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {creating && (
+                  <>
+                    <input
+                      type="text"
+                      className="border px-2 py-1 rounded text-xs"
+                      placeholder="New tag name"
+                      value={newTagName}
+                      onChange={e => setNewTagName(e.target.value)}
+                      disabled={creatingTag}
+                      autoFocus
+                    />
+                    <button
+                      className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-semibold disabled:opacity-50"
+                      onClick={handleCreateTag}
+                      disabled={creatingTag || !newTagName.trim()}
+                    >
+                      {creatingTag ? 'Creating...' : 'Create'}
+                    </button>
+                  </>
+                )}
               </div>
-            )}
-            {activeFilters > 0 && (
-              <div className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md text-xs font-medium">
-                {activeFilters} selected
-              </div>
-            )}
-          </div>
+              {createError && <span className="text-red-600 text-xs">{createError}</span>}
+              <button
+                className="px-2 py-0.5 bg-green-600 text-white rounded text-xs font-semibold disabled:opacity-50"
+                onClick={onAddTag}
+                disabled={tagging || !selectedTagId}
+              >
+                Add Tag
+              </button>
+              <span className="text-xs text-gray-600">{selectedCount} selected</span>
+              {tagError && <span className="text-red-600 text-xs">{tagError}</span>}
+              {tagSuccess && <span className="text-green-600 text-xs">{tagSuccess}</span>}
+            </div>
+          )}
 
           {/* Search bar */}
-          <div className="relative">
-            <FiSearch className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
+          <div className="relative flex-shrink-0">
+            <FiSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
             <input
               type="text"
-              placeholder="Search tags..."
+              placeholder="Q Search tags..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-36 pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              className="w-32 pl-6 pr-2 py-0.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
-
-
           {/* Controls */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {tagFilters.length > 0 && onClear && (
               <button
-                className="px-2 py-1 text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md"
+                className="px-1.5 py-0.5 text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md"
                 onClick={onClear}
               >
                 Clear
@@ -179,10 +361,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
             )}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+              className="p-0.5 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
               title={isExpanded ? "Show less" : "Show more"}
             >
-              {isExpanded ? <FiChevronUp size={16} /> : <FiChevronDown size={16} />}
+              {isExpanded ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
             </button>
           </div>
         </div>
@@ -190,7 +372,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
 
       {/* Second row - Additional tags when expanded */}
       {isExpanded && secondRowTags.length > 0 && (
-        <div className="p-2 border-b border-gray-100">
+        <div className="p-1 border-b border-gray-100">
           <div className="flex flex-wrap gap-1.5 items-center">
             {secondRowTags.map(tag => {
               const btnRef = React.createRef<HTMLButtonElement>();
@@ -198,7 +380,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
               return (
                 <span key={tag.id} className="relative inline-flex items-center group">
                   <button
-                    className={`px-2 py-1 rounded-md text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
+                    className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                     style={{
                       backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
                       color: tagFilters.includes(tag.name) ? '#ffffff' : 'black',
@@ -209,7 +391,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({ allTags, tagFilters, on
                     {tag.name}
                     {typeof count === 'number' && (
                       <span 
-                        className="ml-1 bg-white/90 border rounded-full px-1 text-[10px] font-bold align-middle inline-block min-w-[14px] text-center"
+                        className="ml-1 bg-white/90 border rounded-full px-0.5 text-[9px] font-bold align-middle inline-block min-w-[12px] text-center"
                         style={{
                           borderColor: tag.color || '#6366F1',
                           color: tag.color || '#6366F1'

@@ -30,6 +30,9 @@ export default function BanksTabsClient() {
   const [error, setError] = useState<string | null>(null);
   const [editBank, setEditBank] = useState<Bank | null>(null);
   const [allTags, setAllTags] = useState<Array<{ id: string; name: string; color?: string }>>([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [bankStats, setBankStats] = useState<{ [bankId: string]: { accounts: number; transactions: number } }>({});
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -74,6 +77,64 @@ export default function BanksTabsClient() {
     };
     fetchTags();
   }, []);
+
+  // Fetch bank statistics
+  useEffect(() => {
+    const fetchBankStats = async () => {
+      try {
+        setIsLoadingStats(true);
+        const userId = localStorage.getItem('userId');
+        if (userId && banks.length > 0) {
+          // Fetch all accounts and transactions in parallel
+          const [accountsResponse, transactionsResponse] = await Promise.all([
+            fetch(`/api/account?bankId=all&userId=${userId}`),
+            fetch(`/api/transactions/all?userId=${userId}`)
+          ]);
+
+          const allAccounts = accountsResponse.ok ? await accountsResponse.json() : [];
+          const allTransactions = transactionsResponse.ok ? await transactionsResponse.json() : [];
+
+          console.log('Fetched accounts:', allAccounts);
+          console.log('Fetched transactions:', allTransactions);
+
+          // Process data efficiently
+          const stats: { [bankId: string]: { accounts: number; transactions: number } } = {};
+          
+          banks.forEach(bank => {
+            const bankAccounts = Array.isArray(allAccounts) 
+              ? allAccounts.filter((acc: { bankId: string }) => acc.bankId === bank.id)
+              : [];
+            
+            const bankTransactions = Array.isArray(allTransactions) 
+              ? allTransactions.filter((tx: { bankId: string }) => tx.bankId === bank.id)
+              : [];
+            
+            console.log(`Bank ${bank.bankName} (${bank.id}):`, {
+              accounts: bankAccounts.length,
+              transactions: bankTransactions.length,
+              accountIds: bankAccounts.map((acc: { id: string }) => acc.id),
+              transactionIds: bankTransactions.slice(0, 3).map((tx: { id: string }) => tx.id)
+            });
+            
+            stats[bank.id] = {
+              accounts: bankAccounts.length,
+              transactions: bankTransactions.length
+            };
+          });
+          
+          setBankStats(stats);
+        }
+      } catch (error) {
+        console.error('Error fetching bank stats:', error);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+    
+    if (banks.length > 0) {
+      fetchBankStats();
+    }
+  }, [banks]);
 
 
 
@@ -194,6 +255,11 @@ export default function BanksTabsClient() {
   return (
     <div className="flex h-screen bg-gray-50">
       <BanksSidebar 
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => {
+          // Prevent rapid toggles with immediate state update
+          setIsSidebarCollapsed(prev => !prev);
+        }}
         onSuperBankClick={() => {
           const tabKey = 'super-bank';
           if (tabs.some(tab => tab.key === tabKey)) {
@@ -328,44 +394,88 @@ export default function BanksTabsClient() {
                     <p className="text-lg font-medium text-gray-900 mb-2">No banks added yet</p>
                     <p className="text-sm text-gray-500">Click &quot;Add Bank&quot; to get started</p>
                   </div>
+                ) : isLoadingStats ? (
+                  <div className="col-span-full text-center py-12 text-gray-500">
+                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    Loading bank statistics...
+                  </div>
                 ) : (
                   banks.map((bank) => (
                     <div
                       key={bank.id}
                       onClick={() => handleBankCardClick(bank)}
-                      className="cursor-pointer bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 group relative overflow-hidden"
+                      className="cursor-pointer bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg hover:scale-105 transition-all duration-300 group relative overflow-hidden"
                     >
-                      {/* Watermark Icon */}
-                      <div className="absolute top-4 right-4 opacity-5 text-blue-500 text-4xl pointer-events-none select-none rotate-12">
-                        <RiBankLine />
-                      </div>
+                      {/* Background Pattern */}
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-100 to-transparent rounded-full opacity-20 transform translate-x-16 -translate-y-16"></div>
                       
                       {/* Edit/Delete Buttons */}
                       {user?.email === adminEmail && (
-                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                           <button
-                            className="p-1 bg-blue-100 hover:bg-blue-200 rounded-full"
+                            className="p-2 bg-white hover:bg-blue-50 rounded-full shadow-sm border border-gray-200"
                             onClick={e => { e.stopPropagation(); handleEditBank(bank); }}
                             title="Edit Bank"
                           >
-                            <RiEdit2Line className="text-blue-600" size={14} />
+                            <RiEdit2Line className="text-blue-600" size={16} />
                           </button>
                           <button
-                            className="p-1 bg-red-100 hover:bg-red-200 rounded-full"
+                            className="p-2 bg-white hover:bg-red-50 rounded-full shadow-sm border border-gray-200"
                             onClick={e => { e.stopPropagation(); handleDeleteBank(bank.id); }}
                             title="Delete Bank"
                           >
-                            <RiDeleteBin6Line className="text-red-600" size={14} />
+                            <RiDeleteBin6Line className="text-red-600" size={16} />
                           </button>
                         </div>
                       )}
                       
-                      {/* Bank Content */}
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <RiBankLine className="text-blue-600" size={20} />
+                      {/* Bank Header */}
+                      <div className="flex items-center space-x-4 mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+                          <RiBankLine className="text-white" size={24} />
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-900">{bank.bankName}</h3>
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900">{bank.bankName}</h3>
+                          <p className="text-sm text-gray-500">Financial Institution</p>
+                        </div>
+                      </div>
+                      
+                      {/* Bank Stats */}
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="bg-white rounded-lg p-3 border border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500 uppercase tracking-wide">Accounts</span>
+                            <span className="text-lg font-bold text-blue-600">
+                              {typeof bankStats[bank.id]?.accounts === 'number' ? bankStats[bank.id].accounts : 0}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="bg-white rounded-lg p-3 border border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500 uppercase tracking-wide">Transactions</span>
+                            <span className="text-lg font-bold text-green-600">
+                              {typeof bankStats[bank.id]?.transactions === 'number' ? bankStats[bank.id].transactions.toLocaleString() : '0'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Quick Actions */}
+                      <div className="flex space-x-2">
+                        <div className="flex-1 bg-blue-100 hover:bg-blue-200 rounded-lg p-2 text-center transition-colors">
+                          <span className="text-xs font-medium text-blue-700">View Accounts</span>
+                        </div>
+                        <div className="flex-1 bg-green-100 hover:bg-green-200 rounded-lg p-2 text-center transition-colors">
+                          <span className="text-xs font-medium text-green-700">View Reports</span>
+                        </div>
+                      </div>
+                      
+                      {/* Status Indicator */}
+                      <div className="absolute bottom-3 left-3">
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-xs text-gray-500">Active</span>
+                        </div>
                       </div>
                     </div>
                   ))
