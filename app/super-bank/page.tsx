@@ -1,16 +1,17 @@
 "use client";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { RiEdit2Line } from 'react-icons/ri';
+
 import type { JSX } from 'react';
 import React from 'react';
 
-import AnalyticsSummary from '../../components/AnalyticsSummary';
-import TransactionFilterBar from '../../components/TransactionFilterBar';
-import TagFilterPills from '../../components/TagFilterPills';
+import AnalyticsSummary from '../components/AnalyticsSummary';
+import TransactionFilterBar from '../components/TransactionFilterBar';
+import TagFilterPills from '../components/TagFilterPills';
 
-import TransactionTable from '../../components/TransactionTable';
-import { Transaction, TransactionRow, Tag } from '../../types/transaction';
-import Modal from '../../components/Modals/Modal';
+import TransactionTable from '../components/TransactionTable';
+import { Transaction, TransactionRow, Tag } from '../types/transaction';
+import Modal from '../components/Modals/Modal';
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -76,7 +77,7 @@ function CompactAnalytics({
     return {
       monthlyStats,
       topCategories: Object.entries(topCategories)
-        .sort(([,a], [,b]) => b.amount - a.amount)
+        .sort(([,a], [,b]) => (b as { amount: number }).amount - (a as { amount: number }).amount)
         .slice(0, 5),
       avgTransaction,
       largestTransaction,
@@ -209,9 +210,9 @@ function CompactAnalytics({
                 .map(([month, stats]) => (
                 <tr key={month} className="border-b border-gray-100">
                   <td className="px-1 py-1 truncate text-xs">{month}</td>
-                  <td className="px-1 py-1 text-right text-xs">{stats.count}</td>
+                  <td className="px-1 py-1 text-right text-xs">{(stats as { count: number }).count}</td>
                   <td className="px-1 py-1 text-right text-xs text-green-600">
-                    ₹{stats.credit.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    ₹{(stats as { credit: number }).credit.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </td>
                 </tr>
               ))}
@@ -429,7 +430,7 @@ function CompactReports({
 
       // Count tags
       const tags = Array.isArray(tx.tags) ? tx.tags : [];
-      tags.forEach(tag => {
+      tags.forEach((tag: Tag) => {
         if (tag && tag.name) {
           breakdown[bankId][accountId].tags[tag.name] = 
             (breakdown[bankId][accountId].tags[tag.name] || 0) + 1;
@@ -459,7 +460,7 @@ function CompactReports({
       if (!breakdown[bankId]) breakdown[bankId] = {};
       if (!breakdown[bankId][accountId]) breakdown[bankId][accountId] = {};
 
-      tags.forEach(tag => {
+      tags.forEach((tag: Tag) => {
         if (tag && tag.name) {
           if (!breakdown[bankId][accountId][tag.name]) {
             breakdown[bankId][accountId][tag.name] = {
@@ -787,7 +788,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
     // Find all transactions for this tag across ALL banks and accounts
     const tagTransactions = transactions.filter(tx => {
       const tags = Array.isArray(tx.tags) ? tx.tags : [];
-      return tags.some(tag => tag.name === tagName);
+      return tags.some((tag: Tag) => tag.name === tagName);
     });
 
     // Group transactions by bank and account for display
@@ -2500,7 +2501,7 @@ export default function SuperBankPage() {
           return amountB - amountA;
         }
       }
-
+      
       // Handle date sorting
       if (tableSortColumn.toLowerCase() === 'date') {
         const dateCol = superHeader.find((h) => h.toLowerCase().includes('date'));
@@ -2713,19 +2714,13 @@ export default function SuperBankPage() {
 
   // Date filtering function
   const handleDateFilter = (direction: 'newest' | 'oldest' | 'clear') => {
-    console.log('Date filter triggered:', direction, 'Headers:', superHeader);
+    console.log('Date filter triggered:', direction);
     if (direction === 'clear') {
       setTableSortColumn('');
       setTableSortDirection('asc');
     } else {
-      // Find the actual date column name from headers
-      const dateCol = superHeader.find((h) => h.toLowerCase().includes('date'));
-      console.log('Found date column:', dateCol);
-      if (dateCol) {
-        setTableSortColumn(dateCol);
-        setTableSortDirection(direction === 'newest' ? 'desc' : 'asc');
-        console.log('Set table sort:', dateCol, direction === 'newest' ? 'desc' : 'asc');
-      }
+      setTableSortColumn('Date');
+      setTableSortDirection(direction === 'newest' ? 'desc' : 'asc');
     }
   };
 
@@ -3319,26 +3314,18 @@ export default function SuperBankPage() {
         </div>
 
 
-                {/* Filter box below stats, wider on PC */}
-                <TransactionFilterBar
-          search={search}
-          onSearchChange={setSearch}
-          dateRange={dateRange}
-          onDateRangeChange={setDateRange}
-          onDownload={() => setReportOpen(true)}
-          downloadDisabled={false}
-          searchField={searchField}
-          onSearchFieldChange={setSearchField}
-          searchFieldOptions={['all', 'Bank Name', ...superHeader.filter(header => header !== 'Bank Name')]}
-          sortOrder={sortOrder}
-          onSortOrderChange={setSortOrder}
-          sortOrderOptions={[
-            { value: 'desc', label: 'Latest First' },
-            { value: 'asc', label: 'Oldest First' },
-            { value: 'tagged', label: 'Tagged Only' },
-            { value: 'untagged', label: 'Untagged Only' },
-          ]}
-        />
+                                 {/* Filter box below stats, wider on PC */}
+                 <TransactionFilterBar
+           search={search}
+           onSearchChange={setSearch}
+           dateRange={dateRange}
+           onDateRangeChange={setDateRange}
+           onDownload={() => setReportOpen(true)}
+           downloadDisabled={false}
+           searchField={searchField}
+           onSearchFieldChange={setSearchField}
+           searchFieldOptions={['all', ...superHeader.filter(header => !['Bank Name', 'Date', 'Dr./Cr.', 'Amount'].includes(header))]}
+         />
 
         {/* Active filters indicator */}
         {(bankFilter || drCrFilter || search || dateRange.from || dateRange.to || tagFilters.length > 0) && (

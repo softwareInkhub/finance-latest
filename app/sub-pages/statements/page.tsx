@@ -563,6 +563,7 @@ function StatementsContent() {
               dateRange={dateRange}
               onDateRangeChange={setDateRange}
               onDownload={() => {}}
+              downloadDisabled={false}
               searchField={searchField}
               onSearchFieldChange={setSearchField}
               searchFieldOptions={['all', ...transactionHeaders]}

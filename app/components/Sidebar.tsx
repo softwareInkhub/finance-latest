@@ -45,7 +45,7 @@ export default function Sidebar({ onItemClick }: SidebarProps) {
       name: 'Banks', 
       path: '/banks', 
       icon: RiBankLine,
-      description: 'Manage bank accounts'
+      description: 'Bank overview and management'
     },
     { 
       name: 'Tags', 

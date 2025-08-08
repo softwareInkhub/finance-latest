@@ -27,6 +27,11 @@ interface TagFilterPillsProps {
   tagError?: string | null;
   tagSuccess?: string | null;
   onCreateTag?: (name: string) => Promise<string>;
+  // New props for tagged/untagged click handlers
+  onTaggedClick?: () => void;
+  onUntaggedClick?: () => void;
+  // New prop to track current sort order for visual feedback
+  currentSortOrder?: string;
 }
 
 const TagFilterPills: React.FC<TagFilterPillsProps> = ({ 
@@ -47,7 +52,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
   tagging = false,
   tagError,
   tagSuccess,
-  onCreateTag
+  onCreateTag,
+  onTaggedClick,
+  onUntaggedClick,
+  currentSortOrder
 }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tag: Tag } | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ tag: Tag } | null>(null);
@@ -233,8 +241,28 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
           {/* Tag Statistics */}
           {typeof tagged !== 'undefined' && typeof untagged !== 'undefined' && typeof totalTags !== 'undefined' && (
             <div className="flex items-center gap-2 text-xs text-gray-600 flex-shrink-0">
-              <span>Tagged: {tagged}</span>
-              <span>Untagged: {untagged}</span>
+              <button
+                onClick={onTaggedClick}
+                className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                  currentSortOrder === 'tagged' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                }`}
+                title={currentSortOrder === 'tagged' ? 'Click to show all transactions' : 'Show tagged transactions only'}
+              >
+                Tagged: {tagged}
+              </button>
+              <button
+                onClick={onUntaggedClick}
+                className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                  currentSortOrder === 'untagged' 
+                    ? 'bg-gray-600 text-white' 
+                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                }`}
+                title={currentSortOrder === 'untagged' ? 'Click to show all transactions' : 'Show untagged transactions only'}
+              >
+                Untagged: {untagged}
+              </button>
               <span>Total Tags: {totalTags}</span>
             </div>
           )}
