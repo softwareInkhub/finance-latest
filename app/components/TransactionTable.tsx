@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { RiPriceTag3Line } from 'react-icons/ri';
+import React, { useState, useRef, useEffect } from 'react';
 import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { RiPriceTag3Line } from 'react-icons/ri';
 import { Transaction, TransactionRow, Tag } from '../types/transaction';
 
 interface BankMapping {
@@ -31,30 +31,28 @@ interface TransactionTableProps {
   onSort?: (column: string, direction: 'asc' | 'desc') => void;
   sortColumn?: string;
   sortDirection?: 'asc' | 'desc';
+  // New props for filtering
+  onDateFilter?: (direction: 'newest' | 'oldest' | 'clear') => void;
+  onBankFilter?: (bankName: string | 'clear') => void;
+  onDrCrFilter?: (type: 'DR' | 'CR' | 'clear') => void;
+  availableBanks?: string[];
 }
 
-const DEFAULT_WIDTH = 140;
+const DEFAULT_WIDTH = 120;
 
-// Helper to normalize date to dd/mm/yyyy
 function normalizeDateToDDMMYYYY(dateStr: string): string {
   if (!dateStr) return '';
-  const match = dateStr.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-  if (match) {
-    const [, ddRaw, mmRaw, yyyyRaw] = match;
-    let dd = ddRaw, mm = mmRaw, yyyy = yyyyRaw;
-    if (yyyy.length === 2) yyyy = '20' + yyyy;
-    if (dd.length === 1) dd = '0' + dd;
-    if (mm.length === 1) mm = '0' + mm;
-    return `${dd}/${mm}/${yyyy}`;
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch {
+    return dateStr;
   }
-  const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    return `${dd}/${mm}/${yyyy}`;
-  }
-  return dateStr;
 }
 
 const TransactionTable: React.FC<TransactionTableProps> = ({
@@ -73,6 +71,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   onSort,
   sortColumn,
   sortDirection,
+  onDateFilter,
+  onBankFilter,
+  onDrCrFilter,
+  availableBanks = [],
 }) => {
   // Column widths state
   const [columnWidths, setColumnWidths] = useState<{ [header: string]: number }>(
@@ -127,39 +129,28 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 
   const handleDrop = (e: React.DragEvent, targetHeader: string) => {
     e.preventDefault();
-    if (!draggedHeader || draggedHeader === targetHeader) return;
-    const fromIdx = headers.indexOf(draggedHeader);
-    const toIdx = headers.indexOf(targetHeader);
-    if (fromIdx === -1 || toIdx === -1) return;
-    const newHeaders = [...headers];
-    newHeaders.splice(fromIdx, 1);
-    newHeaders.splice(toIdx, 0, draggedHeader);
-    setDraggedHeader(null);
-    if (typeof onReorderHeaders === 'function') onReorderHeaders(newHeaders);
+    if (draggedHeader && draggedHeader !== targetHeader && onReorderHeaders) {
+      const newHeaders = [...headers];
+      const draggedIndex = newHeaders.indexOf(draggedHeader);
+      const targetIndex = newHeaders.indexOf(targetHeader);
+      newHeaders.splice(draggedIndex, 1);
+      newHeaders.splice(targetIndex, 0, draggedHeader);
+      onReorderHeaders(newHeaders);
+    }
   };
 
   const handleDragEnd = () => {
     setDraggedHeader(null);
   };
 
-  // Sort handlers
   const handleSortDropdownToggle = (column: string) => {
-    console.log('Toggle dropdown for column:', column, 'Current state:', sortDropdownOpen);
-    const newState = sortDropdownOpen === column ? null : column;
-    console.log('Setting new state to:', newState);
-    setSortDropdownOpen(newState);
+    setSortDropdownOpen(sortDropdownOpen === column ? null : column);
   };
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
-      // Don't close if clicking on the sort button or dropdown
-      if (target.closest('.sort-dropdown') || target.closest('.sort-button')) {
-        return;
-      }
-      if (sortDropdownOpen) {
-        console.log('Closing dropdown due to outside click');
+      if (sortDropdownOpen && !(event.target as Element).closest('.sort-dropdown')) {
         setSortDropdownOpen(null);
       }
     };
@@ -267,6 +258,179 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                           )}
                         </div>
                       )}
+
+                      {/* Date filter dropdown */}
+                      {(sh.toLowerCase() === 'date') && onDateFilter && (
+                        <div className="relative sort-dropdown">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSortDropdownToggle(sh);
+                            }}
+                            className="sort-button p-1 hover:bg-gray-200 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300"
+                            title="Filter by date"
+                          >
+                            <FiChevronDown className="w-3 h-3 text-gray-400" />
+                          </button>
+                          
+                          {sortDropdownOpen === sh && (
+                            <div className="sort-dropdown absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-[9999] min-w-[140px]">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (onDateFilter) onDateFilter('newest');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                <FiChevronDown className="w-3 h-3" />
+                                Newest to Oldest
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (onDateFilter) onDateFilter('oldest');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                <FiChevronUp className="w-3 h-3" />
+                                Oldest to Newest
+                              </button>
+                              <div className="border-t border-gray-200 my-1"></div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (onDateFilter) onDateFilter('clear');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-gray-500"
+                              >
+                                Clear filter
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Bank Name filter dropdown */}
+                      {(sh.toLowerCase() === 'bank name' || sh.toLowerCase() === 'bankname') && onBankFilter && (
+                        <div className="relative sort-dropdown">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSortDropdownToggle(sh);
+                            }}
+                            className="sort-button p-1 hover:bg-gray-200 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300"
+                            title="Filter by bank"
+                          >
+                            <FiChevronDown className="w-3 h-3 text-gray-400" />
+                          </button>
+                          
+                          {sortDropdownOpen === sh && (
+                            <div className="sort-dropdown absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-[9999] min-w-[140px] max-h-48 overflow-y-auto">
+                              {availableBanks.map((bank) => (
+                                <button
+                                  key={bank}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (onBankFilter) onBankFilter(bank);
+                                    setSortDropdownOpen(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                                >
+                                  {bank}
+                                </button>
+                              ))}
+                              <div className="border-t border-gray-200 my-1"></div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (onBankFilter) onBankFilter('clear');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-gray-500"
+                              >
+                                Clear filter
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Dr./Cr. filter dropdown */}
+                      {(sh.toLowerCase() === 'dr./cr.' || sh.toLowerCase() === 'dr/cr' || sh.toLowerCase() === 'dr. cr.') && onDrCrFilter && (
+                        <div className="relative sort-dropdown">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSortDropdownToggle(sh);
+                            }}
+                            className="sort-button p-1 hover:bg-gray-200 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300"
+                            title="Filter by transaction type"
+                          >
+                            <FiChevronDown className="w-3 h-3 text-gray-400" />
+                          </button>
+                          
+                          {sortDropdownOpen === sh && (
+                            <div className="sort-dropdown absolute top-full right-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-[9999] min-w-[140px]">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (onDrCrFilter) onDrCrFilter('DR');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                DR (Debit)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (onDrCrFilter) onDrCrFilter('CR');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                              >
+                                CR (Credit)
+                              </button>
+                              <div className="border-t border-gray-200 my-1"></div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (onDrCrFilter) onDrCrFilter('clear');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-gray-500"
+                              >
+                                Clear filter
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       
                       {/* Resize handle */}
                       <span
@@ -286,7 +450,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             {rows.map((row, idx) => {
               const tx = transactions?.find(t => t.id === row.id);
               return (
-                <tr key={idx} data-row-idx={idx}>
+                <tr key={idx} data-row-idx={idx} className="hover:bg-blue-50 transition-colors duration-150">
                   <td className="border px-2 py-1 text-center" style={{ width: 40 }}>
                     <input
                       type="checkbox"

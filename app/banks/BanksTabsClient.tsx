@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import AccountsClient from '../sub-pages/accounts/AccountsClient';
 import StatementsPage from '../sub-pages/statements/page';
-import SuperBankPage from '../sub-pages/super-bank/page';
+import SuperBankPage from '../super-bank/page';
 import CreateBankModal from '../components/Modals/CreateBankModal';
 import { RiBankLine, RiCloseLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
 import { Bank } from '../types/aws';
@@ -379,6 +379,8 @@ export default function BanksTabsClient() {
                 editBank={editBank}
                 onUpdate={handleUpdateBank}
               />
+
+
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {isFetching ? (

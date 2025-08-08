@@ -360,45 +360,45 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           <div className="flex-1 flex items-center gap-1.5">
             <button
               onClick={() => openModal('Transaction Details', getTransactionDetails())}
-              className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
+              className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
             >
               Total Tranx: {totalTransactions}
             </button>
             <button
               onClick={() => openModal('Amount Details', getAmountDetails())}
-              className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-xs font-semibold hover:bg-green-200 transition-colors cursor-pointer"
+              className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold hover:bg-green-200 transition-colors cursor-pointer"
             >
               Total Amt.: ₹{typeof totalAmount === 'number' ? totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
             </button>
             <button
               onClick={() => openModal('Credit Details', getCreditDetails())}
-              className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
+              className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
             >
               Cr.: ₹{typeof totalCredit === 'number' ? totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
             </button>
             <button
               onClick={() => openModal('Debit Details', getDebitDetails())}
-              className="px-1.5 py-0.5 bg-red-100 text-red-800 rounded text-xs font-semibold hover:bg-red-200 transition-colors cursor-pointer"
+              className="px-2 py-1 bg-red-100 text-red-800 rounded text-sm font-semibold hover:bg-red-200 transition-colors cursor-pointer"
             >
               Dr.: ₹{typeof totalDebit === 'number' ? totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
             </button>
             {showBalance && (
               <button
                 onClick={() => openModal('Balance Details', getBalanceDetails())}
-                className={`px-1.5 py-0.5 rounded text-xs font-semibold hover:transition-colors cursor-pointer ${balance >= 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}
+                className={`px-2 py-1 rounded text-sm font-semibold hover:transition-colors cursor-pointer ${balance >= 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}
               >
                 Bal.: ₹{typeof balance === 'number' ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
               </button>
             )}
             <button
               onClick={() => openModal('Bank Details', getBanksDetails())}
-              className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded text-xs font-semibold hover:bg-yellow-200 transition-colors cursor-pointer"
+              className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm font-semibold hover:bg-yellow-200 transition-colors cursor-pointer"
             >
               Total Banks: {totalBanks}
             </button>
             <button
               onClick={() => openModal('Account Details', getAccountsDetails())}
-              className="px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded text-xs font-semibold hover:bg-purple-200 transition-colors cursor-pointer"
+              className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-semibold hover:bg-purple-200 transition-colors cursor-pointer"
             >
               Total Acc.: {totalAccounts}
             </button>
