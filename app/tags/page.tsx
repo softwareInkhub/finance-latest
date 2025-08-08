@@ -96,7 +96,7 @@ export default function TagsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10 px-2">
+    <div className="h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10 px-2 overflow-y-auto">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-2 mb-6">
           <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-2xl shadow">
