@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
 import { Tag } from '../types/transaction';
 import AnalyticsSummary from '../components/AnalyticsSummary';
@@ -17,6 +17,14 @@ interface CashFlowItem {
     debit: number;
     balance: number;
   };
+}
+
+interface TransactionData {
+  AmountRaw?: number;
+  Amount?: number | string;
+  amount?: number | string;
+  'Dr./Cr.'?: string;
+  tags?: Array<{ name: string }>;
 }
 
 interface CashFlowGroup {
@@ -160,7 +168,7 @@ export default function ReportsPage() {
   const [pendingAddGroupSection, setPendingAddGroupSection] = useState<string | null>(null);
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
+
   const [modalSelectedTag, setModalSelectedTag] = useState<Tag | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
 
@@ -178,12 +186,12 @@ export default function ReportsPage() {
       console.log(`Using ${transactions.length} transactions from Redux for tag: ${tagName}`);
       
       // Use exact same logic as Super Bank
-      const txs = transactions.filter((tx: any) => Array.isArray(tx.tags) && tx.tags.some((t: any) => t.name === tagName));
+      const txs = transactions.filter((tx: { tags?: Array<{ name: string }> }) => Array.isArray(tx.tags) && tx.tags.some((t: { name: string }) => t.name === tagName));
       console.log(`Found ${txs.length} transactions for tag ${tagName}`);
       
       let totalAmount = 0, totalCredit = 0, totalDebit = 0;
       
-      txs.forEach((tx: any) => {
+      txs.forEach((tx: TransactionData) => {
         // Get amount from AmountRaw or parse from Amount field - EXACT SAME LOGIC AS SUPER BANK
         let amount = 0;
         if (typeof tx.AmountRaw === 'number') {
@@ -380,8 +388,6 @@ export default function ReportsPage() {
   const handleAddGroup = () => {
     if (!pendingAddGroup || !newGroupName.trim()) return;
     
-    const section = cashFlowData.find(s => s.id === pendingAddGroup);
-    
     const newGroup: CashFlowGroup = {
       id: Date.now().toString(),
       title: newGroupName.trim(),
@@ -519,7 +525,6 @@ export default function ReportsPage() {
 
   const closeTagsModal = () => {
     setShowTagsModal(false);
-    setSelectedTag(null);
     setModalSelectedTag(null);
     setPendingAddGroupSection(null);
     setPendingAddGroup(null);
@@ -1110,7 +1115,7 @@ export default function ReportsPage() {
                     />
                     <div>
                            <h4 className="font-semibold text-blue-800">Selected Tag: {modalSelectedTag.name}</h4>
-                           <p className="text-sm text-blue-600">Click "Add Tag" to add this tag to your cashflow statement</p>
+                           <p className="text-sm text-blue-600">Click &quot;Add Tag&quot; to add this tag to your cashflow statement</p>
                     </div>
                   </div>
                   </div>

@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { Transaction } from '../../types/transaction';
 
 interface AnalyticsData {
   totalAmount: number;
@@ -7,7 +8,7 @@ interface AnalyticsData {
   totalTransactions: number;
   totalBanks: number;
   totalAccounts: number;
-  transactions: any[];
+  transactions: Transaction[];
   lastUpdated: string;
 }
 
@@ -55,3 +56,6 @@ export const {
 } = analyticsSlice.actions;
 
 export default analyticsSlice.reducer;
+
+
+
