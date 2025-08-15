@@ -9,7 +9,8 @@ import {
   RiPriceTag3Line,
   RiMenuFoldLine,
   RiMenuUnfoldLine,
-  RiFileLine
+  RiFileLine,
+  RiBarChartLine
 } from 'react-icons/ri';
 
 interface SidebarProps {
@@ -58,6 +59,12 @@ export default function Sidebar({ onItemClick }: SidebarProps) {
       path: '/files', 
       icon: RiFileLine,
       description: 'Upload and manage files'
+    },
+    { 
+      name: 'Reports', 
+      path: '/reports', 
+      icon: RiBarChartLine,
+      description: 'Financial reports and statements'
     },
   ];
 

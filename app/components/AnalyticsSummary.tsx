@@ -41,12 +41,12 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 };
 
 const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
-  totalAmount,
-  totalCredit,
-  totalDebit,
-  totalTransactions,
-  totalBanks,
-  totalAccounts,
+  totalAmount = 0,
+  totalCredit = 0,
+  totalDebit = 0,
+  totalTransactions = 0,
+  totalBanks = 0,
+  totalAccounts = 0,
   showBalance = false,
 }) => {
   const [modalState, setModalState] = useState<{
@@ -59,7 +59,15 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     content: null,
   });
 
-  const balance = totalCredit - totalDebit;
+  // Ensure all values are numbers and handle undefined/null values
+  const safeTotalAmount = typeof totalAmount === 'number' && !isNaN(totalAmount) ? totalAmount : 0;
+  const safeTotalCredit = typeof totalCredit === 'number' && !isNaN(totalCredit) ? totalCredit : 0;
+  const safeTotalDebit = typeof totalDebit === 'number' && !isNaN(totalDebit) ? totalDebit : 0;
+  const safeTotalTransactions = typeof totalTransactions === 'number' && !isNaN(totalTransactions) ? totalTransactions : 0;
+  const safeTotalBanks = typeof totalBanks === 'number' && !isNaN(totalBanks) ? totalBanks : 0;
+  const safeTotalAccounts = typeof totalAccounts === 'number' && !isNaN(totalAccounts) ? totalAccounts : 0;
+  
+  const balance = safeTotalCredit - safeTotalDebit;
 
   const openModal = (title: string, content: React.ReactNode) => {
     setModalState({
@@ -82,12 +90,12 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="font-semibold text-gray-800">Total Transactions</div>
-          <div className="text-2xl font-bold text-blue-600">{totalTransactions}</div>
+          <div className="text-2xl font-bold text-blue-600">{safeTotalTransactions}</div>
         </div>
         <div>
           <div className="font-semibold text-gray-800">Average per Transaction</div>
           <div className="text-lg font-semibold text-gray-700">
-            ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+            ₹{safeTotalTransactions > 0 ? (safeTotalAmount / safeTotalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
           </div>
         </div>
       </div>
@@ -121,12 +129,12 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Total Amount</div>
           <div className="text-2xl font-bold text-green-600">
-            ₹{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{safeTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
         <div>
           <div className="font-semibold text-gray-800">Transaction Count</div>
-          <div className="text-lg font-semibold text-gray-700">{totalTransactions}</div>
+          <div className="text-lg font-semibold text-gray-700">{safeTotalTransactions}</div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -159,13 +167,13 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Total Credits</div>
           <div className="text-2xl font-bold text-blue-600">
-            ₹{totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
         <div>
           <div className="font-semibold text-gray-800">Percentage of Total</div>
           <div className="text-lg font-semibold text-gray-700">
-            {((totalCredit / totalAmount) * 100).toFixed(1)}%
+            {safeTotalAmount > 0 ? ((safeTotalCredit / safeTotalAmount) * 100).toFixed(1) : '0.0'}%
           </div>
         </div>
       </div>
@@ -200,13 +208,13 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Total Debits</div>
           <div className="text-2xl font-bold text-red-600">
-            ₹{totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ₹{safeTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
         <div>
           <div className="font-semibold text-gray-800">Percentage of Total</div>
           <div className="text-lg font-semibold text-gray-700">
-            {((totalDebit / totalAmount) * 100).toFixed(1)}%
+            {safeTotalAmount > 0 ? ((safeTotalDebit / safeTotalAmount) * 100).toFixed(1) : '0.0'}%
           </div>
         </div>
       </div>
@@ -241,7 +249,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         <div>
           <div className="font-semibold text-gray-800">Net Balance</div>
           <div className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            ₹{typeof balance === 'number' ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+            ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
         <div>
@@ -281,24 +289,24 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="font-semibold text-gray-800">Total Banks</div>
-          <div className="text-2xl font-bold text-yellow-600">{totalBanks}</div>
+          <div className="text-2xl font-bold text-yellow-600">{safeTotalBanks}</div>
             </div>
         <div>
           <div className="font-semibold text-gray-800">Total Accounts</div>
-          <div className="text-lg font-semibold text-gray-700">{totalAccounts}</div>
+          <div className="text-lg font-semibold text-gray-700">{safeTotalAccounts}</div>
             </div>
             </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="font-semibold text-gray-800">Accounts per Bank</div>
           <div className="text-lg font-semibold text-gray-700">
-            {(totalAccounts / totalBanks).toFixed(1)}
+            {safeTotalBanks > 0 ? (safeTotalAccounts / safeTotalBanks).toFixed(1) : '0.0'}
                   </div>
               </div>
         <div>
           <div className="font-semibold text-gray-800">Banking Diversity</div>
           <div className="text-lg font-semibold text-gray-700">
-            {totalBanks === 1 ? 'Single Bank' : totalBanks <= 3 ? 'Moderate' : 'High'}
+            {safeTotalBanks === 1 ? 'Single Bank' : safeTotalBanks <= 3 ? 'Moderate' : 'High'}
           </div>
         </div>
       </div>
@@ -318,12 +326,12 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="font-semibold text-gray-800">Total Accounts</div>
-          <div className="text-2xl font-bold text-purple-600">{totalAccounts}</div>
+          <div className="text-2xl font-bold text-purple-600">{safeTotalAccounts}</div>
         </div>
         <div>
           <div className="font-semibold text-gray-800">Average per Bank</div>
           <div className="text-lg font-semibold text-gray-700">
-            {(totalAccounts / totalBanks).toFixed(1)}
+            {safeTotalBanks > 0 ? (safeTotalAccounts / safeTotalBanks).toFixed(1) : '0.0'}
           </div>
         </div>
       </div>
@@ -362,45 +370,45 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
               onClick={() => openModal('Transaction Details', getTransactionDetails())}
               className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
             >
-              Total Tranx: {totalTransactions}
+              Total Tranx: {safeTotalTransactions}
             </button>
             <button
               onClick={() => openModal('Amount Details', getAmountDetails())}
               className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold hover:bg-green-200 transition-colors cursor-pointer"
             >
-              Total Amt.: ₹{typeof totalAmount === 'number' ? totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+              Total Amt.: ₹{safeTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </button>
             <button
               onClick={() => openModal('Credit Details', getCreditDetails())}
               className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
             >
-              Cr.: ₹{typeof totalCredit === 'number' ? totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+              Cr.: ₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </button>
             <button
               onClick={() => openModal('Debit Details', getDebitDetails())}
               className="px-2 py-1 bg-red-100 text-red-800 rounded text-sm font-semibold hover:bg-red-200 transition-colors cursor-pointer"
             >
-              Dr.: ₹{typeof totalDebit === 'number' ? totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+              Dr.: ₹{safeTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </button>
             {showBalance && (
               <button
                 onClick={() => openModal('Balance Details', getBalanceDetails())}
                 className={`px-2 py-1 rounded text-sm font-semibold hover:transition-colors cursor-pointer ${balance >= 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}
               >
-                Bal.: ₹{typeof balance === 'number' ? balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </button>
             )}
             <button
               onClick={() => openModal('Bank Details', getBanksDetails())}
               className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm font-semibold hover:bg-yellow-200 transition-colors cursor-pointer"
             >
-              Total Banks: {totalBanks}
+              Total Banks: {safeTotalBanks}
             </button>
             <button
               onClick={() => openModal('Account Details', getAccountsDetails())}
               className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-semibold hover:bg-purple-200 transition-colors cursor-pointer"
             >
-              Total Acc.: {totalAccounts}
+              Total Acc.: {safeTotalAccounts}
             </button>
           </div>
         </div>

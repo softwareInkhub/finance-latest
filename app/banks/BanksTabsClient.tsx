@@ -22,8 +22,8 @@ interface Tab {
 }
 
 export default function BanksTabsClient() {
-  const [tabs, setTabs] = useState<Tab[]>([{ key: 'overview', label: 'Overview', type: 'overview' }]);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [tabs, setTabs] = useState<Tab[]>([{ key: 'super-bank', label: 'Super Bank', type: 'super-bank' }]);
+  const [activeTab, setActiveTab] = useState('super-bank');
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
