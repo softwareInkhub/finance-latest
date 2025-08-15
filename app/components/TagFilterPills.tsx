@@ -57,6 +57,8 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
   onUntaggedClick,
   currentSortOrder
 }) => {
+  // Filter out tags with undefined or null names to prevent errors
+  const validTags = allTags.filter(tag => tag && tag.name && typeof tag.name === 'string');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tag: Tag } | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ tag: Tag } | null>(null);
   const [deleteInput, setDeleteInput] = useState('');
@@ -153,21 +155,21 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
   };
 
   // Filter tags based on search query
-  const filteredTags = allTags.filter(tag =>
+  const filteredTags = validTags.filter(tag =>
     tag.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Sort tags for dropdown
-  const sortedAndFilteredTags = allTags
+  const sortedAndFilteredTags = validTags
     .filter(tag => 
       tag.name.toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-  // Show first 6 tags in first row, rest in second row when expanded
-  const firstRowTags = filteredTags.slice(0, 6);
-  const secondRowTags = filteredTags.slice(6);
-  const hasMoreTags = filteredTags.length > 6;
+  // Show first 5 tags in first row, rest in second row when expanded
+  const firstRowTags = filteredTags.slice(0, 5);
+  const secondRowTags = filteredTags.slice(5);
+  const hasMoreTags = filteredTags.length > 5;
 
   // Calculate tag statistics
   // Note: These variables were calculated but not used in the component
@@ -230,7 +232,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
               className="px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer flex-shrink-0"
               title="Click to show more tags"
             >
-              +{filteredTags.length - 6} more
+              +{filteredTags.length - 5} more
             </button>
           )}
         </div>
@@ -508,7 +510,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
               </button>
               <button
                 className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-                disabled={deleteInput.trim().toLowerCase() !== deleteModal.tag.name.toLowerCase() || deleting}
+                disabled={deleteInput.trim().toLowerCase() !== (deleteModal.tag.name || '').toLowerCase() || deleting}
                 onClick={handleDelete}
               >
                 {deleting ? 'Deleting...' : 'Delete'}

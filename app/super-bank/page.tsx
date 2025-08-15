@@ -12,6 +12,8 @@ import TagFilterPills from '../components/TagFilterPills';
 import TransactionTable from '../components/TransactionTable';
 import { Transaction, TransactionRow, Tag } from '../types/transaction';
 import Modal from '../components/Modals/Modal';
+import { useAppDispatch } from '../store/hooks';
+import { setAnalyticsData } from '../store/slices/analyticsSlice';
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1159,6 +1161,42 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
   const superTagged = statsArr.reduce((sum, s) => sum + s.tagged, 0);
   const superUntagged = statsArr.reduce((sum, s) => sum + s.untagged, 0);
 
+  // Console logging for individual tags Credit, Debit, and Balance
+  if (tagFilters && tagFilters.length > 0) {
+    console.log('=== INDIVIDUAL TAGS FINANCIAL SUMMARY ===');
+    statsArr.forEach(stat => {
+      const tagBalance = stat.totalCredit - stat.totalDebit;
+      console.log(`${stat.label}:`);
+      console.log(`  Credit (Cr.): ₹${stat.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
+      console.log(`  Debit (Dr.): ₹${stat.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
+      console.log(`  Balance (Bal.): ₹${tagBalance >= 0 ? '+' : ''}${tagBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
+      console.log('---');
+    });
+    console.log('==========================================');
+    
+    // Additional debugging: Show transaction structure for first few transactions
+    console.log('=== TRANSACTION STRUCTURE DEBUG ===');
+    if (transactions.length > 0) {
+      console.log('Sample transaction structure:', transactions[0]);
+      console.log('Available fields:', Object.keys(transactions[0]));
+      
+      // Show first few transactions with their amount and Dr./Cr. fields
+      const sampleTransactions = transactions.slice(0, 3);
+      sampleTransactions.forEach((tx, index) => {
+        console.log(`Transaction ${index + 1}:`, {
+          id: tx.id,
+          AmountRaw: tx.AmountRaw,
+          Amount: tx.Amount,
+          amount: tx.amount,
+          'Dr./Cr.': tx['Dr./Cr.'],
+          'DR/CR': tx['DR/CR'],
+          tags: tx.tags
+        });
+      });
+    }
+    console.log('=====================================');
+  }
+
   // Group transactions by bank and then by accountId
   const perBankAccount: { [bankId: string]: { [accountId: string]: (Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[] } } = {};
   transactions.forEach(tx => {
@@ -1848,6 +1886,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
 }
 
 export default function SuperBankPage() {
+  const dispatch = useAppDispatch();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2487,6 +2526,8 @@ export default function SuperBankPage() {
     setTotalAccounts(stats.totalAccounts);
   }, [stats]);
 
+
+
   // Filtered and searched rows with table sorting
   const sortedAndFilteredRows = [...filteredRows].sort((a, b) => {
     // If table sorting is active, use that instead of date sorting
@@ -2676,6 +2717,31 @@ export default function SuperBankPage() {
   });
   if (!isFinite(totalCredit)) totalCredit = 0;
   if (!isFinite(totalDebit)) totalDebit = 0;
+
+  // Store analytics data in Redux when calculations are complete
+  useEffect(() => {
+    if (filteredRows.length > 0 && !loading) {
+      console.log('=== STORING ANALYTICS DATA IN REDUX ===');
+      console.log('Total Amount:', totalAmount);
+      console.log('Total Credit:', totalCredit);
+      console.log('Total Debit:', totalDebit);
+      console.log('Total Transactions:', filteredRows.length);
+      console.log('Total Banks:', stats.totalBanks);
+      console.log('Total Accounts:', stats.totalAccounts);
+      console.log('=====================================');
+
+      dispatch(setAnalyticsData({
+        totalAmount,
+        totalCredit,
+        totalDebit,
+        totalTransactions: filteredRows.length,
+        totalBanks: stats.totalBanks,
+        totalAccounts: stats.totalAccounts,
+        transactions: filteredRows,
+        lastUpdated: new Date().toISOString()
+      }));
+    }
+  }, [filteredRows, totalAmount, totalCredit, totalDebit, stats.totalBanks, stats.totalAccounts, loading, dispatch]);
 
   let tagged = 0, untagged = 0;
   filteredRows.forEach(row => {
