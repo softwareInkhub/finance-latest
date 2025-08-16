@@ -166,10 +166,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
     )
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
-  // Show first 5 tags in first row, rest in second row when expanded
-  const firstRowTags = filteredTags.slice(0, 5);
-  const secondRowTags = filteredTags.slice(5);
-  const hasMoreTags = filteredTags.length > 5;
+  // Show first 4 tags in first row, rest in second row when expanded
+  const firstRowTags = filteredTags.slice(0, 4);
+  const secondRowTags = filteredTags.slice(4);
+  const hasMoreTags = filteredTags.length > 4;
 
   // Calculate tag statistics
   // Note: These variables were calculated but not used in the component
@@ -188,11 +188,13 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                 <button
                   className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                   style={{
-                    backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
-                    color: tagFilters.includes(tag.name) ? '#ffffff' : 'black',
-                    borderColor: tag.color || '#6366F1'
+                    backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}30`,
+                    color: tagFilters.includes(tag.name) ? '#ffffff' : '#000000',
+                    borderColor: tag.color || '#6366F1',
+                    borderWidth: '2px'
                   }}
                   onClick={() => onToggleTag(tag.name)}
+                  title={`${tagFilters.includes(tag.name) ? 'Remove' : 'Add'} filter for ${tag.name} (${count || 0} transactions)`}
                 >
                   {tag.name}
                   {typeof count === 'number' && (
@@ -230,9 +232,9 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
             <button
               onClick={() => setIsExpanded(true)}
               className="px-2 py-1 text-xs text-gray-500 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-colors cursor-pointer flex-shrink-0"
-              title="Click to show more tags"
+              title={`Click to show ${filteredTags.length - 4} more tags`}
             >
-              +{filteredTags.length - 5} more
+              +{filteredTags.length - 4} more
             </button>
           )}
         </div>
@@ -278,6 +280,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                     type="button"
                     className="border px-1.5 py-0.5 rounded text-xs w-full sm:w-auto bg-white flex items-center justify-between min-w-[100px]"
                     onClick={() => setShowDropdown(!showDropdown)}
+                    title="Select a tag to apply to selected transactions"
                   >
                     <span>{selectedTagId ? allTags.find(t => t.id === selectedTagId)?.name || 'Add tag...' : 'Add tag...'}</span>
                     <span className="ml-2">▼</span>
@@ -302,6 +305,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                         <button
                           className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-blue-600 font-medium"
                           onClick={() => handleTagSelect('__create__')}
+                          title="Create a new tag for organizing transactions"
                         >
                           + Create new tag...
                         </button>
@@ -347,6 +351,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                       className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-semibold disabled:opacity-50"
                       onClick={handleCreateTag}
                       disabled={creatingTag || !newTagName.trim()}
+                      title="Create the new tag with the entered name"
                     >
                       {creatingTag ? 'Creating...' : 'Create'}
                     </button>
@@ -412,9 +417,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   <button
                     className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                     style={{
-                      backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}15`,
-                      color: tagFilters.includes(tag.name) ? '#ffffff' : 'black',
-                      borderColor: tag.color || '#6366F1'
+                      backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}30`,
+                      color: tagFilters.includes(tag.name) ? '#ffffff' : '#000000',
+                      borderColor: tag.color || '#6366F1',
+                      borderWidth: '2px'
                     }}
                     onClick={() => onToggleTag(tag.name)}
                   >

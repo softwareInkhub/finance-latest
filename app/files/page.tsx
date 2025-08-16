@@ -1687,7 +1687,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
   };
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw] h-[73vh] ">
+    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw] h-[73vh] overflow-y-auto">
       {/* Duplicate check field selection UI */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3 ">
         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -1719,57 +1719,65 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center">
-          <button
-            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={() => setDelimitDialogOpen(true)}
-            disabled={previewData.length === 0}
-            title="Split a column into multiple columns (e.g., date/time)"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-            </svg>
-            Delimit
-          </button>
-          
-          <button
-            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={handleCheckDuplicates}
-            disabled={checkingDuplicates || previewData.length === 0}
-            title="Check for duplicate transactions in database"
-          >
-            {checkingDuplicates ? (
-              <>
-                <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Checking...
-              </>
-            ) : (
-              <>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Check Duplicates
-              </>
-            )}
-          </button>
-          
-
-          
-          {duplicateRows.size > 0 && (
+        <div className="flex flex-wrap gap-2 items-center justify-between">
+          <div className="flex flex-wrap gap-2 items-center">
             <button
-              className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium"
-              onClick={handleToggleDuplicates}
-              title="Select or deselect all duplicate rows"
+              className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded hover:from-blue-600 hover:to-blue-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setDelimitDialogOpen(true)}
+              disabled={previewData.length === 0}
+              title="Split a column into multiple columns (e.g., date/time)"
             >
-              {allDuplicatesSelected ? 'Deselect Duplicates' : 'Select Duplicates'}
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              Delimit
             </button>
-          )}
+            
+            <button
+              className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleCheckDuplicates}
+              disabled={checkingDuplicates || previewData.length === 0}
+              title="Check for duplicate transactions in database"
+            >
+              {checkingDuplicates ? (
+                <>
+                  <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Checking...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Check Duplicates
+                </>
+              )}
+            </button>
+            
+            {duplicateRows.size > 0 && (
+              <button
+                className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium"
+                onClick={handleToggleDuplicates}
+                title="Select or deselect all duplicate rows"
+              >
+                {allDuplicatesSelected ? 'Deselect Duplicates' : 'Select Duplicates'}
+              </button>
+            )}
+          </div>
+          
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            onClick={handleSave}
+            disabled={saving || selectedRows.size === 0}
+          >
+            {saving ? 'Saving...' : `Save ${selectedRows.size} row(s)`}
+          </button>
         </div>
       </div>
-      <div className="overflow-auto h-[32vh]" >
+      <div className="overflow-auto h-[45vh]" >
         <table ref={tableRef} className="border-collapse min-w-full text-xs select-none " style={{ tableLayout: 'fixed' }}>
           <tbody>
             {previewData.map((row, i) => {
@@ -1852,21 +1860,8 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
         </table>
       </div>
       {duplicateChecked && duplicateRows.size > 0 && (
-        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <div className="text-red-800 text-base font-semibold mb-2">
-            ⚠️ {duplicateRows.size} row(s) already exist in database
-          </div>
-          <div className="text-red-600 text-sm space-y-1">
-            {duplicateInfo.some(info => info.type === 'internal') && (
-              <div>• Some duplicates exist within the uploaded data</div>
-            )}
-            {duplicateInfo.some(info => info.type === 'database') && (
-              <div>• Some duplicates exist in the database (checked using Date + Description)</div>
-            )}
-            <div className="mt-2 text-xs">
-              These rows are highlighted in red and will be skipped during save to avoid duplicates.
-            </div>
-          </div>
+        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+          ⚠️ {duplicateRows.size} duplicate row(s) found - highlighted in red and will be skipped
         </div>
       )}
       {duplicateChecked && duplicateRows.size === 0 && (
@@ -1874,7 +1869,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
           ✅ No duplicate rows found
         </div>
       )}
-      {/* Progress bar UI below the table and above the Save button */}
+      {/* Progress bar UI below the table */}
       {isBatchSaving && (
         <div className="w-full my-4">
           <div className="mb-1 text-blue-700 font-semibold">Saving {saveProgress} of {saveTotal} rows...</div>
@@ -1886,17 +1881,8 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
           </div>
         </div>
       )}
-      <div className="flex justify-end gap-2 mt-4">
-        <button
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          onClick={handleSave}
-          disabled={saving || selectedRows.size === 0}
-        >
-          {saving ? 'Saving...' : `Save ${selectedRows.size} row(s)`}
-        </button>
-        {saveError && <span className="text-red-600 ml-4">{saveError}</span>}
-        {saveSuccess && <span className="text-green-600 ml-4">Saved successfully!</span>}
-      </div>
+      {saveError && <div className="mt-2 text-red-600 text-sm">{saveError}</div>}
+      {saveSuccess && <div className="mt-2 text-green-600 text-sm">Saved successfully!</div>}
       
       {/* Delimit Dialog */}
       {delimitDialogOpen && (

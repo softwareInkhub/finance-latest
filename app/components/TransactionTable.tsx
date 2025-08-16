@@ -180,10 +180,10 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           </colgroup>
           <thead className="sticky top-0 z-20 bg-white shadow">
             <tr>
-              <th className="border px-2 py-1 bg-gray-100" style={{ width: 40 }}>
+              <th className="border px-2 py-1 bg-gray-100" style={{ width: 40 }} title="Select all transactions">
                 <input type="checkbox" checked={selectAll} onChange={onSelectAll} />
               </th>
-              <th className="border px-2 py-1 font-bold bg-gray-100" style={{ width: 40 }}>#</th>
+              <th className="border px-2 py-1 font-bold bg-gray-100" style={{ width: 40 }} title="Row number">#</th>
               {headers.map((sh) => (
                 <th
                   key={sh}
@@ -196,7 +196,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   onDragEnd={handleDragEnd}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="truncate block w-full">{sh}</span>
+                    <span className="truncate block w-full" title={`Column: ${sh}`}>{sh}</span>
                     <div className="flex items-center gap-1">
                       {/* Sort dropdown for Amount column */}
                       {sh.toLowerCase() === 'amount' && onSort && (
@@ -464,7 +464,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       {sh.toLowerCase() === 'tags' && Array.isArray(row[sh]) ? (
                         <div className="flex gap-1">
                           {(row[sh] as Tag[]).map((tag, tagIdx: number) => (
-                            <span key={tag.id + '-' + tagIdx} className="inline-flex items-center text-xs px-2 py-0.5 rounded mr-1 mb-1 max-w-[120px] group" style={{ background: tag.color, color: '#222' }}>
+                            <span key={tag.id + '-' + tagIdx} className="inline-flex items-center text-xs px-2 py-0.5 rounded mr-1 mb-1 max-w-[120px] group" style={{ background: tag.color, color: '#ffffff', border: '1px solid rgba(0,0,0,0.1)', fontWeight: '500' }}>
                               <RiPriceTag3Line className="inline mr-1" />
                               <span className="truncate">{tag.name}</span>
                               {onRemoveTag && (

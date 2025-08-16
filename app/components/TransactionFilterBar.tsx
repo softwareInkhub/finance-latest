@@ -44,6 +44,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
           className="border border-gray-300 px-2 py-0.5 pl-8 rounded text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           value={search}
           onChange={e => onSearchChange(e.target.value)}
+          title="Search transactions by description, reference number, or any other field"
         />
       </div>
       
@@ -54,6 +55,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
             value={searchField}
             onChange={e => onSearchFieldChange(e.target.value)}
             className="border border-gray-300 px-2 py-0.5 rounded text-sm min-w-[100px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+            title="Select which field to search in"
           >
             {searchFieldOptions.map(opt => (
               <option key={opt} value={opt}>{opt === 'all' ? 'All Fields' : opt}</option>
@@ -74,6 +76,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
             value={sortOrder}
             onChange={e => onSortOrderChange(e.target.value as SortOrderType)}
             className="border border-gray-300 px-2 py-0.5 rounded text-sm min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white"
+            title="Sort transactions by date or other criteria"
           >
             {(typeof sortOrderOptions !== 'undefined' ? sortOrderOptions : [
               { value: 'desc', label: 'Latest First' },
@@ -100,6 +103,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
             value={dateRange.from}
             onChange={e => onDateRangeChange({ ...dateRange, from: e.target.value })}
             placeholder="From"
+            title="Select start date for filtering transactions"
           />
         </div>
         <span className="text-gray-400 text-xs">to</span>
@@ -111,6 +115,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
             value={dateRange.to}
             onChange={e => onDateRangeChange({ ...dateRange, to: e.target.value })}
             placeholder="To"
+            title="Select end date for filtering transactions"
           />
         </div>
       </div>
@@ -122,7 +127,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
         className="px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed gap-1"
         onClick={onDownload}
         disabled={downloadDisabled}
-        title="Generate Report"
+        title="Generate and download a comprehensive transaction report"
         style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
       >
         <FiDownload size={14} />
