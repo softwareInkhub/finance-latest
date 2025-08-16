@@ -29,6 +29,8 @@ interface TransactionData {
   tags?: Array<{ name: string }>;
 }
 
+
+
 interface CashFlowGroup {
   id: string;
   title: string;
@@ -170,6 +172,7 @@ export default function ReportsPage() {
   const [pendingAddGroupSection, setPendingAddGroupSection] = useState<string | null>(null);
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [tagSearchQuery, setTagSearchQuery] = useState('');
 
   const [modalSelectedTag, setModalSelectedTag] = useState<Tag | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -195,7 +198,9 @@ export default function ReportsPage() {
       console.log(`Using ${transactions.length} transactions from Redux for tag: ${tagName}`);
       
       // Use exact same logic as Super Bank
-      const txs = transactions.filter((tx: { tags?: Array<{ name: string }> }) => Array.isArray(tx.tags) && tx.tags.some((t: { name: string }) => t.name === tagName));
+      const txs = transactions.filter((tx: { tags?: Array<{ name: string }> }) => 
+        Array.isArray(tx.tags) && tx.tags.some((t: { name: string }) => t.name === tagName)
+      );
       console.log(`Found ${txs.length} transactions for tag ${tagName}`);
       
       let totalAmount = 0, totalCredit = 0, totalDebit = 0;
@@ -613,8 +618,41 @@ export default function ReportsPage() {
     setModalSelectedTag(tag);
   };
 
+  // Filter tags based on search query
+  const filteredTags = allTags.filter(tag =>
+    tag.name && tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase())
+  );
+
+  // Function to check if a tag already exists in cashflow data
+  const isTagAlreadyAdded = (tagName: string): boolean => {
+    for (const section of cashFlowData) {
+      for (const group of section.groups) {
+        for (const item of group.items) {
+          if (item.particular === tagName && item.createdByTag) {
+            return true;
+          }
+          // Check sub-items too
+          if (item.subItems) {
+            for (const subItem of item.subItems) {
+              if (subItem.particular === tagName && subItem.createdByTag) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+    return false;
+  };
+
   const handleAddSelectedTag = async () => {
     if (!modalSelectedTag) return;
+    
+    // Check if tag is already added
+    if (isTagAlreadyAdded(modalSelectedTag.name)) {
+      alert(`Tag "${modalSelectedTag.name}" is already added to the cashflow statement.`);
+      return;
+    }
     
     setIsAddingTag(true);
     console.log('Adding tag to cashflow:', modalSelectedTag.name);
@@ -674,6 +712,12 @@ export default function ReportsPage() {
 
   const handleAddSelectedSubItemTag = async () => {
     if (!modalSelectedTag || !pendingSubItemAdd) return;
+    
+    // Check if tag is already added
+    if (isTagAlreadyAdded(modalSelectedTag.name)) {
+      alert(`Tag "${modalSelectedTag.name}" is already added to the cashflow statement.`);
+      return;
+    }
     
     setIsAddingTag(true);
     console.log('Adding tag as sub-item:', modalSelectedTag.name);
@@ -743,6 +787,7 @@ export default function ReportsPage() {
     setModalSelectedTag(null);
     setPendingAddGroupSection(null);
     setPendingAddGroup(null);
+    setTagSearchQuery(''); // Clear search when modal is closed
   };
 
   const handleSave = () => {
@@ -750,6 +795,79 @@ export default function ReportsPage() {
     localStorage.setItem('cashFlowData', JSON.stringify(cashFlowData));
     setIsEditing(false);
     // You can add a success message or notification here
+  };
+
+  const handleDownloadCSV = () => {
+    // Create CSV data
+    const csvData = [];
+    
+    // Add header
+    csvData.push(['PARTICULAR', 'AMOUNT']);
+    
+    // Add INFLOWS section
+    csvData.push([cashFlowData[0].title, totalInflow.toLocaleString()]);
+    
+    // Add inflow groups and items
+    cashFlowData[0].groups.forEach(group => {
+      const groupTotal = calculateGroupTotal(group);
+      csvData.push([`  ${group.title}`, groupTotal.toLocaleString()]);
+      
+      if (group.isExpanded) {
+        group.items.forEach(item => {
+          const itemTotal = calculateItemTotal(item);
+          csvData.push([`    ${item.particular}`, itemTotal.toLocaleString()]);
+          
+          // Add sub-items if expanded
+          if (item.isExpanded && item.subItems) {
+            item.subItems.forEach(subItem => {
+              csvData.push([`      ${subItem.particular}`, (subItem.amount || 0).toLocaleString()]);
+            });
+          }
+        });
+      }
+    });
+    
+    // Add OUTFLOWS section
+    csvData.push([cashFlowData[1].title, totalOutflow.toLocaleString()]);
+    
+    // Add outflow groups and items
+    cashFlowData[1].groups.forEach(group => {
+      const groupTotal = calculateGroupTotal(group);
+      csvData.push([`  ${group.title}`, groupTotal.toLocaleString()]);
+      
+      if (group.isExpanded) {
+        group.items.forEach(item => {
+          const itemTotal = calculateItemTotal(item);
+          csvData.push([`    ${item.particular}`, itemTotal.toLocaleString()]);
+          
+          // Add sub-items if expanded
+          if (item.isExpanded && item.subItems) {
+            item.subItems.forEach(subItem => {
+              csvData.push([`      ${subItem.particular}`, (subItem.amount || 0).toLocaleString()]);
+            });
+          }
+        });
+      }
+    });
+    
+    // Add NET CASH FLOW
+    csvData.push([cashFlowData[2].title, netFlow.toLocaleString()]);
+    
+    // Convert to CSV string
+    const csvContent = csvData.map(row => 
+      row.map(cell => `"${cell}"`).join(',')
+    ).join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `cashflow-statement-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
     return (
@@ -805,7 +923,7 @@ export default function ReportsPage() {
         {/* Cashflow Statement */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden max-h-[70vh] overflow-y-auto">
                      {/* Statement Header */}
-           <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 relative">
+           <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 relative sticky top-0 z-10">
              <div className="flex items-center justify-between">
                <h2 className="text-2xl font-bold">CASHFLOW STATEMENT</h2>
                                <div className="flex items-center gap-3">
@@ -827,13 +945,25 @@ export default function ReportsPage() {
                       </button>
                     </>
                   ) : (
-        <button
-                      onClick={handleEdit}
-                      className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2"
-        >
-                      <RiEdit2Line size={16} />
-                      EDIT
-        </button>
+                    <>
+                      <button
+                        onClick={handleDownloadCSV}
+                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2"
+                        title="Download as CSV"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        DOWNLOAD
+                      </button>
+                      <button
+                        onClick={handleEdit}
+                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2"
+                      >
+                        <RiEdit2Line size={16} />
+                        EDIT
+                      </button>
+                    </>
                   )}
       </div>
             </div>
@@ -1416,6 +1546,37 @@ export default function ReportsPage() {
                  <div className="space-y-4">
                    <p className="text-gray-600 mb-4">Choose a tag to create a new item:</p>
                    
+                   {/* Search Bar */}
+                   <div className="relative">
+                     <input
+                       type="text"
+                       placeholder="Search tags..."
+                       className="w-full border border-gray-200 px-4 py-2 pl-10 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                       value={tagSearchQuery}
+                       onChange={e => setTagSearchQuery(e.target.value)}
+                     />
+                     <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                       </svg>
+                     </div>
+                     {tagSearchQuery && (
+                       <button
+                         onClick={() => setTagSearchQuery('')}
+                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                       >
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                         </svg>
+                       </button>
+                     )}
+                   </div>
+                   {tagSearchQuery && (
+                     <div className="text-sm text-gray-600">
+                       Found {filteredTags.length} tag(s) matching &quot;{tagSearchQuery}&quot;
+                     </div>
+                   )}
+                   
                    {/* Selected Tag Display */}
                    {modalSelectedTag && (
                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -1433,32 +1594,48 @@ export default function ReportsPage() {
                    )}
                    
                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
-                     {allTags.map((tag) => (
-                       <button
-                         key={tag.id}
-                         onClick={() => handleTagSelect(tag)}
-                         className={`p-3 border rounded-lg hover:bg-gray-50 transition-colors text-left ${
-                           modalSelectedTag?.id === tag.id 
-                             ? 'border-blue-500 bg-blue-50' 
-                             : 'border-gray-200'
-                         }`}
-                       >
-                         <div className="flex items-center gap-2">
-                           <div 
-                             className="w-4 h-4 rounded-full"
-                             style={{ backgroundColor: tag.color || '#3B82F6' }}
-                           />
-                           <span className="font-medium text-gray-800">{tag.name}</span>
-                </div>
-                       </button>
-              ))}
-            </div>
+                     {filteredTags.map((tag) => {
+                       const isAlreadyAdded = isTagAlreadyAdded(tag.name);
+                       return (
+                         <button
+                           key={tag.id}
+                           onClick={() => !isAlreadyAdded && handleTagSelect(tag)}
+                           disabled={isAlreadyAdded}
+                           className={`p-3 border rounded-lg transition-colors text-left ${
+                             isAlreadyAdded
+                               ? 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60'
+                               : modalSelectedTag?.id === tag.id 
+                                 ? 'border-blue-500 bg-blue-50 hover:bg-blue-100' 
+                                 : 'border-gray-200 hover:bg-gray-50'
+                           }`}
+                         >
+                           <div className="flex items-center gap-2">
+                             <div 
+                               className="w-4 h-4 rounded-full"
+                               style={{ backgroundColor: tag.color || '#3B82F6' }}
+                             />
+                             <span className={`font-medium ${isAlreadyAdded ? 'text-gray-500' : 'text-gray-800'}`}>
+                               {tag.name}
+                             </span>
+                             {isAlreadyAdded && (
+                               <span className="text-xs text-gray-500 ml-auto">✓ Added</span>
+                             )}
+                           </div>
+                         </button>
+                       );
+                     })}
+                   </div>
                    
-                   {allTags.length === 0 && (
+                   {filteredTags.length === 0 && (
                      <div className="text-center py-8 text-gray-500">
-                       <p>No tags found. Create some tags in the Super Bank first.</p>
-        </div>
-      )}
+                       <p>
+                         {tagSearchQuery 
+                           ? `No tags found matching &quot;${tagSearchQuery}&quot;. Try a different search term.`
+                           : 'No tags found. Create some tags in the Super Bank first.'
+                         }
+                       </p>
+                     </div>
+                   )}
                  </div>
                  
                  <div className="flex gap-3 mt-6">

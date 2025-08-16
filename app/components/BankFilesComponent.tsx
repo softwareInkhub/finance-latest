@@ -109,7 +109,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
   if (!data.length) return <div>No data to display.</div>;
 
   return (
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[90%]">
+    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw]">
       {isStatement && (
         <div className="mb-4 flex items-center gap-4">
           <button
@@ -140,7 +140,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
           </button>
         </div>
       )}
-      <div className="overflow-auto" style={{ maxHeight: '70vh', minHeight: '400px' }}>
+      <div className="overflow-auto" style={{ maxHeight: 600 }}>
         <table ref={tableRef} className="border-collapse min-w-full text-xs select-none" style={{ tableLayout: 'fixed' }}>
           <tbody>
             {data.map((row, i) => {
@@ -514,7 +514,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
   };
 
   return (
-    <div className="bg-blue rounded-xl border border-blue-100 p-4 mt-4">
+    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw]">
       {/* Duplicate check field selection UI */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3">
         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -582,7 +582,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
           )}
         </div>
       </div>
-      <div className="overflow-auto" style={{ maxHeight: '70vh', minHeight: '400px' }}>
+      <div className="overflow-auto" style={{ maxHeight: '45vh', minHeight: '300px' }}>
         <table ref={tableRef} className="border-collapse min-w-full text-xs select-none" style={{ tableLayout: 'fixed' }}>
           <tbody>
             {sliceData.map((row, i) => {

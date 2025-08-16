@@ -1613,9 +1613,9 @@ function SuperBankReportModal({ isOpen, onClose, transactions, totalBanks, total
                                       key={tag.id} 
                                       className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1"
                                       style={{
-                                        backgroundColor: `${tag.color || '#6366F1'}15`,
+                                        backgroundColor: `${tag.color || '#6366F1'}40`,
                                         color: tag.color || '#6366F1',
-                                        border: `1px solid ${tag.color || '#6366F1'}`
+                                        border: `2px solid ${tag.color || '#6366F1'}`
                                       }}
                                     >
                                       {tag.name}
@@ -3207,10 +3207,11 @@ export default function SuperBankPage() {
       <div className="py-4 sm:py-6 px-2 sm:px-4">
         <div className="max-w-full mx-auto flex flex-col">
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
-          <h3 className="font-bold text-blue-700 truncate">Super Bank: All Transactions</h3> 
+          <h3 className="font-bold text-blue-700 truncate" title="View and manage all your financial transactions across multiple banks">Super Bank: All Transactions</h3> 
           <button
             className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow font-semibold text-xs whitespace-nowrap"
             onClick={() => setShowHeaderSection(true)}
+            title="Configure custom column headers for the transaction table"
           >
             Header
           </button>

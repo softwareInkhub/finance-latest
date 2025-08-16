@@ -17,6 +17,9 @@ export default function TagsPage() {
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('#60a5fa');
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchTags = async () => {
     setLoading(true);
@@ -73,6 +76,53 @@ export default function TagsPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedTags.size === 0) return;
+    if (!window.confirm(`Delete ${selectedTags.size} selected tag(s)?`)) return;
+    
+    setDeleting(true);
+    try {
+      const deletePromises = Array.from(selectedTags).map(id =>
+        fetch('/api/tags', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id }),
+        })
+      );
+      
+      await Promise.all(deletePromises);
+      setSelectedTags(new Set());
+      fetchTags();
+    } catch {
+      setError('Failed to delete some tags');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Filter tags based on search query
+  const filteredTags = tags.filter(tag =>
+    tag.name && tag.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedTags(new Set(filteredTags.map(tag => tag.id)));
+    } else {
+      setSelectedTags(new Set());
+    }
+  };
+
+  const handleSelectTag = (tagId: string, checked: boolean) => {
+    const newSelected = new Set(selectedTags);
+    if (checked) {
+      newSelected.add(tagId);
+    } else {
+      newSelected.delete(tagId);
+    }
+    setSelectedTags(newSelected);
+  };
+
   const startEdit = (tag: Tag) => {
     setEditingTag(tag);
     setEditName(tag.name);
@@ -120,6 +170,56 @@ export default function TagsPage() {
           <button type="submit" className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-5 py-2 rounded-lg shadow hover:scale-105 hover:shadow-lg transition-all font-semibold whitespace-nowrap ml-auto">Add Tag</button>
         </form>
         {error && <div className="text-red-600 mb-2">{error}</div>}
+        
+        {/* Search Bar */}
+        <div className="mb-4 bg-white/70 backdrop-blur-lg p-4 rounded-xl shadow border border-blue-100">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search tags..."
+              className="w-full border border-gray-200 px-4 py-2 pl-10 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <div className="mt-2 text-sm text-gray-600">
+              Found {filteredTags.length} tag(s) matching &quot;{searchQuery}&quot;
+            </div>
+          )}
+        </div>
+        
+        {/* Bulk Actions */}
+        {selectedTags.size > 0 && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+            <span className="text-blue-800 font-medium">
+              {selectedTags.size} tag(s) selected
+            </span>
+            <button
+              onClick={handleBulkDelete}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {deleting ? 'Deleting...' : `Delete ${selectedTags.size} tag(s)`}
+            </button>
+          </div>
+        )}
+        
         {loading ? (
           <div>Loading...</div>
         ) : (
@@ -127,14 +227,30 @@ export default function TagsPage() {
             <table className="min-w-full bg-white/70 backdrop-blur-lg rounded-xl shadow border border-gray-100 text-sm">
               <thead>
                 <tr>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={selectedTags.size === filteredTags.length && filteredTags.length > 0}
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                  </th>
                   <th className="px-4 py-2 text-left font-semibold text-gray-700">Name</th>
                   <th className="px-4 py-2 text-left font-semibold text-gray-700">Color</th>
                   <th className="px-4 py-2 text-left font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {tags.map(tag => (
+                {filteredTags.map(tag => (
                   <tr key={tag.id} className="hover:bg-blue-50/60 transition-all group">
+                    <td className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedTags.has(tag.id)}
+                        onChange={(e) => handleSelectTag(tag.id, e.target.checked)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                    </td>
                     <td className="px-4 py-2">
                       {editingTag?.id === tag.id ? (
                         <form onSubmit={handleEdit} className="flex gap-2 items-center">
