@@ -817,8 +817,8 @@ export default function ReportsPage() {
           const itemTotal = calculateItemTotal(item);
           csvData.push([`    ${item.particular}`, itemTotal.toLocaleString()]);
           
-          // Add sub-items if expanded
-          if (item.isExpanded && item.subItems) {
+          // Add sub-items (always include them in CSV)
+          if (item.subItems) {
             item.subItems.forEach(subItem => {
               csvData.push([`      ${subItem.particular}`, (subItem.amount || 0).toLocaleString()]);
             });
@@ -840,8 +840,8 @@ export default function ReportsPage() {
           const itemTotal = calculateItemTotal(item);
           csvData.push([`    ${item.particular}`, itemTotal.toLocaleString()]);
           
-          // Add sub-items if expanded
-          if (item.isExpanded && item.subItems) {
+          // Add sub-items (always include them in CSV)
+          if (item.subItems) {
             item.subItems.forEach(subItem => {
               csvData.push([`      ${subItem.particular}`, (subItem.amount || 0).toLocaleString()]);
             });
