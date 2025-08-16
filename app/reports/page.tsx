@@ -17,6 +17,8 @@ interface CashFlowItem {
     debit: number;
     balance: number;
   };
+  subItems?: CashFlowItem[]; // Support for hierarchical structure
+  isExpanded?: boolean; // Track if sub-items are expanded
 }
 
 interface TransactionData {
@@ -160,7 +162,7 @@ export default function ReportsPage() {
   const [newItemName, setNewItemName] = useState('');
   const [pendingAdd, setPendingAdd] = useState<{sectionId: string, groupId: string} | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<{sectionId: string, groupId: string, itemId?: string} | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{sectionId: string, groupId: string, itemId?: string, subItemId?: string} | null>(null);
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [pendingAddGroup, setPendingAddGroup] = useState<string | null>(null);
@@ -171,6 +173,13 @@ export default function ReportsPage() {
 
   const [modalSelectedTag, setModalSelectedTag] = useState<Tag | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
+  
+  // New state variables for sub-item operations
+  const [showSubItemOptionModal, setShowSubItemOptionModal] = useState(false);
+  const [pendingSubItemAdd, setPendingSubItemAdd] = useState<{sectionId: string, groupId: string, parentItemId: string} | null>(null);
+  const [showSubItemAddModal, setShowSubItemAddModal] = useState(false);
+  const [newSubItemName, setNewSubItemName] = useState('');
+  const [showSubItemTagsModal, setShowSubItemTagsModal] = useState(false);
 
 
 
@@ -238,14 +247,27 @@ export default function ReportsPage() {
     }
   };
 
-      // Calculate totals with safety checks
+      // Helper function to calculate item total including sub-items
+  const calculateItemTotal = (item: CashFlowItem): number => {
+    const itemAmount = item.amount || 0;
+    const subItemsTotal = item.subItems?.reduce((sum, subItem) => sum + calculateItemTotal(subItem), 0) || 0;
+    return itemAmount + subItemsTotal;
+  };
+
+  // Helper function to calculate group total including sub-items
+  const calculateGroupTotal = (group: CashFlowGroup): number => {
+    return group.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+  };
+
+  // Calculate totals with safety checks
   const totalInflow = cashFlowData[0]?.groups?.reduce((sum, group) => 
-    sum + (group?.items?.reduce((groupSum, item) => groupSum + (item?.amount || 0), 0) || 0), 0
+    sum + calculateGroupTotal(group), 0
   ) || 0;
   const totalOutflow = cashFlowData[1]?.groups?.reduce((sum, group) => 
-    sum + (group?.items?.reduce((groupSum, item) => groupSum + (item?.amount || 0), 0) || 0), 0
+    sum + calculateGroupTotal(group), 0
   ) || 0;
-  const netFlow = totalInflow - totalOutflow;
+  // Net flow = Inflows - Outflows (outflows are already negative, so we add them)
+  const netFlow = totalInflow + totalOutflow;
 
   const handleEdit = () => {
     setIsEditing(!isEditing);
@@ -274,10 +296,46 @@ export default function ReportsPage() {
     });
   };
 
+  const toggleItemExpansion = (sectionId: string, groupId: string, itemId: string) => {
+    setCashFlowData(prev => {
+      const updated = prev.map(section => {
+        if (section.id === sectionId) {
+          return {
+            ...section,
+            groups: section.groups.map(group => {
+              if (group.id === groupId) {
+                return {
+                  ...group,
+                  items: group.items.map(item => {
+                    if (item.id === itemId) {
+                      return { ...item, isExpanded: !item.isExpanded };
+                    }
+                    return item;
+                  })
+                };
+              }
+              return group;
+            })
+          };
+        }
+        return section;
+      });
+
+      // Save to localStorage
+      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const openAddModal = (sectionId: string, groupId: string) => {
     setPendingAddGroupSection(sectionId);
     setPendingAddGroup(groupId);
     setShowGroupOptionModal(true);
+  };
+
+  const openSubItemAddModal = (sectionId: string, groupId: string, parentItemId: string) => {
+    setPendingSubItemAdd({ sectionId, groupId, parentItemId });
+    setShowSubItemOptionModal(true);
   };
 
   const handleAddItem = () => {
@@ -328,8 +386,77 @@ export default function ReportsPage() {
     setNewItemName('');
   };
 
-  const openDeleteModal = (sectionId: string, groupId: string, itemId?: string) => {
-    setPendingDelete({ sectionId, groupId, itemId });
+  // Sub-item add functions
+  const handleAddSubItem = () => {
+    if (!pendingSubItemAdd || !newSubItemName.trim()) return;
+    
+    const section = cashFlowData.find(s => s.id === pendingSubItemAdd.sectionId);
+    
+    const newSubItem: CashFlowItem = {
+      id: Date.now().toString(),
+      particular: newSubItemName.trim(),
+      amount: 0,
+      type: section?.type === 'inflow' ? 'inflow' : 'outflow'
+    };
+
+    setCashFlowData(prev => {
+      const updated = prev.map(section => {
+        if (section.id === pendingSubItemAdd.sectionId) {
+          return {
+            ...section,
+            groups: section.groups.map(group => {
+              if (group.id === pendingSubItemAdd.groupId) {
+                return {
+                  ...group,
+                  items: group.items.map(item => {
+                    if (item.id === pendingSubItemAdd.parentItemId) {
+                      return {
+                        ...item,
+                        subItems: [...(item.subItems || []), newSubItem]
+                      };
+                    }
+                    return item;
+                  })
+                };
+              }
+              return group;
+            })
+          };
+        }
+        return section;
+      });
+
+      // Save to localStorage
+      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Close modal and reset
+    setShowSubItemAddModal(false);
+    setPendingSubItemAdd(null);
+    setNewSubItemName('');
+  };
+
+  const closeSubItemAddModal = () => {
+    setShowSubItemAddModal(false);
+    setPendingSubItemAdd(null);
+    setNewSubItemName('');
+  };
+
+  const openSubItemAddNameModal = () => {
+    setShowSubItemAddModal(true);
+    setNewSubItemName('');
+    setShowSubItemOptionModal(false);
+  };
+
+  const openSubItemAddTagsModal = () => {
+    setShowSubItemTagsModal(true);
+    setShowSubItemOptionModal(false);
+    fetchTags();
+  };
+
+  const openDeleteModal = (sectionId: string, groupId: string, itemId?: string, subItemId?: string) => {
+    setPendingDelete({ sectionId, groupId, itemId, subItemId });
     setShowDeleteModal(true);
   };
 
@@ -339,7 +466,29 @@ export default function ReportsPage() {
     setCashFlowData(prev => {
       const updated = prev.map(section => {
         if (section.id === pendingDelete.sectionId) {
-          if (pendingDelete.itemId) {
+          if (pendingDelete.subItemId && pendingDelete.itemId) {
+            // Delete specific sub-item
+            return {
+              ...section,
+              groups: section.groups.map(group => {
+                if (group.id === pendingDelete.groupId) {
+                  return {
+                    ...group,
+                    items: group.items.map(item => {
+                      if (item.id === pendingDelete.itemId) {
+                        return {
+                          ...item,
+                          subItems: item.subItems?.filter(subItem => subItem.id !== pendingDelete.subItemId) || []
+                        };
+                      }
+                      return item;
+                    })
+                  };
+                }
+                return group;
+              })
+            };
+          } else if (pendingDelete.itemId) {
             // Delete specific item
             return {
               ...section,
@@ -523,6 +672,72 @@ export default function ReportsPage() {
     }
   };
 
+  const handleAddSelectedSubItemTag = async () => {
+    if (!modalSelectedTag || !pendingSubItemAdd) return;
+    
+    setIsAddingTag(true);
+    console.log('Adding tag as sub-item:', modalSelectedTag.name);
+    
+    try {
+      // Fetch tag financial data
+      const tagData = await fetchTagFinancialData(modalSelectedTag.name);
+      console.log('Tag financial data:', tagData);
+      
+      // Create a new sub-item with the tag name and financial data
+      const newSubItem: CashFlowItem = {
+        id: Date.now().toString(),
+        particular: modalSelectedTag.name,
+        amount: tagData.balance, // Use the balance as the amount
+        type: pendingSubItemAdd.sectionId === '1' ? 'inflow' : 'outflow',
+        createdByTag: true,
+        tagData: tagData
+      };
+      
+      console.log('Created new sub-item:', newSubItem);
+
+      setCashFlowData(prev => {
+        const updated = prev.map(section => {
+          if (section.id === pendingSubItemAdd.sectionId) {
+            return {
+              ...section,
+              groups: section.groups.map(group => {
+                if (group.id === pendingSubItemAdd.groupId) {
+                  return {
+                    ...group,
+                    items: group.items.map(item => {
+                      if (item.id === pendingSubItemAdd.parentItemId) {
+                        return {
+                          ...item,
+                          subItems: [...(item.subItems || []), newSubItem]
+                        };
+                      }
+                      return item;
+                    })
+                  };
+                }
+                return group;
+              })
+            };
+          }
+          return section;
+        });
+
+        // Save to localStorage
+        localStorage.setItem('cashFlowData', JSON.stringify(updated));
+        return updated;
+      });
+
+      // Close modals and reset
+      setShowSubItemTagsModal(false);
+      setModalSelectedTag(null);
+      setPendingSubItemAdd(null);
+    } catch (error) {
+      console.error('Error adding sub-item tag:', error);
+    } finally {
+      setIsAddingTag(false);
+    }
+  };
+
   const closeTagsModal = () => {
     setShowTagsModal(false);
     setModalSelectedTag(null);
@@ -588,7 +803,7 @@ export default function ReportsPage() {
         )}
 
         {/* Cashflow Statement */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden max-h-[60vh] overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden max-h-[70vh] overflow-y-auto">
                      {/* Statement Header */}
            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 relative">
              <div className="flex items-center justify-between">
@@ -656,7 +871,7 @@ export default function ReportsPage() {
                   
                   {/* Inflow Groups */}
                   {cashFlowData[0]?.groups?.map((group) => {
-                    const groupTotal = group?.items?.reduce((sum, item) => sum + (item?.amount || 0), 0) || 0;
+                    const groupTotal = calculateGroupTotal(group);
                     return (
                       <React.Fragment key={group.id}>
                         {/* Group Header */}
@@ -699,45 +914,93 @@ export default function ReportsPage() {
                         
                         {/* Group Items */}
                         {group.isExpanded && group.items.map((item) => (
-                          <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
-                            <td className="py-2 px-8 text-gray-700 flex items-center justify-between">
-                              <div className="flex flex-col">
-                                <span>{item.particular}</span>
-                                {item.createdByTag && item.tagData && (
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    CR: ₹{(item.tagData.credit || 0).toLocaleString('en-IN')} | 
-                                    DR: ₹{(item.tagData.debit || 0).toLocaleString('en-IN')} | 
-                                    Bal: ₹{(item.tagData.balance || 0).toLocaleString('en-IN')}
+                          <React.Fragment key={item.id}>
+                            {/* Main Item */}
+                            <tr className="border-b border-gray-200 hover:bg-gray-50">
+                              <td className="py-2 px-8 text-gray-700 flex items-center justify-between">
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-2">
+                                    {item.subItems && item.subItems.length > 0 && (
+                                      <button
+                                        onClick={() => toggleItemExpansion(cashFlowData[0].id, group.id, item.id)}
+                                        className="text-gray-500 hover:text-gray-700"
+                                      >
+                                        {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
+                                      </button>
+                                    )}
+                                    <span>{item.particular}</span>
                                   </div>
-                                )}
-                              </div>
-                              {isEditing && (
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openAddModal(cashFlowData[0].id, group.id);
-                                    }}
-                                    className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                                    title="Add new item"
-                                  >
-                                    <RiAddLine size={12} />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openDeleteModal(cashFlowData[0].id, group.id, item.id);
-                                    }}
-                                    className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                                    title="Delete item"
-                                  >
-                                    <RiDeleteBin6Line size={12} />
-                                  </button>
+                                  {item.createdByTag && item.tagData && (
+                                    <div className="text-xs text-gray-500 mt-1">
+                                      CR: ₹{(item.tagData.credit || 0).toLocaleString('en-IN')} | 
+                                      DR: ₹{(item.tagData.debit || 0).toLocaleString('en-IN')} | 
+                                      Bal: ₹{(item.tagData.balance || 0).toLocaleString('en-IN')}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </td>
-                            <td className="py-2 px-4 text-right text-gray-700">{(item.amount || 0).toLocaleString()}</td>
-                          </tr>
+                                                                 {isEditing && (
+                                   <div className="flex items-center gap-1">
+                                     {!item.createdByTag && (
+                                       <button
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           openSubItemAddModal(cashFlowData[0].id, group.id, item.id);
+                                         }}
+                                         className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                         title="Add sub-item"
+                                       >
+                                         <RiAddLine size={12} />
+                                       </button>
+                                     )}
+                                     <button
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         openDeleteModal(cashFlowData[0].id, group.id, item.id);
+                                       }}
+                                       className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                       title="Delete item"
+                                     >
+                                       <RiDeleteBin6Line size={12} />
+                                     </button>
+                                   </div>
+                                 )}
+                              </td>
+                              <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString()}</td>
+                            </tr>
+                            
+                            {/* Sub-Items */}
+                            {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
+                              <tr key={subItem.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                <td className="py-2 px-12 text-gray-600 flex items-center justify-between">
+                                  <div className="flex flex-col">
+                                    <span className="text-sm">{subItem.particular}</span>
+                                    {subItem.createdByTag && subItem.tagData && (
+                                      <div className="text-xs text-gray-500 mt-1">
+                                        CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
+                                        DR: ₹{(subItem.tagData.debit || 0).toLocaleString('en-IN')} | 
+                                        Bal: ₹{(subItem.tagData.balance || 0).toLocaleString('en-IN')}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {isEditing && (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openDeleteModal(cashFlowData[0].id, group.id, item.id, subItem.id);
+                                        }}
+                                        className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                        title="Delete sub-item"
+                                      >
+                                        <RiDeleteBin6Line size={10} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
                         ))}
                       </React.Fragment>
                     );
@@ -764,7 +1027,7 @@ export default function ReportsPage() {
                   
                   {/* Outflow Groups */}
                   {cashFlowData[1]?.groups?.map((group) => {
-                    const groupTotal = group?.items?.reduce((sum, item) => sum + (item?.amount || 0), 0) || 0;
+                    const groupTotal = calculateGroupTotal(group);
                     return (
                       <React.Fragment key={group.id}>
                         {/* Group Header */}
@@ -807,46 +1070,94 @@ export default function ReportsPage() {
                          
                          {/* Group Items */}
                          {group.isExpanded && group.items.map((item) => (
-                           <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
-                             <td className="py-2 px-8 text-gray-700 flex items-center justify-between">
-                               <div className="flex flex-col">
-                                 <span>{item.particular}</span>
-                                                                 {item.createdByTag && item.tagData && (
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    CR: ₹{(item.tagData.credit || 0).toLocaleString('en-IN')} | 
-                                    DR: ₹{(item.tagData.debit || 0).toLocaleString('en-IN')} | 
-                                    Bal: ₹{(item.tagData.balance || 0).toLocaleString('en-IN')}
-                                  </div>
-                                )}
-                               </div>
-                               {isEditing && (
-                                 <div className="flex items-center gap-1">
-                                   <button
-                                     onClick={(e) => {
-                                       e.stopPropagation();
-                                       openAddModal(cashFlowData[1].id, group.id);
-                                     }}
-                                     className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                                     title="Add new item"
-                                   >
-                                     <RiAddLine size={12} />
-                                   </button>
-                                   <button
-                                     onClick={(e) => {
-                                       e.stopPropagation();
-                                       openDeleteModal(cashFlowData[1].id, group.id, item.id);
-                                     }}
-                                     className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                                     title="Delete item"
-                                   >
-                                     <RiDeleteBin6Line size={12} />
-                                   </button>
+                           <React.Fragment key={item.id}>
+                             {/* Main Item */}
+                             <tr className="border-b border-gray-200 hover:bg-gray-50">
+                               <td className="py-2 px-8 text-gray-700 flex items-center justify-between">
+                                 <div className="flex flex-col">
+                                   <div className="flex items-center gap-2">
+                                     {item.subItems && item.subItems.length > 0 && (
+                                       <button
+                                         onClick={() => toggleItemExpansion(cashFlowData[1].id, group.id, item.id)}
+                                         className="text-gray-500 hover:text-gray-700"
+                                       >
+                                         {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
+                                       </button>
+                                     )}
+                                     <span>{item.particular}</span>
+                                   </div>
+                                   {item.createdByTag && item.tagData && (
+                                     <div className="text-xs text-gray-500 mt-1">
+                                       CR: ₹{(item.tagData.credit || 0).toLocaleString('en-IN')} | 
+                                       DR: ₹{(item.tagData.debit || 0).toLocaleString('en-IN')} | 
+                                       Bal: ₹{(item.tagData.balance || 0).toLocaleString('en-IN')}
+                                     </div>
+                                   )}
                                  </div>
-                               )}
-                                                         </td>
-                            <td className="py-2 px-4 text-right text-gray-700">{(item.amount || 0).toLocaleString()}</td>
-                          </tr>
-                        ))}
+                                 {isEditing && (
+                                   <div className="flex items-center gap-1">
+                                     {!item.createdByTag && (
+                                       <button
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           openSubItemAddModal(cashFlowData[1].id, group.id, item.id);
+                                         }}
+                                         className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                         title="Add sub-item"
+                                       >
+                                         <RiAddLine size={12} />
+                                       </button>
+                                     )}
+                                     <button
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         openDeleteModal(cashFlowData[1].id, group.id, item.id);
+                                       }}
+                                       className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                       title="Delete item"
+                                     >
+                                       <RiDeleteBin6Line size={12} />
+                                     </button>
+                                   </div>
+                                 )}
+                               </td>
+                               <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString()}</td>
+                             </tr>
+                             
+                             {/* Sub-Items */}
+                             {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
+                               <tr key={subItem.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                 <td className="py-2 px-12 text-gray-600 flex items-center justify-between">
+                                   <div className="flex flex-col">
+                                     <span className="text-sm">{subItem.particular}</span>
+                                     {subItem.createdByTag && subItem.tagData && (
+                                       <div className="text-xs text-gray-500 mt-1">
+                                         CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
+                                         DR: ₹{(subItem.tagData.debit || 0).toLocaleString('en-IN')} | 
+                                         Bal: ₹{(subItem.tagData.balance || 0).toLocaleString('en-IN')}
+                                       </div>
+                                     )}
+                                   </div>
+                                   {isEditing && (
+                                     <div className="flex items-center gap-1">
+                                       <button
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           openDeleteModal(cashFlowData[1].id, group.id, item.id, subItem.id);
+                                         }}
+                                         className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                         title="Delete sub-item"
+                                       >
+                                         <RiDeleteBin6Line size={10} />
+                                       </button>
+                                     </div>
+                                   )}
+                                 </td>
+                                 <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString()}</td>
+                               </tr>
+                             ))}
+                           </React.Fragment>
+                         ))}
                       </React.Fragment>
                     );
                   })}
@@ -1167,6 +1478,200 @@ export default function ReportsPage() {
                      </button>
                    )}
                  </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Item Option Modal */}
+      {showSubItemOptionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Add Sub-Item</h3>
+              <button
+                onClick={() => setShowSubItemOptionModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-gray-600 mb-4">How would you like to add this sub-item?</p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={openSubItemAddNameModal}
+                  className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <RiAddLine className="text-blue-600" size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-800">Add by Name</h4>
+                      <p className="text-sm text-gray-600">Create a sub-item with a custom name</p>
+                    </div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={openSubItemAddTagsModal}
+                  className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <RiBarChartLine className="text-green-600" size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-800">Add by Tags</h4>
+                      <p className="text-sm text-gray-600">Create a sub-item using predefined tags</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSubItemOptionModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Item Add Modal */}
+      {showSubItemAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Add New Sub-Item</h3>
+              <button
+                onClick={closeSubItemAddModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sub-Item Name
+                </label>
+                <input
+                  type="text"
+                  value={newSubItemName}
+                  onChange={(e) => setNewSubItemName(e.target.value)}
+                  placeholder="Enter sub-item name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeSubItemAddModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddSubItem}
+                disabled={!newSubItemName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Add Sub-Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Item Tags Modal */}
+      {showSubItemTagsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Select a Tag for Sub-Item</h3>
+              <button
+                onClick={() => setShowSubItemTagsModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-gray-600 mb-4">Choose a tag to create a new sub-item:</p>
+              
+              {/* Selected Tag Display */}
+              {modalSelectedTag && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-6 h-6 rounded-full"
+                      style={{ backgroundColor: modalSelectedTag.color || '#3B82F6' }}
+                    />
+                    <div>
+                      <h4 className="font-semibold text-blue-800">Selected Tag: {modalSelectedTag.name}</h4>
+                      <p className="text-sm text-blue-600">Click &quot;Add Tag&quot; to add this tag as a sub-item</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
+                {allTags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    onClick={() => handleTagSelect(tag)}
+                    className={`p-3 border rounded-lg hover:bg-gray-50 transition-colors text-left ${
+                      modalSelectedTag?.id === tag.id 
+                        ? 'border-blue-500 bg-blue-50' 
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-4 h-4 rounded-full"
+                        style={{ backgroundColor: tag.color || '#3B82F6' }}
+                      />
+                      <span className="font-medium text-gray-800">{tag.name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              
+              {allTags.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No tags found. Create some tags in the Super Bank first.</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSubItemTagsModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              {modalSelectedTag && (
+                <button
+                  onClick={handleAddSelectedSubItemTag}
+                  disabled={isAddingTag}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isAddingTag ? 'Adding...' : 'Add Tag'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
