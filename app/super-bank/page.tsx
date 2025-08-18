@@ -2751,7 +2751,7 @@ export default function SuperBankPage() {
     setHeaderLoading(true);
     setHeaderError(null);
     setHeaderSuccess(null);
-    const headerArr = headerInputs.map(h => h.trim()).filter(Boolean);
+    const headerArr = headerInputs.map(h => h && h.trim()).filter(Boolean);
     if (!headerArr.length) {
       setHeaderError("Header cannot be empty");
       setHeaderLoading(false);
@@ -2803,9 +2803,13 @@ export default function SuperBankPage() {
 
   // Add this handler in SuperBankPage
   const handleCreateTag = async (name: string) => {
+    if (!name || typeof name !== 'string') {
+      console.error('handleCreateTag called with invalid name:', name);
+      return;
+    }
     const trimmed = name.trim().toLowerCase();
     // Check for duplicate (case-insensitive, trimmed)
-    const existing = allTags.find(tag => tag.name.trim().toLowerCase() === trimmed);
+    const existing = allTags.find(tag => tag.name && tag.name.trim().toLowerCase() === trimmed);
     if (existing) {
       setSelectedTagId(existing.id);
       setTimeout(() => handleAddTag(), 0);
