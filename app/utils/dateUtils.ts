@@ -145,6 +145,7 @@ export function isValidDDMMYYYY(dateStr: string): boolean {
 /**
  * Converts any date string to ISO format (YYYY-MM-DD)
  * Supports multiple input formats: dd/mm/yyyy, dd-mm-yyyy, dd/mm/yy, dd-mm-yy, yyyy-mm-dd, yyyy/mm/dd
+ * IMPORTANT: For ambiguous dates (where both day and month are <= 12), assumes DD/MM/YYYY format
  */
 export function convertToISOFormat(dateStr: string): string {
   if (!dateStr) return '';
@@ -161,8 +162,32 @@ export function convertToISOFormat(dateStr: string): string {
     
     // For DD/MM/YYYY format (common in UK/India), assume first is day, second is month
     // This handles cases like 12/03/2025 (12th March) correctly
-    const paddedDd = first.length === 1 ? '0' + first : first;
-    const paddedMm = second.length === 1 ? '0' + second : second;
+    // IMPORTANT: For ambiguous dates where both parts are <= 12, we assume DD/MM/YYYY
+    const firstNum = parseInt(first, 10);
+    const secondNum = parseInt(second, 10);
+    
+    let day, month;
+    if (firstNum <= 12 && secondNum <= 12) {
+      // Ambiguous case: both could be day or month
+      // Assume DD/MM/YYYY format for Indian/UK dates
+      day = first;
+      month = second;
+    } else if (firstNum <= 31 && secondNum <= 12) {
+      // First is day (1-31), second is month (1-12)
+      day = first;
+      month = second;
+    } else if (firstNum <= 12 && secondNum <= 31) {
+      // First is month (1-12), second is day (1-31)
+      day = second;
+      month = first;
+    } else {
+      // Default to DD/MM/YYYY for consistency
+      day = first;
+      month = second;
+    }
+    
+    const paddedDd = day.length === 1 ? '0' + day : day;
+    const paddedMm = month.length === 1 ? '0' + month : month;
     return `${fullYear}-${paddedMm}-${paddedDd}`;
   }
   
@@ -217,4 +242,40 @@ export function formatDisplayDate(isoDateStr: string): string {
   }
   
   return isoDateStr;
+}
+
+/**
+ * Fixes incorrectly formatted dates that were stored as MM/DD/YYYY instead of DD/MM/YYYY
+ * This function should be used to migrate existing data
+ */
+export function fixIncorrectDateFormat(dateStr: string): string {
+  if (!dateStr) return '';
+  
+  // Check if this looks like a date that might be incorrectly formatted
+  const match = dateStr.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (!match) return dateStr;
+  
+  const [, first, second, year] = match;
+  const firstNum = parseInt(first, 10);
+  const secondNum = parseInt(second, 10);
+  
+  // If both parts are <= 12, it's ambiguous and might be incorrectly stored
+  if (firstNum <= 12 && secondNum <= 12) {
+    // Assume it was stored as MM/DD/YYYY but should be DD/MM/YYYY
+    // So we need to swap them
+    const paddedFirst = first.length === 1 ? '0' + first : first;
+    const paddedSecond = second.length === 1 ? '0' + second : second;
+    return `${paddedSecond}/${paddedFirst}/${year}`;
+  }
+  
+  return dateStr;
+}
+
+/**
+ * Converts a date string that might be incorrectly formatted to the correct ISO format
+ * This is a combination of fixing the format and converting to ISO
+ */
+export function fixAndConvertToISO(dateStr: string): string {
+  const fixedDate = fixIncorrectDateFormat(dateStr);
+  return convertToISOFormat(fixedDate);
 }

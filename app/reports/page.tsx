@@ -174,7 +174,7 @@ export default function ReportsPage() {
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [tagSearchQuery, setTagSearchQuery] = useState('');
 
-  const [modalSelectedTag, setModalSelectedTag] = useState<Tag | null>(null);
+  const [modalSelectedTags, setModalSelectedTags] = useState<Tag[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
   
   // New state variables for sub-item operations
@@ -615,7 +615,16 @@ export default function ReportsPage() {
   };
 
   const handleTagSelect = (tag: Tag) => {
-    setModalSelectedTag(tag);
+    setModalSelectedTags(prev => {
+      const isSelected = prev.some(t => t.id === tag.id);
+      if (isSelected) {
+        // Remove tag if already selected
+        return prev.filter(t => t.id !== tag.id);
+      } else {
+        // Add tag if not selected
+        return [...prev, tag];
+      }
+    });
   };
 
   // Filter tags based on search query
@@ -645,34 +654,43 @@ export default function ReportsPage() {
     return false;
   };
 
-  const handleAddSelectedTag = async () => {
-    if (!modalSelectedTag) return;
+  const handleAddSelectedTags = async () => {
+    if (modalSelectedTags.length === 0) return;
     
-    // Check if tag is already added
-    if (isTagAlreadyAdded(modalSelectedTag.name)) {
-      alert(`Tag "${modalSelectedTag.name}" is already added to the cashflow statement.`);
+    // Check if any tags are already added
+    const alreadyAddedTags = modalSelectedTags.filter(tag => isTagAlreadyAdded(tag.name));
+    if (alreadyAddedTags.length > 0) {
+      const tagNames = alreadyAddedTags.map(tag => `"${tag.name}"`).join(', ');
+      alert(`The following tags are already added to the cashflow statement: ${tagNames}`);
       return;
     }
     
     setIsAddingTag(true);
-    console.log('Adding tag to cashflow:', modalSelectedTag.name);
+    console.log('Adding tags to cashflow:', modalSelectedTags.map(t => t.name));
     
     try {
-      // Fetch tag financial data
-      const tagData = await fetchTagFinancialData(modalSelectedTag.name);
-      console.log('Tag financial data:', tagData);
+      // Process each selected tag
+      const newItems: CashFlowItem[] = [];
       
-      // Create a new item with the tag name and financial data
-      const newItem: CashFlowItem = {
-        id: Date.now().toString(),
-        particular: modalSelectedTag.name,
-        amount: tagData.balance, // Use the balance as the amount
-        type: pendingAddGroupSection === '1' ? 'inflow' : 'outflow',
-        createdByTag: true,
-        tagData: tagData
-      };
+      for (const tag of modalSelectedTags) {
+        // Fetch tag financial data
+        const tagData = await fetchTagFinancialData(tag.name);
+        console.log('Tag financial data for', tag.name, ':', tagData);
+        
+        // Create a new item with the tag name and financial data
+        const newItem: CashFlowItem = {
+          id: Date.now().toString() + '-' + tag.id,
+          particular: tag.name,
+          amount: tagData.balance, // Use the balance as the amount
+          type: pendingAddGroupSection === '1' ? 'inflow' : 'outflow',
+          createdByTag: true,
+          tagData: tagData
+        };
+        
+        newItems.push(newItem);
+      }
       
-      console.log('Created new item:', newItem);
+      console.log('Created new items:', newItems);
 
       setCashFlowData(prev => {
         const updated = prev.map(section => {
@@ -683,7 +701,7 @@ export default function ReportsPage() {
                 if (group.id === pendingAddGroup) {
                   return {
                     ...group,
-                    items: [...group.items, newItem]
+                    items: [...group.items, ...newItems]
                   };
                 }
                 return group;
@@ -700,44 +718,53 @@ export default function ReportsPage() {
 
       // Close modals and reset
       setShowTagsModal(false);
-      setModalSelectedTag(null);
+      setModalSelectedTags([]);
       setPendingAddGroupSection(null);
       setPendingAddGroup(null);
     } catch (error) {
-      console.error('Error adding tag:', error);
+      console.error('Error adding tags:', error);
     } finally {
       setIsAddingTag(false);
     }
   };
 
-  const handleAddSelectedSubItemTag = async () => {
-    if (!modalSelectedTag || !pendingSubItemAdd) return;
+  const handleAddSelectedSubItemTags = async () => {
+    if (modalSelectedTags.length === 0 || !pendingSubItemAdd) return;
     
-    // Check if tag is already added
-    if (isTagAlreadyAdded(modalSelectedTag.name)) {
-      alert(`Tag "${modalSelectedTag.name}" is already added to the cashflow statement.`);
+    // Check if any tags are already added
+    const alreadyAddedTags = modalSelectedTags.filter(tag => isTagAlreadyAdded(tag.name));
+    if (alreadyAddedTags.length > 0) {
+      const tagNames = alreadyAddedTags.map(tag => `"${tag.name}"`).join(', ');
+      alert(`The following tags are already added to the cashflow statement: ${tagNames}`);
       return;
     }
     
     setIsAddingTag(true);
-    console.log('Adding tag as sub-item:', modalSelectedTag.name);
+    console.log('Adding tags as sub-items:', modalSelectedTags.map(t => t.name));
     
     try {
-      // Fetch tag financial data
-      const tagData = await fetchTagFinancialData(modalSelectedTag.name);
-      console.log('Tag financial data:', tagData);
+      // Process each selected tag
+      const newSubItems: CashFlowItem[] = [];
       
-      // Create a new sub-item with the tag name and financial data
-      const newSubItem: CashFlowItem = {
-        id: Date.now().toString(),
-        particular: modalSelectedTag.name,
-        amount: tagData.balance, // Use the balance as the amount
-        type: pendingSubItemAdd.sectionId === '1' ? 'inflow' : 'outflow',
-        createdByTag: true,
-        tagData: tagData
-      };
+      for (const tag of modalSelectedTags) {
+        // Fetch tag financial data
+        const tagData = await fetchTagFinancialData(tag.name);
+        console.log('Tag financial data for', tag.name, ':', tagData);
+        
+        // Create a new sub-item with the tag name and financial data
+        const newSubItem: CashFlowItem = {
+          id: Date.now().toString() + '-' + tag.id,
+          particular: tag.name,
+          amount: tagData.balance, // Use the balance as the amount
+          type: pendingSubItemAdd.sectionId === '1' ? 'inflow' : 'outflow',
+          createdByTag: true,
+          tagData: tagData
+        };
+        
+        newSubItems.push(newSubItem);
+      }
       
-      console.log('Created new sub-item:', newSubItem);
+      console.log('Created new sub-items:', newSubItems);
 
       setCashFlowData(prev => {
         const updated = prev.map(section => {
@@ -752,7 +779,7 @@ export default function ReportsPage() {
                       if (item.id === pendingSubItemAdd.parentItemId) {
                         return {
                           ...item,
-                          subItems: [...(item.subItems || []), newSubItem]
+                          subItems: [...(item.subItems || []), ...newSubItems]
                         };
                       }
                       return item;
@@ -773,10 +800,10 @@ export default function ReportsPage() {
 
       // Close modals and reset
       setShowSubItemTagsModal(false);
-      setModalSelectedTag(null);
+      setModalSelectedTags([]);
       setPendingSubItemAdd(null);
     } catch (error) {
-      console.error('Error adding sub-item tag:', error);
+      console.error('Error adding sub-item tags:', error);
     } finally {
       setIsAddingTag(false);
     }
@@ -784,7 +811,7 @@ export default function ReportsPage() {
 
   const closeTagsModal = () => {
     setShowTagsModal(false);
-    setModalSelectedTag(null);
+    setModalSelectedTags([]);
     setPendingAddGroupSection(null);
     setPendingAddGroup(null);
     setTagSearchQuery(''); // Clear search when modal is closed
@@ -995,7 +1022,7 @@ export default function ReportsPage() {
                        )}
                      </td>
                      <td className="py-3 px-4 text-right font-bold text-blue-700 text-lg bg-blue-50">
-                       {totalInflow.toLocaleString()}
+                       {totalInflow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                      </td>
                    </tr>
                   
@@ -1038,7 +1065,7 @@ export default function ReportsPage() {
                              )}
                            </td>
                           <td className="py-2 px-4 text-right font-semibold text-gray-800">
-                            {groupTotal.toLocaleString()}
+                            {groupTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
                         
@@ -1095,7 +1122,7 @@ export default function ReportsPage() {
                                    </div>
                                  )}
                               </td>
-                              <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString()}</td>
+                              <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                             </tr>
                             
                             {/* Sub-Items */}
@@ -1127,7 +1154,7 @@ export default function ReportsPage() {
                                     </div>
                                   )}
                                 </td>
-                                <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString()}</td>
+                                <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                               </tr>
                             ))}
                           </React.Fragment>
@@ -1151,7 +1178,7 @@ export default function ReportsPage() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-red-700 text-lg bg-red-50">
-                      {totalOutflow.toLocaleString()}
+                      {totalOutflow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                   
@@ -1165,7 +1192,7 @@ export default function ReportsPage() {
                           className="border-b border-gray-300 hover:bg-gray-50 cursor-pointer"
                           onClick={() => toggleGroup(cashFlowData[1].id, group.id)}
                         >
-                                                     <td className="py-2 px-4 font-semibold text-gray-800 flex items-center gap-2">
+                                                   <td className="py-2 px-4 font-semibold text-gray-800 flex items-center gap-2">
                              {group.isExpanded ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
                              {group.title}
                              {isEditing && (
@@ -1193,8 +1220,8 @@ export default function ReportsPage() {
           </div>
                              )}
                            </td>
-                                                     <td className="py-2 px-4 text-right font-semibold text-gray-800">
-                             {groupTotal.toLocaleString()}
+                                                   <td className="py-2 px-4 text-right font-semibold text-gray-800">
+                             {groupTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                            </td>
                          </tr>
                          
@@ -1251,7 +1278,7 @@ export default function ReportsPage() {
                                    </div>
                                  )}
                                </td>
-                               <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString()}</td>
+                               <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                              </tr>
                              
                              {/* Sub-Items */}
@@ -1283,7 +1310,7 @@ export default function ReportsPage() {
                                      </div>
                                    )}
                                  </td>
-                                 <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString()}</td>
+                                 <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                                </tr>
                              ))}
                            </React.Fragment>
@@ -1298,7 +1325,7 @@ export default function ReportsPage() {
                        {cashFlowData[2].title}
                      </td>
                      <td className="py-3 px-4 text-right font-bold text-green-700 text-lg bg-green-50">
-                       {(netFlow || 0).toLocaleString()}
+                       {(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                      </td>
                    </tr>
                 </tbody>
@@ -1309,16 +1336,16 @@ export default function ReportsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <h3 className="text-blue-700 font-semibold mb-2">Total Inflow</h3>
-                                    <p className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString()}</p>
+                                    <p className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
           </div>
               <div className="bg-red-50 rounded-lg p-4 border border-red-200">
                 <h3 className="text-red-700 font-semibold mb-2">Total Outflow</h3>
-                                    <p className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString()}</p>
+                                    <p className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="bg-green-50 rounded-lg p-4 border border-green-200">
                 <h3 className="text-green-700 font-semibold mb-2">Net Cash Flow</h3>
                 <p className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                  ₹{(netFlow || 0).toLocaleString()}
+                  ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </p>
               </div>
           </div>
@@ -1532,7 +1559,7 @@ export default function ReportsPage() {
            {/* Tags Modal */}
            {showTagsModal && (
              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden">
+               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
                  <div className="flex items-center justify-between mb-4">
                    <h3 className="text-lg font-semibold text-gray-800">Select a Tag</h3>
                    <button
@@ -1543,7 +1570,7 @@ export default function ReportsPage() {
                    </button>
           </div>
 
-                 <div className="space-y-4">
+                 <div className="space-y-4 flex-1 overflow-y-auto">
                    <p className="text-gray-600 mb-4">Choose a tag to create a new item:</p>
                    
                    {/* Search Bar */}
@@ -1577,20 +1604,35 @@ export default function ReportsPage() {
                      </div>
                    )}
                    
-                   {/* Selected Tag Display */}
-                   {modalSelectedTag && (
+                   {/* Selected Tags Display */}
+                   {modalSelectedTags.length > 0 && (
                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                       <div className="flex items-center gap-3">
-                         <div 
-                           className="w-6 h-6 rounded-full"
-                           style={{ backgroundColor: modalSelectedTag.color || '#3B82F6' }}
-                    />
-                    <div>
-                           <h4 className="font-semibold text-blue-800">Selected Tag: {modalSelectedTag.name}</h4>
-                           <p className="text-sm text-blue-600">Click &quot;Add Tag&quot; to add this tag to your cashflow statement</p>
-                    </div>
-                  </div>
-                  </div>
+                       <div className="space-y-3">
+                         <h4 className="font-semibold text-blue-800">
+                           Selected Tags ({modalSelectedTags.length}):
+                         </h4>
+                         <div className="flex flex-wrap gap-2">
+                           {modalSelectedTags.map((tag) => (
+                             <div key={tag.id} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-blue-200">
+                               <div 
+                                 className="w-4 h-4 rounded-full"
+                                 style={{ backgroundColor: tag.color || '#3B82F6' }}
+                               />
+                               <span className="text-sm font-medium text-blue-800">{tag.name}</span>
+                               <button
+                                 onClick={() => handleTagSelect(tag)}
+                                 className="text-red-500 hover:text-red-700 text-sm font-bold"
+                               >
+                                 ×
+                               </button>
+                             </div>
+                           ))}
+                         </div>
+                         <p className="text-sm text-blue-600">
+                           Click &quot;Add Tags&quot; to add these tags to your cashflow statement
+                         </p>
+                       </div>
+                     </div>
                    )}
                    
                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
@@ -1604,7 +1646,7 @@ export default function ReportsPage() {
                            className={`p-3 border rounded-lg transition-colors text-left ${
                              isAlreadyAdded
                                ? 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60'
-                               : modalSelectedTag?.id === tag.id 
+                               : modalSelectedTags.some(t => t.id === tag.id)
                                  ? 'border-blue-500 bg-blue-50 hover:bg-blue-100' 
                                  : 'border-gray-200 hover:bg-gray-50'
                            }`}
@@ -1638,23 +1680,21 @@ export default function ReportsPage() {
                    )}
                  </div>
                  
-                 <div className="flex gap-3 mt-6">
-                   <button
-                     onClick={closeTagsModal}
-                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                   >
-                     Cancel
-                   </button>
-                   {modalSelectedTag && (
-                     <button
-                       onClick={handleAddSelectedTag}
-                       disabled={isAddingTag}
-                       className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                     >
-                       {isAddingTag ? 'Adding...' : 'Add Tag'}
-                     </button>
-                   )}
-                 </div>
+                                   <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={closeTagsModal}
+                      className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      CANCEL
+                    </button>
+                    <button
+                      onClick={handleAddSelectedTags}
+                      disabled={isAddingTag || modalSelectedTags.length === 0}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+                    >
+                      {isAddingTag ? 'Adding...' : 'SAVE'}
+                    </button>
+                  </div>
           </div>
         </div>
       )}
@@ -1770,35 +1810,53 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Sub-Item Tags Modal */}
-      {showSubItemTagsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-hidden">
+             {/* Sub-Item Tags Modal */}
+       {showSubItemTagsModal && (
+         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-800">Select a Tag for Sub-Item</h3>
               <button
-                onClick={() => setShowSubItemTagsModal(false)}
+                onClick={() => {
+                  setShowSubItemTagsModal(false);
+                  setModalSelectedTags([]);
+                }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <RiCloseLine size={20} />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <p className="text-gray-600 mb-4">Choose a tag to create a new sub-item:</p>
+                         <div className="space-y-4 flex-1 overflow-y-auto">
+               <p className="text-gray-600 mb-4">Choose a tag to create a new sub-item:</p>
               
-              {/* Selected Tag Display */}
-              {modalSelectedTag && (
+              {/* Selected Tags Display */}
+              {modalSelectedTags.length > 0 && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-6 h-6 rounded-full"
-                      style={{ backgroundColor: modalSelectedTag.color || '#3B82F6' }}
-                    />
-                    <div>
-                      <h4 className="font-semibold text-blue-800">Selected Tag: {modalSelectedTag.name}</h4>
-                      <p className="text-sm text-blue-600">Click &quot;Add Tag&quot; to add this tag as a sub-item</p>
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-blue-800">
+                      Selected Tags ({modalSelectedTags.length}):
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {modalSelectedTags.map((tag) => (
+                        <div key={tag.id} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-blue-200">
+                          <div 
+                            className="w-4 h-4 rounded-full"
+                            style={{ backgroundColor: tag.color || '#3B82F6' }}
+                          />
+                          <span className="text-sm font-medium text-blue-800">{tag.name}</span>
+                          <button
+                            onClick={() => handleTagSelect(tag)}
+                            className="text-red-500 hover:text-red-700 text-sm font-bold"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
+                    <p className="text-sm text-blue-600">
+                      Click &quot;Add Tags&quot; to add these tags as sub-items
+                    </p>
                   </div>
                 </div>
               )}
@@ -1809,7 +1867,7 @@ export default function ReportsPage() {
                     key={tag.id}
                     onClick={() => handleTagSelect(tag)}
                     className={`p-3 border rounded-lg hover:bg-gray-50 transition-colors text-left ${
-                      modalSelectedTag?.id === tag.id 
+                      modalSelectedTags.some(t => t.id === tag.id)
                         ? 'border-blue-500 bg-blue-50' 
                         : 'border-gray-200'
                     }`}
@@ -1832,23 +1890,24 @@ export default function ReportsPage() {
               )}
             </div>
             
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowSubItemTagsModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              {modalSelectedTag && (
-                <button
-                  onClick={handleAddSelectedSubItemTag}
-                  disabled={isAddingTag}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                         <div className="flex gap-3 mt-6">
+               <button
+                 onClick={() => {
+                   setShowSubItemTagsModal(false);
+                   setModalSelectedTags([]);
+                 }}
+                 className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+               >
+                 Cancel
+               </button>
+                               <button
+                  onClick={handleAddSelectedSubItemTags}
+                  disabled={isAddingTag || modalSelectedTags.length === 0}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
                 >
-                  {isAddingTag ? 'Adding...' : 'Add Tag'}
+                  {isAddingTag ? 'Adding...' : 'SAVE'}
                 </button>
-              )}
-            </div>
+             </div>
           </div>
         </div>
       )}

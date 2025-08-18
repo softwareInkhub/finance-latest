@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { RiPriceTag3Line } from 'react-icons/ri';
 import { Transaction, TransactionRow, Tag } from '../types/transaction';
-import { formatDisplayDate } from '../utils/dateUtils';
+import { formatDisplayDate, fixAndConvertToISO } from '../utils/dateUtils';
 
 interface BankMapping {
   id: string;
@@ -473,7 +473,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                         ) : sh.toLowerCase() === 'date' ? (
                           (() => {
                             const val = row[sh];
-                            if (typeof val === 'string') return formatDisplayDate(val);
+                            if (typeof val === 'string') {
+                              // Fix any incorrectly formatted dates and then display them
+                              const fixedDate = fixAndConvertToISO(val);
+                              return formatDisplayDate(fixedDate);
+                            }
                             return val !== undefined && val !== null ? String(val) : '';
                           })()
                       ) : getValueForColumn && tx ? (
