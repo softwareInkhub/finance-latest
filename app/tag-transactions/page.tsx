@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { formatDateForCSV } from '../utils/dateUtils';
 
 interface Tag {
   id: string;
@@ -178,7 +179,7 @@ export default function TagTransactionsPage() {
                     const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
                     const description = (tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A') as string;
                     const reference = (tx['Reference No.'] || tx['Reference'] || tx['Cheque No.'] || 'N/A') as string;
-                    const date = (tx.Date || tx['Transaction Date'] || 'N/A') as string;
+                    const date = formatDateForCSV(String(tx.Date || tx['Transaction Date'] || 'N/A'));
                     const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
                     const accountName = (tx.accountName || tx.accountHolderName || 'N/A') as string;
                     const accountNumber = (tx.accountNumber || 'N/A') as string;

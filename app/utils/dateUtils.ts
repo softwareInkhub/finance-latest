@@ -279,3 +279,26 @@ export function fixAndConvertToISO(dateStr: string): string {
   const fixedDate = fixIncorrectDateFormat(dateStr);
   return convertToISOFormat(fixedDate);
 }
+
+/**
+ * Formats a date string for CSV export in DD/MM/YYYY format
+ * This function ensures dates are consistently formatted as DD/MM/YYYY for CSV downloads
+ */
+export function formatDateForCSV(dateStr: string): string {
+  if (!dateStr) return '';
+  
+  // First try to convert to ISO format, then format as DD/MM/YYYY
+  const isoDate = fixAndConvertToISO(dateStr);
+  if (isoDate) {
+    const date = new Date(isoDate);
+    if (!isNaN(date.getTime())) {
+      const dd = String(date.getDate()).padStart(2, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const yyyy = date.getFullYear();
+      return `${dd}/${mm}/${yyyy}`;
+    }
+  }
+  
+  // Fallback to normalize function
+  return normalizeDateToDDMMYYYY(dateStr);
+}
