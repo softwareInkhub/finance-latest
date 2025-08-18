@@ -1302,6 +1302,27 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
     setSaveError(null);
     
     try {
+      // Ensure selectedFields is populated with all columns if it's empty
+      let fieldsToUse = selectedFields;
+      if (selectedFields.length === 0 && previewData.length > 0) {
+        console.log('selectedFields is empty, using all columns');
+        fieldsToUse = previewData[0].map((header, idx) => `${header}-${idx}`);
+        setSelectedFields(fieldsToUse);
+      }
+      
+      console.log('Fields to use for duplicate check:', fieldsToUse);
+      console.log('Preview data length:', previewData.length);
+      console.log('Preview data headers:', previewData[0]);
+      
+      // Ensure we have data to check
+      if (previewData.length <= 1) {
+        throw new Error('No data to check for duplicates');
+      }
+      
+      if (fieldsToUse.length === 0) {
+        throw new Error('No fields selected for duplicate checking');
+      }
+      
       const userId = localStorage.getItem('userId') || '';
       const res = await fetch(`/api/transactions?accountId=${file.accountId}&userId=${userId}&bankName=${encodeURIComponent(file.bankName || '')}`);
       const existing = await res.json();
@@ -1313,11 +1334,20 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
       console.log('Found existing transactions:', existing.length);
       console.log('Sample existing transaction:', existing[0]);
       
-      const uniqueFields = selectedFields.map(f => f.split('-')[0]);
-      console.log('Selected fields (raw):', selectedFields);
+      const uniqueFields = fieldsToUse.map(f => f.split('-')[0]);
+      console.log('Selected fields (raw):', fieldsToUse);
       console.log('Checking against fields:', uniqueFields);
       console.log('Available fields in existing data:', existing.length > 0 ? Object.keys(existing[0]) : []);
       console.log('Preview data headers:', previewData[0]);
+      
+      // Debug: Show sample data from both sources
+      if (existing.length > 0 && previewData.length > 1) {
+        console.log('=== DEBUG: Sample Data Comparison ===');
+        console.log('Sample existing transaction:', existing[0]);
+        console.log('Sample new transaction:', previewData[1]);
+        console.log('Selected fields to check:', uniqueFields);
+        console.log('=====================================');
+      }
       
       // Check for duplicates within the current slice data first
       const currentDataKeys = new Set<string>();
@@ -1378,8 +1408,25 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
                 fieldMapping[field] = partialMatch;
                 console.log(`Field "${field}" mapped to "${partialMatch}" (partial match)`);
               } else {
-                fieldMapping[field] = field; // Keep original if no match found
-                console.log(`Field "${field}" not found in database, keeping original`);
+                // Try common field name variations
+                const commonVariations: { [key: string]: string[] } = {
+                  'Date': ['Transaction Date', 'Txn Date', 'Date'],
+                  'Description': ['Narration', 'Transaction Description', 'Particulars', 'Description'],
+                  'Amount': ['Transaction Amount', 'Amount', 'Txn Amount'],
+                  'Balance': ['Running Balance', 'Balance', 'Closing Balance'],
+                  'Reference': ['Reference No.', 'Chq / Ref No.', 'Cheque No.', 'Ref No.'],
+                  'Time': ['Transaction Time', 'Time', 'Txn Time']
+                };
+                
+                const variations = commonVariations[field] || [];
+                const variationMatch = variations.find(v => existingFields.includes(v));
+                if (variationMatch) {
+                  fieldMapping[field] = variationMatch;
+                  console.log(`Field "${field}" mapped to "${variationMatch}" (common variation)`);
+                } else {
+                  fieldMapping[field] = field; // Keep original if no match found
+                  console.log(`Field "${field}" not found in database, keeping original`);
+                }
               }
             }
           }
@@ -1494,67 +1541,144 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
         fieldsMapped: Object.keys(fieldMapping)
       });
       
-      // If we found very few duplicates, use the alternative approach as primary
-      if (allDupRows.size < 5 && existing.length > 0) {
-        console.log('Using alternative duplicate check with Date + Description fields...');
+      // Enhanced duplicate detection with better field mapping
+      console.log('Final duplicate check results:', {
+        totalRows: previewData.length - 1,
+        internalDuplicates: currentDataDups.size,
+        databaseDuplicates: dbDupRows.size,
+        totalDuplicates: allDupRows.size,
+        fieldsChecked: uniqueFields,
+        fieldsMapped: Object.keys(fieldMapping),
+        existingTransactionsCount: existing.length
+      });
+
+      // If we found very few duplicates, try enhanced field mapping
+      if (allDupRows.size < 10 && existing.length > 0) {
+        console.log('Trying enhanced duplicate detection with better field mapping...');
         
-        // Use Date and Description as the primary duplicate check fields
-        const primaryFields = ['Date', 'Description'];
-        const primaryKeys = new Set(
-          existing.map((tx: Record<string, unknown>) => primaryFields.map(f => {
-            const dbField = fieldMapping[f] || f;
-            let value = (tx[dbField] || '').toString().trim().toLowerCase();
-            if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
-              value = value.replace(/,/g, '');
-            }
-            return value;
-          }).join('|'))
-        );
+        // Try multiple field combinations for better duplicate detection
+        const enhancedFieldCombinations = [
+          ['Date', 'Description', 'Amount'], // Most common combination
+          ['Date', 'Description'], // Fallback
+          ['Date', 'Amount'], // Alternative
+          uniqueFields // Original selected fields
+        ];
         
-        const primaryDups = new Set<number>();
-        const primaryDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
+        let bestResult = { duplicates: new Set<number>(), info: [] as Array<{ row: number; key: string; fields: string; type: string }>, fields: [] as string[] };
         
-        previewData.slice(1).forEach((row, i) => {
-          const rowObj: Record<string, string> = {};
-          previewData[0].forEach((header, j) => { rowObj[header] = row[j]; });
-          const key = primaryFields.map(f => {
-            let value = (rowObj[f] || '').toString().trim().toLowerCase();
-            if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
-              value = value.replace(/,/g, '');
-            }
-            return value;
-          }).join('|');
+        for (const fieldCombo of enhancedFieldCombinations) {
+          console.log(`Trying field combination: ${fieldCombo.join(', ')}`);
           
-          if (primaryKeys.has(key)) {
-            primaryDups.add(i + 1);
-            primaryDupInfo.push({ 
-              row: i + 2, 
-              key,
-              fields: primaryFields.map(f => `${f}: ${rowObj[f]}`).join(', '),
-              type: 'database'
-            });
-            console.log(`Row ${i + 1} is a duplicate with primary fields (Date + Description)`);
-          }
-        });
-        
-        // Use the primary results instead of the original results
-        const allDupRows = new Set([...currentDataDups, ...primaryDups]);
-        const allDupInfo = [...currentDataDupInfo, ...primaryDupInfo];
-        
-        setDuplicateRows(allDupRows);
-        setDuplicateInfo(allDupInfo);
-        setDuplicateChecked(true);
-        
-        // Auto-select all duplicate rows
-        setSelectedRows(prev => {
-          const newSelected = new Set(prev);
-          allDupRows.forEach(rowIndex => {
-            newSelected.add(rowIndex);
+          // Create enhanced field mapping for this combination
+          const enhancedMapping: { [key: string]: string } = {};
+          fieldCombo.forEach(field => {
+            if (existing.length > 0) {
+              const existingFields = Object.keys(existing[0]);
+              // Try multiple matching strategies
+              let mappedField = field;
+              
+              // 1. Exact match
+              if (existingFields.includes(field)) {
+                mappedField = field;
+              }
+              // 2. Case-insensitive match
+              else {
+                const lowerField = field.toLowerCase();
+                const matchedField = existingFields.find(ef => ef.toLowerCase() === lowerField);
+                if (matchedField) {
+                  mappedField = matchedField;
+                }
+                // 3. Partial match
+                else {
+                  const partialMatch = existingFields.find(ef => 
+                    ef.toLowerCase().includes(lowerField) || lowerField.includes(ef.toLowerCase())
+                  );
+                  if (partialMatch) {
+                    mappedField = partialMatch;
+                  }
+                }
+              }
+              enhancedMapping[field] = mappedField;
+            }
           });
-          return newSelected;
-        });
+          
+          console.log('Enhanced field mapping:', enhancedMapping);
+          
+          // Create keys set for this combination
+          const comboKeys = new Set(
+            existing.map((tx: Record<string, unknown>) => fieldCombo.map(f => {
+              const dbField = enhancedMapping[f] || f;
+              let value = (tx[dbField] || '').toString().trim().toLowerCase();
+              if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+                value = value.replace(/,/g, '');
+              }
+              return value;
+            }).join('|'))
+          );
+          
+          // Check for duplicates with this combination
+          const comboDups = new Set<number>();
+          const comboDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
+          
+          previewData.slice(1).forEach((row, i) => {
+            const rowObj: Record<string, string> = {};
+            previewData[0].forEach((header, j) => { rowObj[header] = row[j]; });
+            const key = fieldCombo.map(f => {
+              let value = (rowObj[f] || '').toString().trim().toLowerCase();
+              if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+                value = value.replace(/,/g, '');
+              }
+              return value;
+            }).join('|');
+            
+            if (comboKeys.has(key)) {
+              comboDups.add(i + 1);
+              comboDupInfo.push({ 
+                row: i + 2, 
+                key,
+                fields: fieldCombo.map(f => `${f}: ${rowObj[f]}`).join(', '),
+                type: 'enhanced'
+              });
+            }
+          });
+          
+          // Update best result if this combination found more duplicates
+          if (comboDups.size > bestResult.duplicates.size) {
+            bestResult = {
+              duplicates: new Set([...currentDataDups, ...comboDups]),
+              info: [...currentDataDupInfo, ...comboDupInfo],
+              fields: fieldCombo
+            };
+            console.log(`Better result found with ${fieldCombo.join(', ')}: ${comboDups.size} duplicates`);
+          }
+        }
         
-        console.log(`Primary check found ${primaryDups.size} duplicates using Date + Description only`);
+        // Use the best result found
+        if (bestResult.duplicates.size > allDupRows.size) {
+          setDuplicateRows(bestResult.duplicates);
+          setDuplicateInfo(bestResult.info);
+          setDuplicateChecked(true);
+          
+          // Auto-select all duplicate rows
+          setSelectedRows(prev => {
+            const newSelected = new Set(prev);
+            bestResult.duplicates.forEach(rowIndex => {
+              newSelected.add(rowIndex);
+            });
+            return newSelected;
+          });
+          
+          console.log(`Enhanced check found ${bestResult.duplicates.size} duplicates using fields: ${bestResult.fields.join(', ')}`);
+        }
+        
+        // If still very few duplicates found, show a warning
+        if (bestResult.duplicates.size < 50 && existing.length > 100) {
+          console.warn('⚠️ WARNING: Very few duplicates detected despite large existing dataset. This might indicate:');
+          console.warn('1. Field mapping issues between uploaded file and database');
+          console.warn('2. Different date formats or field names');
+          console.warn('3. Data structure differences between banks');
+          console.warn('Consider checking the field mapping and data formats.');
+        }
       }
       
     } catch (err) {
@@ -1581,6 +1705,105 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
       }
       return newSelected;
     });
+  };
+
+  // Manual duplicate check with specific fields
+  const handleManualDuplicateCheck = async (manualFields: string[]) => {
+    console.log('Manual duplicate check with fields:', manualFields);
+    setCheckingDuplicates(true);
+    setDuplicateRows(new Set());
+    setDuplicateInfo([]);
+    setDuplicateChecked(false);
+    setSaveError(null);
+    
+    try {
+      const userId = localStorage.getItem('userId') || '';
+      const res = await fetch(`/api/transactions?accountId=${file.accountId}&userId=${userId}&bankName=${encodeURIComponent(file.bankName || '')}`);
+      const existing = await res.json();
+      
+      if (!Array.isArray(existing)) {
+        throw new Error('Failed to fetch existing transactions');
+      }
+      
+      // Create manual field mapping
+      const manualMapping: { [key: string]: string } = {};
+      if (existing.length > 0) {
+        const existingFields = Object.keys(existing[0]);
+        manualFields.forEach(field => {
+          // Try to find the best match
+          let mappedField = field;
+          if (existingFields.includes(field)) {
+            mappedField = field;
+          } else {
+            const lowerField = field.toLowerCase();
+            const matchedField = existingFields.find(ef => ef.toLowerCase() === lowerField);
+            if (matchedField) {
+              mappedField = matchedField;
+            }
+          }
+          manualMapping[field] = mappedField;
+        });
+      }
+      
+      // Create keys set
+      const manualKeys = new Set(
+        existing.map((tx: Record<string, unknown>) => manualFields.map(f => {
+          const dbField = manualMapping[f] || f;
+          let value = (tx[dbField] || '').toString().trim().toLowerCase();
+          if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+            value = value.replace(/,/g, '');
+          }
+          return value;
+        }).join('|'))
+      );
+      
+      // Check for duplicates
+      const manualDups = new Set<number>();
+      const manualDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
+      
+      previewData.slice(1).forEach((row, i) => {
+        const rowObj: Record<string, string> = {};
+        previewData[0].forEach((header, j) => { rowObj[header] = row[j]; });
+        const key = manualFields.map(f => {
+          let value = (rowObj[f] || '').toString().trim().toLowerCase();
+          if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
+            value = value.replace(/,/g, '');
+          }
+          return value;
+        }).join('|');
+        
+        if (manualKeys.has(key)) {
+          manualDups.add(i + 1);
+          manualDupInfo.push({ 
+            row: i + 2, 
+            key,
+            fields: manualFields.map(f => `${f}: ${rowObj[f]}`).join(', '),
+            type: 'manual'
+          });
+        }
+      });
+      
+      setDuplicateRows(manualDups);
+      setDuplicateInfo(manualDupInfo);
+      setDuplicateChecked(true);
+      
+      // Auto-select all duplicate rows
+      setSelectedRows(prev => {
+        const newSelected = new Set(prev);
+        manualDups.forEach(rowIndex => {
+          newSelected.add(rowIndex);
+        });
+        return newSelected;
+      });
+      
+      console.log(`Manual check found ${manualDups.size} duplicates using fields: ${manualFields.join(', ')}`);
+      
+    } catch (err) {
+      console.error('Error in manual duplicate check:', err);
+      setSaveError(err instanceof Error ? err.message : 'Failed to check for duplicates');
+    } finally {
+      setCheckingDuplicates(false);
+    }
   };
 
 
@@ -1756,6 +1979,26 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
                 </>
               )}
             </button>
+            
+            {/* Manual duplicate check buttons for debugging */}
+            <div className="flex gap-1">
+              <button
+                className="flex items-center gap-1 px-2 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => handleManualDuplicateCheck(['Date', 'Description'])}
+                disabled={checkingDuplicates || previewData.length === 0}
+                title="Manual check with Date + Description only"
+              >
+                Date+Desc
+              </button>
+              <button
+                className="flex items-center gap-1 px-2 py-1.5 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded hover:from-indigo-600 hover:to-indigo-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => handleManualDuplicateCheck(['Date', 'Description', 'Amount'])}
+                disabled={checkingDuplicates || previewData.length === 0}
+                title="Manual check with Date + Description + Amount"
+              >
+                Date+Desc+Amt
+              </button>
+            </div>
             
             {duplicateRows.size > 0 && (
               <button

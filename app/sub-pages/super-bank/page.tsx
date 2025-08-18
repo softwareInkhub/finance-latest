@@ -11,6 +11,7 @@ import TagFilterPills from '../../components/TagFilterPills';
 import TransactionTable from '../../components/TransactionTable';
 import { Transaction, TransactionRow, Tag } from '../../types/transaction';
 import Modal from '../../components/Modals/Modal';
+import { convertToISOFormat } from '../../utils/dateUtils';
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2262,29 +2263,7 @@ export default function SuperBankPage() {
     }
   };
 
-  // Helper to normalize date to dd/mm/yyyy
-  function normalizeDateToDDMMYYYY(dateStr: string): string {
-    if (!dateStr) return '';
-    // Match dd/mm/yyyy, dd-mm-yyyy, dd/mm/yy, dd-mm-yy
-    const match = dateStr.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-    if (match) {
-      let [, dd, mm, yyyy] = match;
-      if (yyyy.length === 2) yyyy = '20' + yyyy;
-      // Pad day and month
-      if (dd.length === 1) dd = '0' + dd;
-      if (mm.length === 1) mm = '0' + mm;
-      return `${dd}/${mm}/${yyyy}`;
-    }
-    // Try ISO or fallback
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}/${mm}/${yyyy}`;
-    }
-    return dateStr;
-  }
+
 
   // Helper to robustly parse Indian-style and scientific notation amounts
   function parseIndianAmount(val: string | number | undefined): number {
@@ -2333,7 +2312,7 @@ export default function SuperBankPage() {
         // Normalize date
         const bankHeader = reverseMap[sh];
         const value = bankHeader ? tx[bankHeader] : tx[sh];
-        mappedRow[sh] = typeof value === 'string' ? normalizeDateToDDMMYYYY(value) : value;
+        mappedRow[sh] = typeof value === 'string' ? convertToISOFormat(value) : value;
       } else if (sh === 'Amount') {
         const rawAmount = getValueForColumn(tx, String(tx.bankId), 'Amount');
         mappedRow.Amount = formatIndianAmount(rawAmount); // always Indian style for UI
@@ -2505,13 +2484,14 @@ export default function SuperBankPage() {
       if (tableSortColumn.toLowerCase() === 'date') {
         const dateCol = superHeader.find((h) => h.toLowerCase().includes('date'));
         if (dateCol) {
-          const dateA = parseDate(a[dateCol] as string);
-          const dateB = parseDate(b[dateCol] as string);
+          // Dates are already stored in ISO format, so we can use them directly
+          const dateA = a[dateCol] as string;
+          const dateB = b[dateCol] as string;
           
           if (tableSortDirection === 'asc') {
-            return dateA.getTime() - dateB.getTime(); // Oldest to Newest
+            return new Date(dateA).getTime() - new Date(dateB).getTime(); // Oldest to Newest
           } else {
-            return dateB.getTime() - dateA.getTime(); // Newest to Oldest
+            return new Date(dateB).getTime() - new Date(dateA).getTime(); // Newest to Oldest
           }
         }
       }
@@ -2520,12 +2500,13 @@ export default function SuperBankPage() {
     // Default to date sorting based on sortOrder
     const dateCol = superHeader.find((h) => h.toLowerCase().includes('date'));
     if (dateCol) {
-      const dateA = parseDate(a[dateCol] as string);
-      const dateB = parseDate(b[dateCol] as string);
+      // Dates are already stored in ISO format, so we can use them directly
+      const dateA = a[dateCol] as string;
+      const dateB = b[dateCol] as string;
       if (sortOrder === 'desc') {
-        return dateB.getTime() - dateA.getTime();
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
       } else {
-        return dateA.getTime() - dateB.getTime();
+        return new Date(dateA).getTime() - new Date(dateB).getTime();
       }
     }
     return 0; // No sorting if no date column found
@@ -2979,35 +2960,7 @@ export default function SuperBankPage() {
     setHeaderInputs(inputs => inputs.filter((_, i) => i !== idx));
   };
 
-  // Helper to parse both dd/mm/yyyy and dd-mm-yy, and with - as separator
-  function parseDate(dateStr: string): Date {
-    if (!dateStr || typeof dateStr !== 'string') return new Date('1970-01-01');
-
-    // Regex to match dd/mm/yyyy or dd-mm-yyyy (and yy)
-    const match = dateStr.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-
-    if (match) {
-      const day = match[1];
-      const month = match[2];
-      let year = match[3];
-
-      if (year.length === 2) {
-        year = '20' + year;
-      }
-
-      // Create date, note that the month is 0-indexed in JavaScript's Date constructor.
-      return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
-    }
-    
-    // Fallback for ISO date strings or other formats recognized by new Date()
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      return d;
-    }
-
-    // Return a default date for invalid formats
-    return new Date('1970-01-01');
-  }
+  // (Removed unused parseDate helper)
 
   useEffect(() => {
     console.log('BANKS:', bankIdNameMap);

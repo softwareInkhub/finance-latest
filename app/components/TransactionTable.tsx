@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { RiPriceTag3Line } from 'react-icons/ri';
 import { Transaction, TransactionRow, Tag } from '../types/transaction';
+import { formatDisplayDate } from '../utils/dateUtils';
 
 interface BankMapping {
   id: string;
@@ -40,20 +41,7 @@ interface TransactionTableProps {
 
 const DEFAULT_WIDTH = 120;
 
-function normalizeDateToDDMMYYYY(dateStr: string): string {
-  if (!dateStr) return '';
-  try {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
-    return date.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  } catch {
-    return dateStr;
-  }
-}
+
 
 const TransactionTable: React.FC<TransactionTableProps> = ({
   rows,
@@ -485,7 +473,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                         ) : sh.toLowerCase() === 'date' ? (
                           (() => {
                             const val = row[sh];
-                            if (typeof val === 'string') return normalizeDateToDDMMYYYY(val);
+                            if (typeof val === 'string') return formatDisplayDate(val);
                             return val !== undefined && val !== null ? String(val) : '';
                           })()
                       ) : getValueForColumn && tx ? (

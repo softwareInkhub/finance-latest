@@ -14,6 +14,7 @@ import { Transaction, TransactionRow, Tag } from '../types/transaction';
 import Modal from '../components/Modals/Modal';
 import { useAppDispatch } from '../store/hooks';
 import { setAnalyticsData } from '../store/slices/analyticsSlice';
+import { convertToISOFormat, parseDate } from '../utils/dateUtils';
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2302,29 +2303,7 @@ export default function SuperBankPage() {
     }
   };
 
-  // Helper to normalize date to dd/mm/yyyy
-  function normalizeDateToDDMMYYYY(dateStr: string): string {
-    if (!dateStr) return '';
-    // Match dd/mm/yyyy, dd-mm-yyyy, dd/mm/yy, dd-mm-yy
-    const match = dateStr.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-    if (match) {
-      let [, dd, mm, yyyy] = match;
-      if (yyyy.length === 2) yyyy = '20' + yyyy;
-      // Pad day and month
-      if (dd.length === 1) dd = '0' + dd;
-      if (mm.length === 1) mm = '0' + mm;
-      return `${dd}/${mm}/${yyyy}`;
-    }
-    // Try ISO or fallback
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}/${mm}/${yyyy}`;
-    }
-    return dateStr;
-  }
+
 
   // Helper to robustly parse Indian-style and scientific notation amounts
   function parseIndianAmount(val: string | number | undefined): number {
@@ -2373,7 +2352,7 @@ export default function SuperBankPage() {
         // Normalize date
         const bankHeader = reverseMap[sh];
         const value = bankHeader ? tx[bankHeader] : tx[sh];
-        mappedRow[sh] = typeof value === 'string' ? normalizeDateToDDMMYYYY(value) : value;
+        mappedRow[sh] = typeof value === 'string' ? convertToISOFormat(value) : value;
       } else if (sh === 'Amount') {
         const rawAmount = getValueForColumn(tx, String(tx.bankId), 'Amount');
         mappedRow.Amount = formatIndianAmount(rawAmount); // always Indian style for UI
@@ -2440,35 +2419,28 @@ export default function SuperBankPage() {
     if (dateCol && (dateRange.from || dateRange.to)) {
       const rowDate = row[dateCol];
       if (typeof rowDate === 'string' && rowDate.trim()) {
-        // Try to parse various date formats
-        let normalizedDate = rowDate.trim();
+        // Convert any date format directly to ISO format (YYYY-MM-DD) for comparison
+        let comparisonDate = convertToISOFormat(rowDate.trim());
         
-        // Handle dd/mm/yyyy format
-        if (/\d{2}\/\d{2}\/\d{4}/.test(normalizedDate)) {
-          const [dd, mm, yyyy] = normalizedDate.split("/");
-          normalizedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-        }
-        // Handle dd-mm-yyyy format
-        else if (/\d{2}-\d{2}-\d{4}/.test(normalizedDate)) {
-          const [dd, mm, yyyy] = normalizedDate.split("-");
-          normalizedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-        }
-        // Handle yyyy/mm/dd format
-        else if (/\d{4}\/\d{2}\/\d{2}/.test(normalizedDate)) {
-          const [yyyy, mm, dd] = normalizedDate.split("/");
-          normalizedDate = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-        }
-        // If already in yyyy-mm-dd format, use as is
-        else if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
-          // If none of the above formats match, skip date filtering for this row
-          console.warn(`Unrecognized date format: ${rowDate} in column ${dateCol}`);
+        if (!comparisonDate || comparisonDate === rowDate.trim()) {
+          // If conversion failed, try to parse with parseDate function
+          const parsedDate = parseDate(rowDate.trim());
+          if (parsedDate && !isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1970) {
+            const dd = String(parsedDate.getDate()).padStart(2, '0');
+            const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
+            const yyyy = parsedDate.getFullYear();
+            comparisonDate = `${yyyy}-${mm}-${dd}`;
+          } else {
+            console.warn(`Unrecognized date format: ${rowDate} in column ${dateCol}`);
+            return false; // Skip this row if date cannot be parsed
+          }
         }
         
         // Apply date range filtering
-        if (dateRange.from && normalizedDate < dateRange.from) {
+        if (dateRange.from && comparisonDate < dateRange.from) {
           dateMatch = false;
         }
-        if (dateRange.to && normalizedDate > dateRange.to) {
+        if (dateRange.to && comparisonDate > dateRange.to) {
           dateMatch = false;
         }
       }
@@ -2547,13 +2519,14 @@ export default function SuperBankPage() {
       if (tableSortColumn.toLowerCase() === 'date') {
         const dateCol = superHeader.find((h) => h.toLowerCase().includes('date'));
         if (dateCol) {
-          const dateA = parseDate(a[dateCol] as string);
-          const dateB = parseDate(b[dateCol] as string);
+          // Dates are already stored in ISO format, so we can use them directly
+          const dateA = a[dateCol] as string;
+          const dateB = b[dateCol] as string;
           
           if (tableSortDirection === 'asc') {
-            return dateA.getTime() - dateB.getTime(); // Oldest to Newest
+            return new Date(dateA).getTime() - new Date(dateB).getTime(); // Oldest to Newest
           } else {
-            return dateB.getTime() - dateA.getTime(); // Newest to Oldest
+            return new Date(dateB).getTime() - new Date(dateA).getTime(); // Newest to Oldest
           }
         }
       }
@@ -2562,12 +2535,13 @@ export default function SuperBankPage() {
     // Default to date sorting based on sortOrder
     const dateCol = superHeader.find((h) => h.toLowerCase().includes('date'));
     if (dateCol) {
-      const dateA = parseDate(a[dateCol] as string);
-      const dateB = parseDate(b[dateCol] as string);
+      // Dates are already stored in ISO format, so we can use them directly
+      const dateA = a[dateCol] as string;
+      const dateB = b[dateCol] as string;
       if (sortOrder === 'desc') {
-        return dateB.getTime() - dateA.getTime();
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
       } else {
-        return dateA.getTime() - dateB.getTime();
+        return new Date(dateA).getTime() - new Date(dateB).getTime();
       }
     }
     return 0; // No sorting if no date column found
@@ -3040,35 +3014,7 @@ export default function SuperBankPage() {
     setHeaderInputs(inputs => inputs.filter((_, i) => i !== idx));
   };
 
-  // Helper to parse both dd/mm/yyyy and dd-mm-yy, and with - as separator
-  function parseDate(dateStr: string): Date {
-    if (!dateStr || typeof dateStr !== 'string') return new Date('1970-01-01');
 
-    // Regex to match dd/mm/yyyy or dd-mm-yyyy (and yy)
-    const match = dateStr.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-
-    if (match) {
-      const day = match[1];
-      const month = match[2];
-      let year = match[3];
-
-      if (year.length === 2) {
-        year = '20' + year;
-      }
-
-      // Create date, note that the month is 0-indexed in JavaScript's Date constructor.
-      return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
-    }
-    
-    // Fallback for ISO date strings or other formats recognized by new Date()
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      return d;
-    }
-
-    // Return a default date for invalid formats
-    return new Date('1970-01-01');
-  }
 
   useEffect(() => {
     console.log('BANKS:', bankIdNameMap);

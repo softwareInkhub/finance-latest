@@ -368,6 +368,7 @@ function StatementsContent() {
   // Helper to robustly parse dd/mm/yyyy, dd/mm/yy, dd-mm-yyyy, dd-mm-yy
   function parseDate(dateStr: string): Date {
     if (!dateStr || typeof dateStr !== 'string') return new Date('1970-01-01');
+    
     // Match dd/mm/yyyy, dd-mm-yyyy, dd/mm/yy, dd-mm-yy
     const match = dateStr.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
     if (match) {
@@ -377,6 +378,21 @@ function StatementsContent() {
       if (year.length === 2) year = '20' + year;
       return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
     }
+    
+    // Try ISO format (yyyy-mm-dd)
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    }
+    
+    // Try yyyy/mm/dd format
+    const slashMatch = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (slashMatch) {
+      const [, year, month, day] = slashMatch;
+      return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    }
+    
     // Fallback for ISO or other formats
     const d = new Date(dateStr);
     if (!isNaN(d.getTime())) return d;
