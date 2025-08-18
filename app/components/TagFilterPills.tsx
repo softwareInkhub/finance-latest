@@ -405,10 +405,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
         </div>
       </div>
 
-      {/* Second row - Additional tags when expanded */}
-      {isExpanded && secondRowTags.length > 0 && (
-        <div className="p-1 border-b border-gray-100">
-          <div className="flex flex-wrap gap-1.5 items-center">
+              {/* Second row - Additional tags when expanded */}
+        {isExpanded && secondRowTags.length > 0 && (
+          <div className="p-1 border-b border-gray-100 max-h-20 overflow-y-auto">
+            <div className="flex flex-wrap gap-1.5 items-center">
             {secondRowTags.map(tag => {
               const btnRef = React.createRef<HTMLButtonElement>();
               const count = tagStats ? tagStats[tag.name] : undefined;
@@ -427,10 +427,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                     {tag.name}
                     {typeof count === 'number' && (
                       <span 
-                        className="ml-1 bg-white/90 border rounded-full px-0.5 text-[9px] font-bold align-middle inline-block min-w-[12px] text-center"
+                        className="ml-1 bg-white/90 border rounded-full px-0.5 text-[9px] font-bold align-middle inline-block min-w-[12px] text-center text-black"
                         style={{
                           borderColor: tag.color || '#6366F1',
-                          color: tag.color || '#6366F1'
+                          color: 'black'
                         }}
                       >
                         {count}

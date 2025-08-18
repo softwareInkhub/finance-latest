@@ -147,6 +147,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [sortDropdownOpen]);
 
+
+
   return (
     <div className="flex flex-col h-[65vh]" style={{ minHeight: '500px' }}>
       {/* Table container with vertical scroll only */}
@@ -452,7 +454,16 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       {sh.toLowerCase() === 'tags' && Array.isArray(row[sh]) ? (
                         <div className="flex gap-1">
                           {(row[sh] as Tag[]).map((tag, tagIdx: number) => (
-                            <span key={tag.id + '-' + tagIdx} className="inline-flex items-center text-xs px-2 py-0.5 rounded mr-1 mb-1 max-w-[120px] group" style={{ background: tag.color, color: '#ffffff', border: '1px solid rgba(0,0,0,0.1)', fontWeight: '500' }}>
+                            <span
+                              key={tag.id + '-' + tagIdx}
+                              className="inline-flex items-center text-xs px-2 py-0.5 rounded mr-1 mb-1 max-w-[140px] group"
+                              style={{
+                                background: `${tag.color || '#e5e7eb'}30`,
+                                color: '#000000',
+                                border: `2px solid ${tag.color || '#6366F1'}`,
+                                fontWeight: 500
+                              }}
+                            >
                               <RiPriceTag3Line className="inline mr-1" />
                               <span className="truncate">{tag.name}</span>
                               {onRemoveTag && (

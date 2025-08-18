@@ -614,7 +614,11 @@ function CompactReports({
                   {/* Account Row */}
                   <tr className="border-b border-gray-150 bg-gray-50">
                     <td className="px-1 py-1 text-gray-700 font-medium text-xs pl-4">
-                      Account: {accountId}
+                      {(() => {
+                        const sampleTx = transactions.find(t => t.bankId === bankId && t.accountId === accountId);
+                        const displayAccount = sampleTx && (sampleTx.accountNumber as unknown as string | undefined);
+                        return `Account: ${displayAccount || accountId}`;
+                      })()}
                     </td>
                     <td className="px-1 py-1 text-center text-gray-600 text-xs">
                       {Object.values(tags).reduce((sum, tag) => sum + tag.totalTransactions, 0)}
@@ -802,6 +806,24 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
       groupedTransactions[txBankId][txAccountId].push(tx);
     });
 
+    // Sort transactions by date (oldest to newest) for each account
+    Object.keys(groupedTransactions).forEach(bankId => {
+      Object.keys(groupedTransactions[bankId]).forEach(accountId => {
+        groupedTransactions[bankId][accountId].sort((a, b) => {
+          const getDateValue = (tx: Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string }) => {
+            const dateField = tx.Date || tx['Transaction Date'];
+            if (typeof dateField === 'string') return dateField;
+            if (typeof dateField === 'number') return String(dateField);
+            return '';
+          };
+          const dateA = getDateValue(a);
+          const dateB = getDateValue(b);
+          if (!dateA || !dateB) return 0;
+          return new Date(dateA).getTime() - new Date(dateB).getTime(); // Oldest first
+        });
+      });
+    });
+
     // Set the selected tag for page 2 and navigate to it
     setSelectedTagForPage4({
       tagName,
@@ -839,10 +861,27 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
     csvData.push(['Balance', balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })]);
     csvData.push([]); // Empty row
     
-    // Add transaction details
+    // Add transaction details (sorted oldest -> newest to match on-screen order)
     csvData.push(['Bank', 'Account ID', 'Account Name', 'Account Number', 'Date', 'Description', 'Reference', 'Amount', 'Type', 'Tags']);
-    
-    selectedTagForPage4.transactions.forEach((tx: Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string }) => {
+
+    const toTime = (raw: string): number => {
+      const iso = convertToISOFormat(raw);
+      if (iso) {
+        const t = Date.parse(iso);
+        if (!isNaN(t)) return t;
+      }
+      const parsed = parseDate(raw);
+      if (parsed && !isNaN(parsed.getTime())) return parsed.getTime();
+      return 0;
+    };
+
+    const sortedTxs = [...selectedTagForPage4.transactions].sort((a, b) => {
+      const aRaw = String(a.Date || a['Transaction Date'] || '');
+      const bRaw = String(b.Date || b['Transaction Date'] || '');
+      return toTime(aRaw) - toTime(bRaw);
+    });
+
+    sortedTxs.forEach((tx: Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string }) => {
       const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
       const tags = Array.isArray(tx.tags) ? tx.tags : [];
       const description = tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A';
@@ -953,7 +992,23 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
           ${selectedTagForPage4.transactions.map((tx: Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string }) => {
             const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
             const description = tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A';
-            const date = tx.Date || tx['Transaction Date'] || 'N/A';
+            const date = (() => {
+              const rawDate = tx.Date || tx['Transaction Date'] || 'N/A';
+              if (rawDate && rawDate !== 'N/A') {
+                try {
+                  const dateObj = new Date(String(rawDate));
+                  if (!isNaN(dateObj.getTime())) {
+                    const dd = String(dateObj.getDate()).padStart(2, '0');
+                    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const yyyy = dateObj.getFullYear();
+                    return `${dd}/${mm}/${yyyy}`;
+                  }
+                } catch {
+                  // If parsing fails, return original date
+                }
+              }
+              return String(rawDate);
+            })();
             const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
             const bankName = bankIdNameMap[tx.bankId] || tx.bankId;
             const accountName = tx.accountName || tx.accountHolderName || 'N/A';
@@ -1284,7 +1339,11 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
                   <div key={accountId} className="border-b last:border-b-0">
                     <div className="bg-blue-50 px-4 py-2 border-b">
                       <h5 className="text-sm font-medium text-blue-800">
-                        Account: {accountId}
+                        {(() => {
+                          const firstTx = accountTransactions[0];
+                          const acctNo = firstTx ? ((firstTx as unknown as { accountNumber?: string }).accountNumber || accountId) : accountId;
+                          return `Account: ${acctNo}`;
+                        })()}
                       </h5>
                       <p className="text-xs text-blue-600">
                         {accountTransactions.length} transactions
@@ -1336,7 +1395,25 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
 
                             return (
                               <tr key={idx} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{date}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {(() => {
+                                    // Convert ISO date to DD/MM/YYYY format
+                                    if (date && date !== 'N/A') {
+                                      try {
+                                        const dateObj = new Date(date);
+                                        if (!isNaN(dateObj.getTime())) {
+                                          const dd = String(dateObj.getDate()).padStart(2, '0');
+                                          const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                          const yyyy = dateObj.getFullYear();
+                                          return `${dd}/${mm}/${yyyy}`;
+                                        }
+                                      } catch {
+                                        // If parsing fails, return original date
+                                      }
+                                    }
+                                    return date;
+                                  })()}
+                                </td>
                                 <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">{description}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{reference}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">{accountName}</td>
@@ -1349,15 +1426,16 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">{crdr}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   {tags.map(tag => (
-                                    <span 
-                                      key={tag.id} 
-                                      className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1"
-                                      style={{
-                                        backgroundColor: `${tag.color || '#6366F1'}40`,
-                                        color: tag.color || '#6366F1',
-                                        border: `2px solid ${tag.color || '#6366F1'}`
-                                      }}
-                                    >
+                                                                          <span 
+                                        key={tag.id} 
+                                        className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1 font-semibold"
+                                        style={{
+                                          backgroundColor: `${tag.color || '#6366F1'}30`,
+                                          color: '#000000',
+                                          border: `2px solid ${tag.color || '#6366F1'}`,
+                                          fontWeight: '500'
+                                        }}
+                                      >
                                       {tag.name}
                                     </span>
                                   ))}
@@ -2845,7 +2923,7 @@ export default function SuperBankPage() {
   };
 
   return (
-    <div className="h-90vh overflow-y-auto">
+    <div className="h-screen overflow-y-auto">
       <div className="py-4 sm:py-6 px-2 sm:px-4">
         <div className="max-w-full mx-auto flex flex-col">
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
@@ -3207,7 +3285,7 @@ export default function SuperBankPage() {
               </button>
             </div>
           )}
-          <div className="flex-1 min-h-0"style={{ minHeight: '600px',}}>
+          <div className="flex-1 min-h-0" style={{ minHeight: '400px', maxHeight: 'calc(100vh - 400px)' }}>
           <TransactionTable
             rows={sortedAndFilteredRows}
             headers={superHeader}
