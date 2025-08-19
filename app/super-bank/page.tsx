@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { RiEdit2Line } from 'react-icons/ri';
 
 import type { JSX } from 'react';
@@ -2080,7 +2080,7 @@ export default function SuperBankPage() {
 
 
   // Helper to robustly parse Indian-style and scientific notation amounts
-  function parseIndianAmount(val: string | number | undefined): number {
+  const parseIndianAmount = useCallback((val: string | number | undefined): number => {
     if (typeof val === 'number') return val;
     if (typeof val === 'string') {
       // Remove all commas and spaces
@@ -2090,13 +2090,90 @@ export default function SuperBankPage() {
       return isNaN(num) ? 0 : num;
     }
     return 0;
-  }
+  }, []);
 
   // Helper to format any value as Indian-style string
-  function formatIndianAmount(val: string | number | undefined): string {
+  const formatIndianAmount = useCallback((val: string | number | undefined): string => {
     const num = parseIndianAmount(val);
     return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
+  }, [parseIndianAmount]);
+
+  // Helper: get value for any column using per-bank conditions
+  const getValueForColumn = useCallback((row: TransactionRow, bankId: string, columnName: string): string | number | undefined => {
+    const rawConds = bankMappings[bankId]?.conditions;
+    const conditions = Array.isArray(rawConds) ? rawConds : [];
+    for (const cond of conditions) {
+      if (cond.then && cond.then[columnName] !== undefined) {
+        // Robust normalization for condition
+        const op = cond.if.op;
+        const val = row[cond.if.field];
+        const cmp = cond.if.value;
+        const valStr = (val !== undefined && val !== null) ? String(val).trim() : '';
+        const cmpStr = (cmp !== undefined && cmp !== null) ? String(cmp).trim() : '';
+        const valNum = valStr === '' ? NaN : !isNaN(Number(valStr)) ? parseFloat(valStr) : NaN;
+        const cmpNum = cmpStr === '' ? NaN : !isNaN(Number(cmpStr)) ? parseFloat(cmpStr) : NaN;
+        const bothNumeric = !isNaN(valNum) && !isNaN(cmpNum);
+        let match = false;
+        if (op === 'present') {
+          match = valStr !== '';
+        } else if (op === 'not_present') {
+          match = valStr === '';
+        } else if (op === '==') {
+          if (bothNumeric) {
+            match = valNum === cmpNum;
+          } else {
+            match = valStr === cmpStr;
+          }
+        } else if (op === '!=') {
+          if (bothNumeric) {
+            match = valNum !== cmpNum;
+          } else {
+            match = valStr !== cmpStr;
+          }
+        } else if (op === '>=') {
+          match = bothNumeric && valNum >= cmpNum;
+        } else if (op === '<=') {
+          match = bothNumeric && valNum <= cmpNum;
+        } else if (op === '>') {
+          match = bothNumeric && valNum > cmpNum;
+        } else if (op === '<') {
+          match = bothNumeric && valNum < cmpNum;
+        }
+        if (match) {
+          const result = cond.then[columnName];
+          // If result is a field reference, resolve it
+          if (typeof result === 'string' && row[result] !== undefined) {
+            const v = row[result];
+            if (typeof v === 'string' || typeof v === 'number') {
+              return v;
+            }
+            return undefined;
+          }
+          if (typeof result === 'string' || typeof result === 'number') {
+            return result;
+          }
+          return undefined;
+        }
+      }
+    }
+    // Robust fallback: check mapping, then raw value
+    const mapping = bankMappings[bankId]?.mapping;
+    if (mapping && mapping[columnName] && row[mapping[columnName]] !== undefined) {
+      const v = row[mapping[columnName]];
+      if (typeof v === 'string' || typeof v === 'number') {
+        return v;
+      }
+      return undefined;
+    }
+    if (row[columnName] !== undefined) {
+    const v = row[columnName];
+      if (typeof v === 'string' || typeof v === 'number') {
+        return v;
+      }
+      return undefined;
+    }
+    return undefined;
+  }, [bankMappings]);
 
   // Create mappedRowsWithConditions with proper condition evaluation
   const mappedRowsWithConditions = useMemo(() => transactions.map(tx => {
@@ -2146,7 +2223,7 @@ export default function SuperBankPage() {
       // Apply conditions for Dr./Cr.
       mappedRow['Dr./Cr.'] = getValueForColumn(tx, String(tx.bankId), 'Dr./Cr.');
       return mappedRow as Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string; bankName?: string };
-  }), [transactions, bankMappings, superHeader, bankIdNameMap]);
+  }), [transactions, bankMappings, superHeader, bankIdNameMap, formatIndianAmount, getValueForColumn, parseIndianAmount]);
 
   // Tag filter logic: filter mappedRowsWithConditions by selected tags first
   const tagFilteredRows = tagFilters.length > 0
@@ -2489,7 +2566,7 @@ export default function SuperBankPage() {
         lastUpdated: new Date().toISOString()
       }));
     }
-  }, [filteredRows, totalAmount, totalCredit, totalDebit, stats.totalBanks, stats.totalAccounts, loading, dispatch]);
+  }, [filteredRows, totalAmount, totalCredit, totalDebit, stats.totalBanks, stats.totalAccounts, loading, dispatch, mappedRowsWithConditions]);
 
   let tagged = 0, untagged = 0;
   filteredRows.forEach(row => {
@@ -2639,91 +2716,7 @@ export default function SuperBankPage() {
   };
 
 
-  // Helper: get value for any column using per-bank conditions
-  function getValueForColumn(row: TransactionRow, bankId: string, columnName: string): string | number | undefined {
-    const rawConds = bankMappings[bankId]?.conditions;
-    const conditions = Array.isArray(rawConds) ? rawConds : [];
-    for (const cond of conditions) {
-      if (cond.then && cond.then[columnName] !== undefined) {
-        // Robust normalization for condition
-        const op = cond.if.op;
-        const val = row[cond.if.field];
-        const cmp = cond.if.value;
-        const valStr = (val !== undefined && val !== null) ? String(val).trim() : '';
-        const cmpStr = (cmp !== undefined && cmp !== null) ? String(cmp).trim() : '';
-        const valNum = valStr === '' ? NaN : !isNaN(Number(valStr)) ? parseFloat(valStr) : NaN;
-        const cmpNum = cmpStr === '' ? NaN : !isNaN(Number(cmpStr)) ? parseFloat(cmpStr) : NaN;
-        const bothNumeric = !isNaN(valNum) && !isNaN(cmpNum);
-        let match = false;
-        if (op === 'present') {
-          match = valStr !== '';
-        } else if (op === 'not_present') {
-          match = valStr === '';
-        } else if (op === '==') {
-          if (bothNumeric) {
-            match = valNum === cmpNum;
-          } else {
-            match = valStr === cmpStr;
-          }
-        } else if (op === '!=') {
-          if (bothNumeric) {
-            match = valNum !== cmpNum;
-          } else {
-            match = valStr !== cmpStr;
-          }
-        } else if (op === '>=') {
-          match = bothNumeric && valNum >= cmpNum;
-        } else if (op === '<=') {
-          match = bothNumeric && valNum <= cmpNum;
-        } else if (op === '>') {
-          match = bothNumeric && valNum > cmpNum;
-        } else if (op === '<') {
-          match = bothNumeric && valNum < cmpNum;
-        }
-        if (match) {
-          const result = cond.then[columnName];
-          // If result is a field reference, resolve it
-          if (typeof result === 'string' && row[result] !== undefined) {
-            const v = row[result];
-            if (typeof v === 'string' || typeof v === 'number') {
-              return v;
-            }
-            return undefined;
-          }
-          if (typeof result === 'string' || typeof result === 'number') {
-            return result;
-          }
-          return undefined;
-        }
-      }
-    }
-    // Robust fallback: check mapping, then raw value
-    const mapping = bankMappings[bankId]?.mapping;
-    // if (mapping && mapping[columnName]) {
-    //   console.log('Mapping fallback debug:', {
-    //     bankId,
-    //     columnName,
-    //     mappingField: mapping[columnName],
-    //     value: row[mapping[columnName]],
-    //     row
-    //   });
-    // }
-    if (mapping && mapping[columnName] && row[mapping[columnName]] !== undefined) {
-      const v = row[mapping[columnName]];
-      if (typeof v === 'string' || typeof v === 'number') {
-        return v;
-      }
-      return undefined;
-    }
-    if (row[columnName] !== undefined) {
-    const v = row[columnName];
-      if (typeof v === 'string' || typeof v === 'number') {
-        return v;
-      }
-      return undefined;
-    }
-    return undefined;
-  }
+
 
   useEffect(() => {
     const userId = localStorage.getItem('userId');

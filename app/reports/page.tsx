@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
 import { Tag } from '../types/transaction';
 import AnalyticsSummary from '../components/AnalyticsSummary';
@@ -334,99 +334,244 @@ export default function ReportsPage() {
     cashFlowDataRef.current = cashFlowData;
   }, [cashFlowData]);
 
-  // Auto-refresh tag-based rows whenever analytics Redux data changes
-  useEffect(() => {
-    const refreshTagItems = async () => {
-      try {
-        if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) return;
-        // Collect unique tag names present in the current cashflow that were created from tags
-        const tagNames = new Set<string>();
-        const scanData = cashFlowDataRef.current || [];
-        scanData.forEach(section => {
-          section.groups.forEach(group => {
-            group.items.forEach(item => {
-              if (item.createdByTag) tagNames.add(item.particular);
-              item.subItems?.forEach(sub => {
-                if (sub.createdByTag) tagNames.add(sub.particular);
-                sub.subItems?.forEach(ss => {
-                  if (ss.createdByTag) tagNames.add(ss.particular);
-                });
+  // Loading state for refresh operations
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Manual refresh function to sync latest tag changes from Super Bank
+  const handleRefreshTags = useCallback(async () => {
+    // Prevent multiple simultaneous refresh operations
+    if (isRefreshing) {
+      console.log('Refresh already in progress, skipping...');
+      return;
+    }
+
+    try {
+      setIsRefreshing(true);
+      
+      if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) {
+        console.log('No Redux data available for refresh');
+        return;
+      }
+      
+      // Collect unique tag names present in the current cashflow that were created from tags
+      const tagNames = new Set<string>();
+      cashFlowData.forEach(section => {
+        section.groups.forEach(group => {
+          group.items.forEach(item => {
+            if (item.createdByTag) tagNames.add(item.particular);
+            item.subItems?.forEach(sub => {
+              if (sub.createdByTag) tagNames.add(sub.particular);
+              sub.subItems?.forEach(ss => {
+                if (ss.createdByTag) tagNames.add(ss.particular);
               });
             });
           });
         });
-        if (tagNames.size === 0) return;
+      });
+      
+      if (tagNames.size === 0) {
+        console.log('No tag-based items found to refresh');
+        return;
+      }
 
-        // Compute latest CR/DR/Bal for each tag using Redux transactions
-        const entries = await Promise.all(
-          Array.from(tagNames).map(async (name) => {
-            const data = await fetchTagFinancialData(name);
-            return [name, data] as const;
-          })
-        );
-        const tagToData = new Map(entries);
+      console.log(`Refreshing ${tagNames.size} tag-based items:`, Array.from(tagNames));
 
-        // Update all tag-created items with fresh balances
-        setCashFlowData(prev => {
-          const updated = prev.map(section => ({
-            ...section,
-            groups: section.groups.map(group => ({
-              ...group,
-              items: group.items.map(item => {
-                const updateItem = (node: CashFlowItem): CashFlowItem => {
-                  let next: CashFlowItem = { ...node };
-                  if (node.createdByTag) {
-                    const data = tagToData.get(node.particular);
-                    if (data) {
-                      next = { ...next, amount: data.balance, tagData: data };
+      // Compute latest CR/DR/Bal for each tag using Redux transactions
+      const entries = await Promise.all(
+        Array.from(tagNames).map(async (name) => {
+          const data = await fetchTagFinancialData(name);
+          return [name, data] as const;
+        })
+      );
+      const tagToData = new Map(entries);
+
+      // Update all tag-created items with fresh balances
+      setCashFlowData(prev => {
+        const updated = prev.map(section => ({
+          ...section,
+          groups: section.groups.map(group => ({
+            ...group,
+            items: group.items.map(item => {
+              const updateItem = (node: CashFlowItem): CashFlowItem => {
+                let next: CashFlowItem = { ...node };
+                if (node.createdByTag) {
+                  const data = tagToData.get(node.particular);
+                  if (data) {
+                    next = { ...next, amount: data.balance, tagData: data };
+                  }
+                }
+                if (node.subItems && node.subItems.length > 0) {
+                  next = {
+                    ...next,
+                    subItems: node.subItems.map(updateItem)
+                  };
+                }
+                return next;
+              };
+              return updateItem(item);
+            })
+          }))
+        }));
+
+        // Persist updates (debounced) and local cache
+        saveCashFlowData(updated);
+        return updated;
+      });
+
+      console.log('Tag refresh completed successfully');
+    } catch (error) {
+      console.error('Error refreshing tags:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [reduxAnalyticsData, cashFlowData, fetchTagFinancialData, saveCashFlowData, isRefreshing]);
+
+  // Auto-refresh tag-based rows whenever analytics Redux data changes
+  useEffect(() => {
+    // Skip if no Redux data or if we're already processing
+    if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) return;
+    
+    // Debounce the refresh to prevent excessive calls
+    const timeoutId = setTimeout(() => {
+      const refreshTagItems = async () => {
+        try {
+          // Collect unique tag names present in the current cashflow that were created from tags
+          const tagNames = new Set<string>();
+          const scanData = cashFlowDataRef.current || [];
+          scanData.forEach(section => {
+            section.groups.forEach(group => {
+              group.items.forEach(item => {
+                if (item.createdByTag) tagNames.add(item.particular);
+                item.subItems?.forEach(sub => {
+                  if (sub.createdByTag) tagNames.add(sub.particular);
+                  sub.subItems?.forEach(ss => {
+                    if (ss.createdByTag) tagNames.add(ss.particular);
+                  });
+                });
+              });
+            });
+          });
+          if (tagNames.size === 0) return;
+
+          // Compute latest CR/DR/Bal for each tag using Redux transactions
+          const entries = await Promise.all(
+            Array.from(tagNames).map(async (name) => {
+              const data = await fetchTagFinancialData(name);
+              return [name, data] as const;
+            })
+          );
+          const tagToData = new Map(entries);
+
+          // Update all tag-created items with fresh balances
+          setCashFlowData(prev => {
+            const updated = prev.map(section => ({
+              ...section,
+              groups: section.groups.map(group => ({
+                ...group,
+                items: group.items.map(item => {
+                  const updateItem = (node: CashFlowItem): CashFlowItem => {
+                    let next: CashFlowItem = { ...node };
+                    if (node.createdByTag) {
+                      const data = tagToData.get(node.particular);
+                      if (data) {
+                        next = { ...next, amount: data.balance, tagData: data };
+                      }
                     }
-                  }
-                  if (node.subItems && node.subItems.length > 0) {
-                    next = {
-                      ...next,
-                      subItems: node.subItems.map(updateItem)
-                    };
-                  }
-                  return next;
-                };
-                return updateItem(item);
-              })
-            }))
-          }));
+                    if (node.subItems && node.subItems.length > 0) {
+                      next = {
+                        ...next,
+                        subItems: node.subItems.map(updateItem)
+                      };
+                    }
+                    return next;
+                  };
+                  return updateItem(item);
+                })
+              }))
+            }));
 
-          // Persist updates (debounced) and local cache
-          saveCashFlowData(updated);
-          return updated;
-        });
-      } catch (err) {
-        console.error('Failed to refresh tag-based items:', err);
+            // Persist updates (debounced) and local cache
+            saveCashFlowData(updated);
+            return updated;
+          });
+        } catch (err) {
+          console.error('Failed to refresh tag-based items:', err);
+        }
+      };
+
+      refreshTagItems();
+    }, 1000); // 1 second debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [reduxAnalyticsData, saveCashFlowData, fetchTagFinancialData]);
+
+  // Auto-refresh tags when page loads/becomes visible (additional to Redux changes)
+  useEffect(() => {
+    // Debounce visibility change handler to prevent excessive calls
+    let visibilityTimeoutId: NodeJS.Timeout;
+    
+    const handleVisibilityChange = () => {
+      if (!document.hidden && reduxAnalyticsData && reduxAnalyticsData.transactions && !isRefreshing) {
+        // Clear any pending timeout
+        clearTimeout(visibilityTimeoutId);
+        // Debounce the refresh call
+        visibilityTimeoutId = setTimeout(() => {
+          handleRefreshTags();
+        }, 500);
       }
     };
 
-    refreshTagItems();
-  }, [reduxAnalyticsData, saveCashFlowData, fetchTagFinancialData]);
+    // Refresh on page load/focus (only once)
+    if (reduxAnalyticsData && reduxAnalyticsData.transactions && !isRefreshing) {
+      // Delay initial refresh to prevent blocking page load
+      const initialTimeoutId = setTimeout(() => {
+        handleRefreshTags();
+      }, 1000);
+      
+      return () => {
+        clearTimeout(initialTimeoutId);
+        clearTimeout(visibilityTimeoutId);
+      };
+    }
+
+    // Listen for page visibility changes (when user switches back to tab)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Listen for window focus (when user switches back to window)
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+      clearTimeout(visibilityTimeoutId);
+    };
+  }, [reduxAnalyticsData, handleRefreshTags, isRefreshing]); // Include isRefreshing to prevent conflicts
 
       // Helper function to calculate item total including sub-items
-  const calculateItemTotal = (item: CashFlowItem): number => {
+  const calculateItemTotal = useCallback((item: CashFlowItem): number => {
     const itemAmount = item.amount || 0;
     const subItemsTotal = item.subItems?.reduce((sum, subItem) => sum + calculateItemTotal(subItem), 0) || 0;
     return itemAmount + subItemsTotal;
-  };
+  }, []);
 
   // Helper function to calculate group total including sub-items
-  const calculateGroupTotal = (group: CashFlowGroup): number => {
+  const calculateGroupTotal = useCallback((group: CashFlowGroup): number => {
     return group.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
-  };
+  }, [calculateItemTotal]);
 
-  // Calculate totals with safety checks
-  const totalInflow = cashFlowData[0]?.groups?.reduce((sum, group) => 
-    sum + calculateGroupTotal(group), 0
-  ) || 0;
-  const totalOutflow = cashFlowData[1]?.groups?.reduce((sum, group) => 
-    sum + calculateGroupTotal(group), 0
-  ) || 0;
-  // Net flow = Inflows - Outflows (outflows are already negative, so we add them)
-  const netFlow = totalInflow + totalOutflow;
+  // Memoize totals calculation to prevent unnecessary re-computations
+  const { totalInflow, totalOutflow, netFlow } = useMemo(() => {
+    const inflow = cashFlowData[0]?.groups?.reduce((sum, group) => 
+      sum + calculateGroupTotal(group), 0
+    ) || 0;
+    const outflow = cashFlowData[1]?.groups?.reduce((sum, group) => 
+      sum + calculateGroupTotal(group), 0
+    ) || 0;
+    // Net flow = Inflows - Outflows (outflows are already negative, so we add them)
+    const net = inflow + outflow;
+    
+    return { totalInflow: inflow, totalOutflow: outflow, netFlow: net };
+  }, [cashFlowData, calculateGroupTotal]);
 
   const handleEdit = () => {
     setIsEditing(!isEditing);
@@ -1475,6 +1620,17 @@ export default function ReportsPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         DOWNLOAD
+                      </button>
+                      <button
+                        onClick={handleRefreshTags}
+                        disabled={isRefreshing}
+                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Refresh tag balances from Super Bank"
+                      >
+                        <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {isRefreshing ? 'REFRESHING...' : 'REFRESH TAGS'}
                       </button>
                       <button
                         onClick={handleEdit}
