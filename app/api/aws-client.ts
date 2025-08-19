@@ -45,6 +45,7 @@ export const TABLES = {
   ACCOUNTS: 'accounts',
   BANK_STATEMENTS: process.env.AWS_DYNAMODB_STATEMENTS_TABLE || 'bank-statements',
   TAGS: process.env.AWS_DYNAMODB_TAGS_TABLE || 'tags',
+  REPORTS: process.env.AWS_DYNAMODB_REPORTS_TABLE || 'brmh-fintech-user-reports',
 } as const;
 
 // Helper function to get bank-specific transaction table name

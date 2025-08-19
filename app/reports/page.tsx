@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
 import { Tag } from '../types/transaction';
 import AnalyticsSummary from '../components/AnalyticsSummary';
@@ -206,14 +206,59 @@ export default function ReportsPage() {
   const [newSubSubItemName, setNewSubSubItemName] = useState('');
   const [showSubSubItemTagsModal, setShowSubSubItemTagsModal] = useState(false);
 
-  // Helper function to save cashflow data with user-specific key
-  const saveCashFlowData = (data: CashFlowSection[]) => {
+  // Debounced backend persist handle
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const schedulePersistToBackend = useCallback((data: CashFlowSection[]) => {
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(async () => {
+      try {
+        if (typeof window === 'undefined') return;
+        const userId = localStorage.getItem('userId');
+        if (!userId) return;
+        await fetch('/api/reports/cashflow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, cashFlowData: data })
+        });
+      } catch (err) {
+        console.error('Autosave to backend failed:', err);
+      }
+    }, 800);
+  }, []);
+
+  // Helper function to save cashflow data with user-specific key and optionally persist to backend
+  const saveCashFlowData = useCallback((data: CashFlowSection[], persistToBackend: boolean = true) => {
     if (typeof window !== 'undefined') {
       const userId = localStorage.getItem('userId');
       const key = userId ? `cashFlowData_${userId}` : 'cashFlowData';
       localStorage.setItem(key, JSON.stringify(data));
+      if (persistToBackend && userId) {
+        schedulePersistToBackend(data);
+      }
     }
-  };
+  }, [schedulePersistToBackend]);
+
+  // Load from backend on mount for cross-device persistence
+  useEffect(() => {
+    const fetchRemote = async () => {
+      try {
+        if (typeof window === 'undefined') return;
+        const userId = localStorage.getItem('userId');
+        if (!userId) return;
+        const res = await fetch(`/api/reports/cashflow?userId=${encodeURIComponent(userId)}`);
+        if (!res.ok) return;
+        const remoteData: CashFlowSection[] | null = await res.json();
+        if (remoteData && Array.isArray(remoteData)) {
+          setCashFlowData(remoteData);
+          // Save locally but avoid immediate re-persist to backend to prevent loops
+          saveCashFlowData(remoteData, false);
+        }
+      } catch (err) {
+        console.error('Failed to fetch cashflow from backend:', err);
+      }
+    };
+    fetchRemote();
+  }, [saveCashFlowData]);
 
 
 
@@ -856,11 +901,9 @@ export default function ReportsPage() {
     setTagSearchQuery(''); // Clear search when modal is closed
   };
 
-  const handleSave = () => {
-    // Save to localStorage
+  const handleSave = async () => {
     saveCashFlowData(cashFlowData);
     setIsEditing(false);
-    // You can add a success message or notification here
   };
 
   const handleDownloadCSV = () => {

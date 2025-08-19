@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES } from '../../aws-client';
 
 export async function POST(request: Request) {
@@ -20,21 +20,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Save cashflow data to DynamoDB using the TAGS table for now
-    // You can create a dedicated reports table later
-    const cashflowRecord = {
-      id: `cashflow_${userId}`,
-      userId,
-      cashFlowData,
-      type: 'cashflow_report',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
+    // Save cashflow data to DynamoDB in the REPORTS table
+    const now = new Date().toISOString();
+    // Upsert: update cashFlowData and updatedAt, set createdAt if item is new
     await docClient.send(
-      new PutCommand({
-        TableName: TABLES.TAGS, // Using existing TAGS table
-        Item: cashflowRecord,
+      new UpdateCommand({
+        TableName: TABLES.REPORTS,
+        Key: { id: `cashflow_${userId}` },
+        UpdateExpression: 'SET #d = :data, #u = :updatedAt, #uid = :userId, #t = :type, #ca = if_not_exists(#ca, :createdAt)',
+        ExpressionAttributeNames: {
+          '#d': 'cashFlowData',
+          '#u': 'updatedAt',
+          '#uid': 'userId',
+          '#t': 'type',
+          '#ca': 'createdAt',
+        },
+        ExpressionAttributeValues: {
+          ':data': cashFlowData,
+          ':updatedAt': now,
+          ':userId': userId,
+          ':type': 'cashflow_report',
+          ':createdAt': now,
+        },
       })
     );
 
@@ -67,7 +74,7 @@ export async function GET(request: Request) {
     // Retrieve cashflow data from DynamoDB
     const result = await docClient.send(
       new GetCommand({
-        TableName: TABLES.TAGS, // Using existing TAGS table
+        TableName: TABLES.REPORTS,
         Key: { id: `cashflow_${userId}` },
       })
     );
@@ -78,8 +85,21 @@ export async function GET(request: Request) {
 
     return NextResponse.json(result.Item.cashFlowData);
 
-  } catch (error) {
-    console.error('Error fetching cashflow data:', error);
+  } catch (error: unknown) {
+    // If the table doesn't exist in this region/account, DynamoDB returns ResourceNotFoundException
+    const err = error as { name?: string } | undefined;
+    if (err?.name === 'ResourceNotFoundException') {
+      console.error('Cashflow table not found. Check TABLES.REPORTS and AWS_REGION.', {
+        table: TABLES.REPORTS,
+        region: process.env.AWS_REGION,
+      });
+      // Return null so frontend treats it as no data yet instead of a hard error
+      return NextResponse.json(null);
+    }
+    console.error('Error fetching cashflow data:', error, {
+      table: TABLES.REPORTS,
+      region: process.env.AWS_REGION,
+    });
     return NextResponse.json(
       { error: 'Failed to fetch cashflow data' },
       { status: 500 }
