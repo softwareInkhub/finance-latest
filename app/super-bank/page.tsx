@@ -1177,8 +1177,8 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
   // --- A4 Pagination Logic ---
   const pages: JSX.Element[] = [
     // Tag Summary Page
-    <div key="tag-summary" style={{ width: `${A4_WIDTH_PX}px`, minHeight: `${A4_HEIGHT_PX}px`, padding: '32px', boxSizing: 'border-box', background: 'white', pageBreakAfter: 'always' }}>
-      <div className="bg-white rounded-xl shadow p-6">
+    <div key="tag-summary" style={{ width: exportingAllPages ? `${A4_WIDTH_PX}px` : '100%', minHeight: `${A4_HEIGHT_PX}px`, padding: 0, boxSizing: 'border-box', background: 'transparent', pageBreakAfter: 'always' }}>
+      <div>
         <h3 className="text-xl font-bold mb-4 text-blue-700 tracking-tight">Tag Summary</h3>
         <div className="text-xs text-gray-500 mb-2">
           Showing all tags with their total credits, debits, and balance
@@ -1230,8 +1230,8 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
     </div>,
     // Tag Transactions Page (4th page)
     ...(selectedTagForPage4 ? [(
-      <div key="tag-transactions" style={{ width: `${A4_WIDTH_PX}px`, minHeight: `${A4_HEIGHT_PX}px`, padding: '32px', boxSizing: 'border-box', background: 'white', pageBreakAfter: 'always' }}>
-        <div className="bg-white rounded-xl shadow p-6">
+      <div key="tag-transactions" style={{ width: exportingAllPages ? `${A4_WIDTH_PX}px` : '100%', minHeight: `${A4_HEIGHT_PX}px`, padding: 0, boxSizing: 'border-box', background: 'transparent', pageBreakAfter: 'always' }}>
+        <div>
           <div className="mb-6">
             <div className="flex justify-between items-start mb-4">
               <div>
@@ -1520,7 +1520,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Super Bank Report" maxWidthClass="max-w-[810px]">
+    <Modal isOpen={isOpen} onClose={onClose} title="Super Bank Report" maxWidthClass="max-w-[1200px]">
       {/* Download Dropdown */}
       <div className="relative">
         <div className="absolute top-4 right-4 z-10">
@@ -2099,7 +2099,7 @@ export default function SuperBankPage() {
   }
 
   // Create mappedRowsWithConditions with proper condition evaluation
-  const mappedRowsWithConditions = transactions.map(tx => {
+  const mappedRowsWithConditions = useMemo(() => transactions.map(tx => {
     // Build the mapped row as for the table
     const mapping = bankMappings[tx.bankId]?.mapping || {};
     const reverseMap: Record<string, string> = {};
@@ -2146,7 +2146,7 @@ export default function SuperBankPage() {
       // Apply conditions for Dr./Cr.
       mappedRow['Dr./Cr.'] = getValueForColumn(tx, String(tx.bankId), 'Dr./Cr.');
       return mappedRow as Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string; bankName?: string };
-  });
+  }), [transactions, bankMappings, superHeader, bankIdNameMap]);
 
   // Tag filter logic: filter mappedRowsWithConditions by selected tags first
   const tagFilteredRows = tagFilters.length > 0
@@ -2485,7 +2485,7 @@ export default function SuperBankPage() {
         totalTransactions: filteredRows.length,
         totalBanks: stats.totalBanks,
         totalAccounts: stats.totalAccounts,
-        transactions: filteredRows,
+        transactions: mappedRowsWithConditions,
         lastUpdated: new Date().toISOString()
       }));
     }
