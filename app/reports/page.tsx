@@ -153,7 +153,9 @@ export default function ReportsPage() {
   // Load data from localStorage or use initial data
   const [cashFlowData, setCashFlowData] = useState<CashFlowSection[]>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('cashFlowData');
+      const userId = localStorage.getItem('userId');
+      const key = userId ? `cashFlowData_${userId}` : 'cashFlowData';
+      const saved = localStorage.getItem(key);
       return saved ? JSON.parse(saved) : initialData;
     }
     return initialData;
@@ -183,6 +185,35 @@ export default function ReportsPage() {
   const [showSubItemAddModal, setShowSubItemAddModal] = useState(false);
   const [newSubItemName, setNewSubItemName] = useState('');
   const [showSubItemTagsModal, setShowSubItemTagsModal] = useState(false);
+
+  // Edit sub-item state variables
+  const [showEditSubItemModal, setShowEditSubItemModal] = useState(false);
+  const [editingSubItem, setEditingSubItem] = useState<{sectionId: string, groupId: string, parentItemId: string, subItemId: string, currentName: string} | null>(null);
+  const [editSubItemName, setEditSubItemName] = useState('');
+
+  // Edit group and main item state variables
+  const [showEditGroupModal, setShowEditGroupModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<{sectionId: string, groupId: string, currentName: string} | null>(null);
+  const [editGroupName, setEditGroupName] = useState('');
+  const [showEditMainItemModal, setShowEditMainItemModal] = useState(false);
+  const [editingMainItem, setEditingMainItem] = useState<{sectionId: string, groupId: string, itemId: string, currentName: string} | null>(null);
+  const [editMainItemName, setEditMainItemName] = useState('');
+
+  // Sub-sub-item state variables
+  const [showSubSubItemOptionModal, setShowSubSubItemOptionModal] = useState(false);
+  const [pendingSubSubItemAdd, setPendingSubSubItemAdd] = useState<{sectionId: string, groupId: string, parentItemId: string, subItemId: string} | null>(null);
+  const [showSubSubItemAddModal, setShowSubSubItemAddModal] = useState(false);
+  const [newSubSubItemName, setNewSubSubItemName] = useState('');
+  const [showSubSubItemTagsModal, setShowSubSubItemTagsModal] = useState(false);
+
+  // Helper function to save cashflow data with user-specific key
+  const saveCashFlowData = (data: CashFlowSection[]) => {
+    if (typeof window !== 'undefined') {
+      const userId = localStorage.getItem('userId');
+      const key = userId ? `cashFlowData_${userId}` : 'cashFlowData';
+      localStorage.setItem(key, JSON.stringify(data));
+    }
+  };
 
 
 
@@ -296,7 +327,7 @@ export default function ReportsPage() {
       });
 
       // Save to localStorage
-      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      saveCashFlowData(updated);
       return updated;
     });
   };
@@ -327,7 +358,7 @@ export default function ReportsPage() {
       });
 
       // Save to localStorage
-      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      saveCashFlowData(updated);
       return updated;
     });
   };
@@ -375,7 +406,7 @@ export default function ReportsPage() {
       });
 
       // Save to localStorage
-      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      saveCashFlowData(updated);
       return updated;
     });
 
@@ -432,7 +463,7 @@ export default function ReportsPage() {
       });
 
       // Save to localStorage
-      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      saveCashFlowData(updated);
       return updated;
     });
 
@@ -519,7 +550,7 @@ export default function ReportsPage() {
       });
 
       // Save to localStorage
-      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      saveCashFlowData(updated);
       return updated;
     });
 
@@ -561,7 +592,7 @@ export default function ReportsPage() {
       });
 
       // Save to localStorage
-      localStorage.setItem('cashFlowData', JSON.stringify(updated));
+      saveCashFlowData(updated);
       return updated;
     });
 
@@ -632,7 +663,7 @@ export default function ReportsPage() {
     tag.name && tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase())
   );
 
-  // Function to check if a tag already exists in cashflow data
+  // Function to check if a tag already exists anywhere in the cashflow data
   const isTagAlreadyAdded = (tagName: string): boolean => {
     for (const section of cashFlowData) {
       for (const group of section.groups) {
@@ -646,6 +677,14 @@ export default function ReportsPage() {
               if (subItem.particular === tagName && subItem.createdByTag) {
                 return true;
               }
+              // Check sub-sub-items too
+              if (subItem.subItems) {
+                for (const subSubItem of subItem.subItems) {
+                  if (subSubItem.particular === tagName && subSubItem.createdByTag) {
+                    return true;
+                  }
+                }
+              }
             }
           }
         }
@@ -657,7 +696,7 @@ export default function ReportsPage() {
   const handleAddSelectedTags = async () => {
     if (modalSelectedTags.length === 0) return;
     
-    // Check if any tags are already added
+    // Check if any tags are already added anywhere in the cashflow
     const alreadyAddedTags = modalSelectedTags.filter(tag => isTagAlreadyAdded(tag.name));
     if (alreadyAddedTags.length > 0) {
       const tagNames = alreadyAddedTags.map(tag => `"${tag.name}"`).join(', ');
@@ -712,7 +751,7 @@ export default function ReportsPage() {
         });
 
         // Save to localStorage
-        localStorage.setItem('cashFlowData', JSON.stringify(updated));
+        saveCashFlowData(updated);
         return updated;
       });
 
@@ -731,7 +770,7 @@ export default function ReportsPage() {
   const handleAddSelectedSubItemTags = async () => {
     if (modalSelectedTags.length === 0 || !pendingSubItemAdd) return;
     
-    // Check if any tags are already added
+    // Check if any tags are already added anywhere in the cashflow
     const alreadyAddedTags = modalSelectedTags.filter(tag => isTagAlreadyAdded(tag.name));
     if (alreadyAddedTags.length > 0) {
       const tagNames = alreadyAddedTags.map(tag => `"${tag.name}"`).join(', ');
@@ -794,7 +833,7 @@ export default function ReportsPage() {
         });
 
         // Save to localStorage
-        localStorage.setItem('cashFlowData', JSON.stringify(updated));
+        saveCashFlowData(updated);
         return updated;
       });
 
@@ -819,7 +858,7 @@ export default function ReportsPage() {
 
   const handleSave = () => {
     // Save to localStorage
-    localStorage.setItem('cashFlowData', JSON.stringify(cashFlowData));
+    saveCashFlowData(cashFlowData);
     setIsEditing(false);
     // You can add a success message or notification here
   };
@@ -895,6 +934,339 @@ export default function ReportsPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Edit sub-item functions
+  const openEditSubItemModal = (sectionId: string, groupId: string, parentItemId: string, subItemId: string, currentName: string) => {
+    setEditingSubItem({ sectionId, groupId, parentItemId, subItemId, currentName });
+    setEditSubItemName(currentName);
+    setShowEditSubItemModal(true);
+  };
+
+  const handleEditSubItem = () => {
+    if (!editingSubItem || !editSubItemName.trim()) return;
+
+    setCashFlowData(prev => {
+      const updated = prev.map(section => {
+        if (section.id === editingSubItem.sectionId) {
+          return {
+            ...section,
+            groups: section.groups.map(group => {
+              if (group.id === editingSubItem.groupId) {
+                return {
+                  ...group,
+                  items: group.items.map(item => {
+                    if (item.id === editingSubItem.parentItemId) {
+                      return {
+                        ...item,
+                        subItems: item.subItems?.map(subItem => {
+                          if (subItem.id === editingSubItem.subItemId) {
+                            return {
+                              ...subItem,
+                              particular: editSubItemName.trim()
+                            };
+                          }
+                          return subItem;
+                        }) || []
+                      };
+                    }
+                    return item;
+                  })
+                };
+              }
+              return group;
+            })
+          };
+        }
+        return section;
+      });
+
+      // Save to localStorage
+      saveCashFlowData(updated);
+      return updated;
+    });
+
+    // Close modal and reset
+    setShowEditSubItemModal(false);
+    setEditingSubItem(null);
+    setEditSubItemName('');
+  };
+
+  const closeEditSubItemModal = () => {
+    setShowEditSubItemModal(false);
+    setEditingSubItem(null);
+    setEditSubItemName('');
+  };
+
+  // Edit group functions
+  const openEditGroupModal = (sectionId: string, groupId: string, currentName: string) => {
+    setEditingGroup({ sectionId, groupId, currentName });
+    setEditGroupName(currentName);
+    setShowEditGroupModal(true);
+  };
+
+  const handleEditGroup = () => {
+    if (!editingGroup || !editGroupName.trim()) return;
+
+    setCashFlowData(prev => {
+      const updated = prev.map(section => {
+        if (section.id === editingGroup.sectionId) {
+          return {
+            ...section,
+            groups: section.groups.map(group => {
+              if (group.id === editingGroup.groupId) {
+                return {
+                  ...group,
+                  title: editGroupName.trim()
+                };
+              }
+              return group;
+            })
+          };
+        }
+        return section;
+      });
+
+      // Save to localStorage
+      saveCashFlowData(updated);
+      return updated;
+    });
+
+    // Close modal and reset
+    setShowEditGroupModal(false);
+    setEditingGroup(null);
+    setEditGroupName('');
+  };
+
+  const closeEditGroupModal = () => {
+    setShowEditGroupModal(false);
+    setEditingGroup(null);
+    setEditGroupName('');
+  };
+
+  // Edit main item functions
+  const openEditMainItemModal = (sectionId: string, groupId: string, itemId: string, currentName: string) => {
+    setEditingMainItem({ sectionId, groupId, itemId, currentName });
+    setEditMainItemName(currentName);
+    setShowEditMainItemModal(true);
+  };
+
+  const handleEditMainItem = () => {
+    if (!editingMainItem || !editMainItemName.trim()) return;
+
+    setCashFlowData(prev => {
+      const updated = prev.map(section => {
+        if (section.id === editingMainItem.sectionId) {
+          return {
+            ...section,
+            groups: section.groups.map(group => {
+              if (group.id === editingMainItem.groupId) {
+                return {
+                  ...group,
+                  items: group.items.map(item => {
+                    if (item.id === editingMainItem.itemId) {
+                      return {
+                        ...item,
+                        particular: editMainItemName.trim()
+                      };
+                    }
+                    return item;
+                  })
+                };
+              }
+              return group;
+            })
+          };
+        }
+        return section;
+      });
+
+      // Save to localStorage
+      saveCashFlowData(updated);
+      return updated;
+    });
+
+    // Close modal and reset
+    setShowEditMainItemModal(false);
+    setEditingMainItem(null);
+    setEditMainItemName('');
+  };
+
+  const closeEditMainItemModal = () => {
+    setShowEditMainItemModal(false);
+    setEditingMainItem(null);
+    setEditMainItemName('');
+  };
+
+  // Sub-sub-item functions
+  const openSubSubItemAddModal = (sectionId: string, groupId: string, parentItemId: string, subItemId: string) => {
+    setPendingSubSubItemAdd({ sectionId, groupId, parentItemId, subItemId });
+    setShowSubSubItemOptionModal(true);
+  };
+
+  const openSubSubItemAddNameModal = () => {
+    setShowSubSubItemAddModal(true);
+    setNewSubSubItemName('');
+    setShowSubSubItemOptionModal(false);
+  };
+
+  const openSubSubItemAddTagsModal = () => {
+    setShowSubSubItemTagsModal(true);
+    setShowSubSubItemOptionModal(false);
+    fetchTags();
+  };
+
+  const handleAddSubSubItem = () => {
+    if (!pendingSubSubItemAdd || !newSubSubItemName.trim()) return;
+    
+    const section = cashFlowData.find(s => s.id === pendingSubSubItemAdd.sectionId);
+    
+    const newSubSubItem: CashFlowItem = {
+      id: Date.now().toString(),
+      particular: newSubSubItemName.trim(),
+      amount: 0,
+      type: section?.type === 'inflow' ? 'inflow' : 'outflow'
+    };
+
+    setCashFlowData(prev => {
+      const updated = prev.map(section => {
+        if (section.id === pendingSubSubItemAdd.sectionId) {
+          return {
+            ...section,
+            groups: section.groups.map(group => {
+              if (group.id === pendingSubSubItemAdd.groupId) {
+                return {
+                  ...group,
+                  items: group.items.map(item => {
+                    if (item.id === pendingSubSubItemAdd.parentItemId) {
+                      return {
+                        ...item,
+                        subItems: item.subItems?.map(subItem => {
+                          if (subItem.id === pendingSubSubItemAdd.subItemId) {
+                            return {
+                              ...subItem,
+                              subItems: [...(subItem.subItems || []), newSubSubItem]
+                            };
+                          }
+                          return subItem;
+                        }) || []
+                      };
+                    }
+                    return item;
+                  })
+                };
+              }
+              return group;
+            })
+          };
+        }
+        return section;
+      });
+
+      // Save to localStorage
+      saveCashFlowData(updated);
+      return updated;
+    });
+
+    // Close modal and reset
+    setShowSubSubItemAddModal(false);
+    setPendingSubSubItemAdd(null);
+    setNewSubSubItemName('');
+  };
+
+  const closeSubSubItemAddModal = () => {
+    setShowSubSubItemAddModal(false);
+    setPendingSubSubItemAdd(null);
+    setNewSubSubItemName('');
+  };
+
+  const handleAddSelectedSubSubItemTags = async () => {
+    if (modalSelectedTags.length === 0 || !pendingSubSubItemAdd) return;
+    
+    // Check if any tags are already added anywhere in the cashflow
+    const alreadyAddedTags = modalSelectedTags.filter(tag => isTagAlreadyAdded(tag.name));
+    if (alreadyAddedTags.length > 0) {
+      const tagNames = alreadyAddedTags.map(tag => `"${tag.name}"`).join(', ');
+      alert(`The following tags are already added to the cashflow statement: ${tagNames}`);
+      return;
+    }
+    
+    setIsAddingTag(true);
+    console.log('Adding tags as sub-sub-items:', modalSelectedTags.map(t => t.name));
+    
+    try {
+      // Process each selected tag
+      const newSubSubItems: CashFlowItem[] = [];
+      
+      for (const tag of modalSelectedTags) {
+        // Fetch tag financial data
+        const tagData = await fetchTagFinancialData(tag.name);
+        console.log('Tag financial data for', tag.name, ':', tagData);
+        
+        // Create a new sub-sub-item with the tag name and financial data
+        const newSubSubItem: CashFlowItem = {
+          id: Date.now().toString() + '-' + tag.id,
+          particular: tag.name,
+          amount: tagData.balance, // Use the balance as the amount
+          type: pendingSubSubItemAdd.sectionId === '1' ? 'inflow' : 'outflow',
+          createdByTag: true,
+          tagData: tagData
+        };
+        
+        newSubSubItems.push(newSubSubItem);
+      }
+      
+      console.log('Created new sub-sub-items:', newSubSubItems);
+
+      setCashFlowData(prev => {
+        const updated = prev.map(section => {
+          if (section.id === pendingSubSubItemAdd.sectionId) {
+            return {
+              ...section,
+              groups: section.groups.map(group => {
+                if (group.id === pendingSubSubItemAdd.groupId) {
+                  return {
+                    ...group,
+                    items: group.items.map(item => {
+                      if (item.id === pendingSubSubItemAdd.parentItemId) {
+                        return {
+                          ...item,
+                          subItems: item.subItems?.map(subItem => {
+                            if (subItem.id === pendingSubSubItemAdd.subItemId) {
+                              return {
+                                ...subItem,
+                                subItems: [...(subItem.subItems || []), ...newSubSubItems]
+                              };
+                            }
+                            return subItem;
+                          }) || []
+                        };
+                      }
+                      return item;
+                    })
+                  };
+                }
+                return group;
+              })
+            };
+          }
+          return section;
+        });
+
+        // Save to localStorage
+        saveCashFlowData(updated);
+        return updated;
+      });
+
+      // Close modals and reset
+      setShowSubSubItemTagsModal(false);
+      setModalSelectedTags([]);
+      setPendingSubSubItemAdd(null);
+    } catch (error) {
+      console.error('Error adding sub-sub-item tags:', error);
+    } finally {
+      setIsAddingTag(false);
+    }
   };
 
     return (
@@ -1044,9 +1416,19 @@ export default function ReportsPage() {
                                  <button
                                    onClick={(e) => {
                                      e.stopPropagation();
+                                     openEditGroupModal(cashFlowData[0].id, group.id, group.title);
+                                   }}
+                                   className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                   title="Edit group"
+                                 >
+                                   <RiEdit2Line size={14} />
+                                 </button>
+                                 <button
+                                   onClick={(e) => {
+                                     e.stopPropagation();
                                      openAddModal(cashFlowData[0].id, group.id);
                                    }}
-                                   className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                   className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                                    title="Add new item"
                                  >
                                    <RiAddLine size={14} />
@@ -1056,7 +1438,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openDeleteModal(cashFlowData[0].id, group.id);
                                    }}
-                                   className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                   className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                    title="Delete group"
                                  >
                                    <RiDeleteBin6Line size={14} />
@@ -1097,16 +1479,29 @@ export default function ReportsPage() {
                                 </div>
                                                                  {isEditing && (
                                    <div className="flex items-center gap-1">
+                                     {/* Only show edit button for main items that were created by name (not by tags) */}
+                                     {!item.createdByTag && (
+                                       <button
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           openEditMainItemModal(cashFlowData[0].id, group.id, item.id, item.particular);
+                                         }}
+                                         className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                         title="Edit item"
+                                       >
+                                         <RiEdit2Line size={14} />
+                                       </button>
+                                     )}
                                      {!item.createdByTag && (
                                        <button
                                          onClick={(e) => {
                                            e.stopPropagation();
                                            openSubItemAddModal(cashFlowData[0].id, group.id, item.id);
                                          }}
-                                         className="p-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                         className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                                          title="Add sub-item"
                                        >
-                                         <RiAddLine size={12} />
+                                         <RiAddLine size={14} />
                                        </button>
                                      )}
                                      <button
@@ -1114,10 +1509,10 @@ export default function ReportsPage() {
                                          e.stopPropagation();
                                          openDeleteModal(cashFlowData[0].id, group.id, item.id);
                                        }}
-                                       className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                       className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                        title="Delete item"
                                      >
-                                       <RiDeleteBin6Line size={12} />
+                                       <RiDeleteBin6Line size={14} />
                                      </button>
                                    </div>
                                  )}
@@ -1139,17 +1534,43 @@ export default function ReportsPage() {
                                       </div>
                                     )}
                                   </div>
-                                  {isEditing && (
+                                                                    {isEditing && (
                                     <div className="flex items-center gap-1">
+                                      {/* Only show add button for sub-items that were created by name (not by tags) */}
+                                      {!subItem.createdByTag && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openSubSubItemAddModal(cashFlowData[0].id, group.id, item.id, subItem.id);
+                                          }}
+                                          className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                          title="Add sub-sub-item"
+                                        >
+                                          <RiAddLine size={14} />
+                                        </button>
+                                      )}
+                                      {/* Only show edit button for sub-items that were created by name (not by tags) */}
+                                      {!subItem.createdByTag && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openEditSubItemModal(cashFlowData[0].id, group.id, item.id, subItem.id, subItem.particular);
+                                          }}
+                                          className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                          title="Edit sub-item"
+                                        >
+                                          <RiEdit2Line size={14} />
+                                        </button>
+                                      )}
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           openDeleteModal(cashFlowData[0].id, group.id, item.id, subItem.id);
                                         }}
-                                        className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                        className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                         title="Delete sub-item"
                                       >
-                                        <RiDeleteBin6Line size={10} />
+                                        <RiDeleteBin6Line size={14} />
                                       </button>
                                     </div>
                                   )}
@@ -1200,9 +1621,19 @@ export default function ReportsPage() {
                                  <button
                                    onClick={(e) => {
                                      e.stopPropagation();
+                                     openEditGroupModal(cashFlowData[1].id, group.id, group.title);
+                                   }}
+                                   className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                   title="Edit group"
+                                 >
+                                   <RiEdit2Line size={14} />
+                                 </button>
+                                 <button
+                                   onClick={(e) => {
+                                     e.stopPropagation();
                                      openAddModal(cashFlowData[1].id, group.id);
                                    }}
-                                   className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                   className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                                    title="Add new item"
                                  >
                                    <RiAddLine size={14} />
@@ -1212,7 +1643,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openDeleteModal(cashFlowData[1].id, group.id);
                                    }}
-                                   className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                   className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                    title="Delete group"
                                  >
                                    <RiDeleteBin6Line size={14} />
@@ -1253,16 +1684,29 @@ export default function ReportsPage() {
                                  </div>
                                  {isEditing && (
                                    <div className="flex items-center gap-1">
+                                     {/* Only show edit button for main items that were created by name (not by tags) */}
+                                     {!item.createdByTag && (
+                                       <button
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           openEditMainItemModal(cashFlowData[1].id, group.id, item.id, item.particular);
+                                         }}
+                                         className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                         title="Edit item"
+                                       >
+                                         <RiEdit2Line size={14} />
+                                       </button>
+                                     )}
                                      {!item.createdByTag && (
                                        <button
                                          onClick={(e) => {
                                            e.stopPropagation();
                                            openSubItemAddModal(cashFlowData[1].id, group.id, item.id);
                                          }}
-                                         className="p-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                                         className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
                                          title="Add sub-item"
                                        >
-                                         <RiAddLine size={12} />
+                                         <RiAddLine size={14} />
                                        </button>
                                      )}
                                      <button
@@ -1270,10 +1714,10 @@ export default function ReportsPage() {
                                          e.stopPropagation();
                                          openDeleteModal(cashFlowData[1].id, group.id, item.id);
                                        }}
-                                       className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                       className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                        title="Delete item"
                                      >
-                                       <RiDeleteBin6Line size={12} />
+                                       <RiDeleteBin6Line size={14} />
                                      </button>
                                    </div>
                                  )}
@@ -1297,15 +1741,41 @@ export default function ReportsPage() {
                                    </div>
                                    {isEditing && (
                                      <div className="flex items-center gap-1">
+                                       {/* Only show add button for sub-items that were created by name (not by tags) */}
+                                       {!subItem.createdByTag && (
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             openSubSubItemAddModal(cashFlowData[1].id, group.id, item.id, subItem.id);
+                                           }}
+                                           className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                           title="Add sub-sub-item"
+                                         >
+                                           <RiAddLine size={14} />
+                                         </button>
+                                       )}
+                                       {/* Only show edit button for sub-items that were created by name (not by tags) */}
+                                       {!subItem.createdByTag && (
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             openEditSubItemModal(cashFlowData[1].id, group.id, item.id, subItem.id, subItem.particular);
+                                           }}
+                                           className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                           title="Edit sub-item"
+                                         >
+                                           <RiEdit2Line size={14} />
+                                         </button>
+                                       )}
                                        <button
                                          onClick={(e) => {
                                            e.stopPropagation();
                                            openDeleteModal(cashFlowData[1].id, group.id, item.id, subItem.id);
                                          }}
-                                         className="p-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                         className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                                          title="Delete sub-item"
                                        >
-                                         <RiDeleteBin6Line size={10} />
+                                         <RiDeleteBin6Line size={14} />
                                        </button>
                                      </div>
                                    )}
@@ -1556,10 +2026,10 @@ export default function ReportsPage() {
                 </div>
       )}
 
-           {/* Tags Modal */}
-           {showTagsModal && (
-             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+                 {/* Tags Modal */}
+      {showTagsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl mx-4 max-h-[80vh] flex flex-col">
                  <div className="flex items-center justify-between mb-4">
                    <h3 className="text-lg font-semibold text-gray-800">Select a Tag</h3>
                    <button
@@ -1810,10 +2280,10 @@ export default function ReportsPage() {
         </div>
       )}
 
-             {/* Sub-Item Tags Modal */}
-       {showSubItemTagsModal && (
-         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+                   {/* Sub-Item Tags Modal */}
+      {showSubItemTagsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl mx-4 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-800">Select a Tag for Sub-Item</h3>
               <button
@@ -1829,6 +2299,37 @@ export default function ReportsPage() {
 
                          <div className="space-y-4 flex-1 overflow-y-auto">
                <p className="text-gray-600 mb-4">Choose a tag to create a new sub-item:</p>
+               
+               {/* Search Bar */}
+               <div className="relative">
+                 <input
+                   type="text"
+                   placeholder="Search tags..."
+                   className="w-full border border-gray-200 px-4 py-2 pl-10 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                   value={tagSearchQuery}
+                   onChange={e => setTagSearchQuery(e.target.value)}
+                 />
+                 <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                   </svg>
+                 </div>
+                 {tagSearchQuery && (
+                   <button
+                     onClick={() => setTagSearchQuery('')}
+                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                   >
+                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                     </svg>
+                   </button>
+                 )}
+               </div>
+               {tagSearchQuery && (
+                 <div className="text-sm text-gray-600">
+                   Found {filteredTags.length} tag(s) matching &quot;{tagSearchQuery}&quot;
+                 </div>
+               )}
               
               {/* Selected Tags Display */}
               {modalSelectedTags.length > 0 && (
@@ -1862,30 +2363,46 @@ export default function ReportsPage() {
               )}
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
-                {allTags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => handleTagSelect(tag)}
-                    className={`p-3 border rounded-lg hover:bg-gray-50 transition-colors text-left ${
-                      modalSelectedTags.some(t => t.id === tag.id)
-                        ? 'border-blue-500 bg-blue-50' 
-                        : 'border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-4 h-4 rounded-full"
-                        style={{ backgroundColor: tag.color || '#3B82F6' }}
-                      />
-                      <span className="font-medium text-gray-800">{tag.name}</span>
-                    </div>
-                  </button>
-                ))}
+                {filteredTags.map((tag) => {
+                  const isAlreadyAdded = isTagAlreadyAdded(tag.name);
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => !isAlreadyAdded && handleTagSelect(tag)}
+                      disabled={isAlreadyAdded}
+                      className={`p-3 border rounded-lg transition-colors text-left ${
+                        isAlreadyAdded
+                          ? 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60'
+                          : modalSelectedTags.some(t => t.id === tag.id)
+                            ? 'border-blue-500 bg-blue-50 hover:bg-blue-100' 
+                            : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: tag.color || '#3B82F6' }}
+                        />
+                        <span className={`font-medium ${isAlreadyAdded ? 'text-gray-500' : 'text-gray-800'}`}>
+                          {tag.name}
+                        </span>
+                        {isAlreadyAdded && (
+                          <span className="text-xs text-gray-500 ml-auto">✓ Added</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
               
-              {allTags.length === 0 && (
+              {filteredTags.length === 0 && (
                 <div className="text-center py-8 text-gray-500">
-                  <p>No tags found. Create some tags in the Super Bank first.</p>
+                  <p>
+                    {tagSearchQuery 
+                      ? `No tags found matching &quot;${tagSearchQuery}&quot;. Try a different search term.`
+                      : 'No tags found. Create some tags in the Super Bank first.'
+                    }
+                  </p>
                 </div>
               )}
             </div>
@@ -1908,6 +2425,413 @@ export default function ReportsPage() {
                   {isAddingTag ? 'Adding...' : 'SAVE'}
                 </button>
              </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Sub-Item Option Modal */}
+      {showSubSubItemOptionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Add Sub-Sub-Item</h3>
+              <button
+                onClick={() => setShowSubSubItemOptionModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <p className="text-gray-600 mb-4">How would you like to add this sub-sub-item?</p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={openSubSubItemAddNameModal}
+                  className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <RiAddLine className="text-blue-600" size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-800">Add by Name</h4>
+                      <p className="text-sm text-gray-600">Create a sub-sub-item with a custom name</p>
+                    </div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={openSubSubItemAddTagsModal}
+                  className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                      <RiBarChartLine className="text-green-600" size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-gray-800">Add by Tags</h4>
+                      <p className="text-sm text-gray-600">Create a sub-sub-item using predefined tags</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowSubSubItemOptionModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Sub-Item Add Modal */}
+      {showSubSubItemAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Add New Sub-Sub-Item</h3>
+              <button
+                onClick={closeSubSubItemAddModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sub-Sub-Item Name
+                </label>
+                <input
+                  type="text"
+                  value={newSubSubItemName}
+                  onChange={(e) => setNewSubSubItemName(e.target.value)}
+                  placeholder="Enter sub-sub-item name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeSubSubItemAddModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddSubSubItem}
+                disabled={!newSubSubItemName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Add Sub-Sub-Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Sub-Item Tags Modal */}
+      {showSubSubItemTagsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Select a Tag for Sub-Sub-Item</h3>
+              <button
+                onClick={() => {
+                  setShowSubSubItemTagsModal(false);
+                  setModalSelectedTags([]);
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4 flex-1 overflow-y-auto">
+              <p className="text-gray-600 mb-4">Choose a tag to create a new sub-sub-item:</p>
+              
+              {/* Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search tags..."
+                  className="w-full border border-gray-200 px-4 py-2 pl-10 rounded-lg focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+                  value={tagSearchQuery}
+                  onChange={e => setTagSearchQuery(e.target.value)}
+                />
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                {tagSearchQuery && (
+                  <button
+                    onClick={() => setTagSearchQuery('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {tagSearchQuery && (
+                <div className="text-sm text-gray-600">
+                  Found {filteredTags.length} tag(s) matching &quot;{tagSearchQuery}&quot;
+                </div>
+              )}
+              
+              {/* Selected Tags Display */}
+              {modalSelectedTags.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-blue-800">
+                      Selected Tags ({modalSelectedTags.length}):
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {modalSelectedTags.map((tag) => (
+                        <div key={tag.id} className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-blue-200">
+                          <div 
+                            className="w-4 h-4 rounded-full"
+                            style={{ backgroundColor: tag.color || '#3B82F6' }}
+                          />
+                          <span className="text-sm font-medium text-blue-800">{tag.name}</span>
+                          <button
+                            onClick={() => handleTagSelect(tag)}
+                            className="text-red-500 hover:text-red-700 text-sm font-bold"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-sm text-blue-600">
+                      Click &quot;Add Tags&quot; to add these tags as sub-sub-items
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
+                {filteredTags.map((tag) => {
+                  const isAlreadyAdded = isTagAlreadyAdded(tag.name);
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => !isAlreadyAdded && handleTagSelect(tag)}
+                      disabled={isAlreadyAdded}
+                      className={`p-3 border rounded-lg transition-colors text-left ${
+                        isAlreadyAdded
+                          ? 'border-gray-300 bg-gray-100 cursor-not-allowed opacity-60'
+                          : modalSelectedTags.some(t => t.id === tag.id)
+                            ? 'border-blue-500 bg-blue-50 hover:bg-blue-100' 
+                            : 'border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: tag.color || '#3B82F6' }}
+                        />
+                        <span className={`font-medium ${isAlreadyAdded ? 'text-gray-500' : 'text-gray-800'}`}>
+                          {tag.name}
+                        </span>
+                        {isAlreadyAdded && (
+                          <span className="text-xs text-gray-500 ml-auto">✓ Added</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              
+              {filteredTags.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>
+                    {tagSearchQuery 
+                      ? `No tags found matching &quot;${tagSearchQuery}&quot;. Try a different search term.`
+                      : 'No tags found. Create some tags in the Super Bank first.'
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowSubSubItemTagsModal(false);
+                  setModalSelectedTags([]);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddSelectedSubSubItemTags}
+                disabled={isAddingTag || modalSelectedTags.length === 0}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+              >
+                {isAddingTag ? 'Adding...' : 'SAVE'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Group Modal */}
+      {showEditGroupModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Edit Group</h3>
+              <button
+                onClick={closeEditGroupModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Group Name
+                </label>
+                <input
+                  type="text"
+                  value={editGroupName}
+                  onChange={(e) => setEditGroupName(e.target.value)}
+                  placeholder="Enter group name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeEditGroupModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditGroup}
+                disabled={!editGroupName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Main Item Modal */}
+      {showEditMainItemModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Edit Item</h3>
+              <button
+                onClick={closeEditMainItemModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Item Name
+                </label>
+                <input
+                  type="text"
+                  value={editMainItemName}
+                  onChange={(e) => setEditMainItemName(e.target.value)}
+                  placeholder="Enter item name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeEditMainItemModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditMainItem}
+                disabled={!editMainItemName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Sub-Item Modal */}
+      {showEditSubItemModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Edit Sub-Item</h3>
+              <button
+                onClick={closeEditSubItemModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sub-Item Name
+                </label>
+                <input
+                  type="text"
+                  value={editSubItemName}
+                  onChange={(e) => setEditSubItemName(e.target.value)}
+                  placeholder="Enter sub-item name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeEditSubItemModal}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSubItem}
+                disabled={!editSubItemName.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       )}
