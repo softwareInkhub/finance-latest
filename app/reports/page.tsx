@@ -263,7 +263,7 @@ export default function ReportsPage() {
 
 
   // Function to fetch tag financial data - using Redux data
-  const fetchTagFinancialData = async (tagName: string) => {
+  const fetchTagFinancialData = useCallback(async (tagName: string) => {
     try {
       if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) {
         console.error('No transactions data available in Redux');
@@ -326,7 +326,85 @@ export default function ReportsPage() {
       console.error('Error calculating tag financial data:', error);
       return { credit: 0, debit: 0, balance: 0 };
     }
-  };
+  }, [reduxAnalyticsData]);
+
+  // Keep a ref of latest cashFlowData to avoid effect dependency loops
+  const cashFlowDataRef = useRef<CashFlowSection[]>(cashFlowData);
+  useEffect(() => {
+    cashFlowDataRef.current = cashFlowData;
+  }, [cashFlowData]);
+
+  // Auto-refresh tag-based rows whenever analytics Redux data changes
+  useEffect(() => {
+    const refreshTagItems = async () => {
+      try {
+        if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) return;
+        // Collect unique tag names present in the current cashflow that were created from tags
+        const tagNames = new Set<string>();
+        const scanData = cashFlowDataRef.current || [];
+        scanData.forEach(section => {
+          section.groups.forEach(group => {
+            group.items.forEach(item => {
+              if (item.createdByTag) tagNames.add(item.particular);
+              item.subItems?.forEach(sub => {
+                if (sub.createdByTag) tagNames.add(sub.particular);
+                sub.subItems?.forEach(ss => {
+                  if (ss.createdByTag) tagNames.add(ss.particular);
+                });
+              });
+            });
+          });
+        });
+        if (tagNames.size === 0) return;
+
+        // Compute latest CR/DR/Bal for each tag using Redux transactions
+        const entries = await Promise.all(
+          Array.from(tagNames).map(async (name) => {
+            const data = await fetchTagFinancialData(name);
+            return [name, data] as const;
+          })
+        );
+        const tagToData = new Map(entries);
+
+        // Update all tag-created items with fresh balances
+        setCashFlowData(prev => {
+          const updated = prev.map(section => ({
+            ...section,
+            groups: section.groups.map(group => ({
+              ...group,
+              items: group.items.map(item => {
+                const updateItem = (node: CashFlowItem): CashFlowItem => {
+                  let next: CashFlowItem = { ...node };
+                  if (node.createdByTag) {
+                    const data = tagToData.get(node.particular);
+                    if (data) {
+                      next = { ...next, amount: data.balance, tagData: data };
+                    }
+                  }
+                  if (node.subItems && node.subItems.length > 0) {
+                    next = {
+                      ...next,
+                      subItems: node.subItems.map(updateItem)
+                    };
+                  }
+                  return next;
+                };
+                return updateItem(item);
+              })
+            }))
+          }));
+
+          // Persist updates (debounced) and local cache
+          saveCashFlowData(updated);
+          return updated;
+        });
+      } catch (err) {
+        console.error('Failed to refresh tag-based items:', err);
+      }
+    };
+
+    refreshTagItems();
+  }, [reduxAnalyticsData, saveCashFlowData, fetchTagFinancialData]);
 
       // Helper function to calculate item total including sub-items
   const calculateItemTotal = (item: CashFlowItem): number => {
