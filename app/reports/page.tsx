@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
 import { Tag } from '../types/transaction';
-import AnalyticsSummary from '../components/AnalyticsSummary';
 import { useAppSelector } from '../store/hooks';
 
 interface CashFlowItem {
@@ -27,6 +26,31 @@ interface TransactionData {
   amount?: number | string;
   'Dr./Cr.'?: string;
   tags?: Array<{ name: string }>;
+  // Optional fields that appear in analytics transactions
+  bankName?: string;
+  bankId?: string;
+  accountId?: string;
+  accountNumber?: string;
+  accountNo?: string;
+  account?: string;
+  account_id?: string;
+  Date?: string;
+  date?: string;
+  Description?: string;
+  description?: string;
+  Narration?: string;
+  narration?: string;
+  particulars?: string;
+  Particulars?: string;
+  Reference?: string;
+  reference?: string;
+  'Reference No.'?: string;
+  'reference no.'?: string;
+  remarks?: string;
+  Remarks?: string;
+  'Transaction Description'?: string;
+  'transaction description'?: string;
+  userAccountNumber?: string;
 }
 
 
@@ -274,7 +298,7 @@ export default function ReportsPage() {
       console.log(`Using ${transactions.length} transactions from Redux for tag: ${tagName}`);
       
       // Use exact same logic as Super Bank
-      const txs = transactions.filter((tx: { tags?: Array<{ name: string }> }) => 
+      const txs: TransactionData[] = transactions.filter((tx: TransactionData) =>
         Array.isArray(tx.tags) && tx.tags.some((t: { name: string }) => t.name === tagName)
       );
       console.log(`Found ${txs.length} transactions for tag ${tagName}`);
@@ -336,6 +360,11 @@ export default function ReportsPage() {
 
   // Loading state for refresh operations
   const [isRefreshing, setIsRefreshing] = useState(false);
+     const [isOperationsPanelOpen, setIsOperationsPanelOpen] = useState(true);
+  // New: modal to display transactions for a tag
+  const [showTagTransactionsModal, setShowTagTransactionsModal] = useState(false);
+  const [activeTagName, setActiveTagName] = useState<string | null>(null);
+  const [activeTagTransactions, setActiveTagTransactions] = useState<TransactionData[]>([]);
 
   // Manual refresh function to sync latest tag changes from Super Bank
   const handleRefreshTags = useCallback(async () => {
@@ -573,8 +602,147 @@ export default function ReportsPage() {
     return { totalInflow: inflow, totalOutflow: outflow, netFlow: net };
   }, [cashFlowData, calculateGroupTotal]);
 
+  // Function to get bank breakdown for tooltips
+  const getBankBreakdown = (type: 'inflow' | 'outflow' | 'net') => {
+    const bankData: { name: string; amount: number }[] = [];
+    
+    // Get bank data from Redux analytics data
+    if (reduxAnalyticsData && reduxAnalyticsData.transactions) {
+      const transactions = reduxAnalyticsData.transactions;
+      
+      // Create a map to store bank totals
+      const bankTotals: { [bankName: string]: number } = {};
+      
+      transactions.forEach((tx: TransactionData) => {
+        // Get bank name from transaction
+        const bankName = tx.bankName || tx.bankId || 'Unknown Bank';
+        
+        // Get amount from transaction
+        let amount = 0;
+        if (typeof tx.AmountRaw === 'number') {
+          amount = tx.AmountRaw || 0;
+        } else {
+          const amountField = tx.Amount || tx.amount || 0;
+          if (typeof amountField === 'number') {
+            amount = amountField;
+          } else if (typeof amountField === 'string') {
+            const cleaned = amountField.replace(/,/g, '').trim();
+            const num = parseFloat(cleaned);
+            amount = isNaN(num) ? 0 : num;
+          }
+        }
+        
+        // Determine if it's inflow or outflow based on Dr./Cr.
+        const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+        let isInflow = false;
+        
+        if (crdr === 'CR') {
+          isInflow = true;
+        } else if (crdr === 'DR') {
+          isInflow = false;
+        } else {
+          // If no Dr./Cr. specified, assume positive amounts are inflow
+          isInflow = amount > 0;
+        }
+        
+        // Add to bank totals based on type
+        if (type === 'inflow' && isInflow) {
+          bankTotals[bankName] = (bankTotals[bankName] || 0) + Math.abs(amount);
+        } else if (type === 'outflow' && !isInflow) {
+          bankTotals[bankName] = (bankTotals[bankName] || 0) + Math.abs(amount);
+        } else if (type === 'net') {
+          const currentTotal = bankTotals[bankName] || 0;
+          bankTotals[bankName] = currentTotal + (isInflow ? amount : -amount);
+        }
+      });
+      
+      // Convert to array format
+      Object.entries(bankTotals).forEach(([bankName, total]) => {
+        if (Math.abs(total) > 0) {
+          bankData.push({ name: bankName, amount: total });
+        }
+      });
+    }
+    
+    // If no bank data available, fall back to group data
+    if (bankData.length === 0) {
+      if (type === 'inflow') {
+        cashFlowData[0]?.groups?.forEach(group => {
+          const groupTotal = group.items.reduce((sum, item) => sum + (item.amount || 0), 0);
+          if (groupTotal > 0) {
+            bankData.push({ name: group.title, amount: groupTotal });
+          }
+        });
+      } else if (type === 'outflow') {
+        cashFlowData[1]?.groups?.forEach(group => {
+          const groupTotal = group.items.reduce((sum, item) => sum + (item.amount || 0), 0);
+          if (groupTotal > 0) {
+            bankData.push({ name: group.title, amount: groupTotal });
+          }
+        });
+      } else if (type === 'net') {
+        const inflowByGroup = getBankBreakdown('inflow');
+        const outflowByGroup = getBankBreakdown('outflow');
+        
+        const allGroups = new Set([...inflowByGroup.map(b => b.name), ...outflowByGroup.map(b => b.name)]);
+        
+        allGroups.forEach(groupName => {
+          const inflow = inflowByGroup.find(b => b.name === groupName)?.amount || 0;
+          const outflow = outflowByGroup.find(b => b.name === groupName)?.amount || 0;
+          const net = inflow - outflow;
+          if (net !== 0) {
+            bankData.push({ name: groupName, amount: net });
+          }
+        });
+      }
+    }
+    
+    return bankData.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  };
+
   const handleEdit = () => {
     setIsEditing(!isEditing);
+  };
+
+  // Function to expand all groups
+  const expandAllGroups = () => {
+    setCashFlowData(prev => {
+      const updated = prev.map(section => ({
+        ...section,
+        groups: section.groups.map(group => ({
+          ...group,
+          isExpanded: true,
+          items: group.items.map(item => ({
+            ...item,
+            isExpanded: true,
+            // keep existing subItems unchanged
+            subItems: item.subItems?.map(sub => ({ ...sub })) || item.subItems
+          }))
+        }))
+      }));
+      saveCashFlowData(updated);
+      return updated;
+    });
+  };
+
+  // Function to collapse all groups
+  const collapseAllGroups = () => {
+    setCashFlowData(prev => {
+      const updated = prev.map(section => ({
+        ...section,
+        groups: section.groups.map(group => ({
+          ...group,
+          isExpanded: false,
+          items: group.items.map(item => ({
+            ...item,
+            isExpanded: false,
+            subItems: item.subItems?.map(sub => ({ ...sub })) || item.subItems
+          }))
+        }))
+      }));
+      saveCashFlowData(updated);
+      return updated;
+    });
   };
 
   const toggleGroup = (sectionId: string, groupId: string) => {
@@ -747,11 +915,7 @@ export default function ReportsPage() {
     setNewSubItemName('');
   };
 
-  const openSubItemAddNameModal = () => {
-    setShowSubItemAddModal(true);
-    setNewSubItemName('');
-    setShowSubItemOptionModal(false);
-  };
+
 
   const openSubItemAddTagsModal = () => {
     setShowSubItemTagsModal(true);
@@ -1535,36 +1699,65 @@ export default function ReportsPage() {
     }
   };
 
+  // Helper: open tag transactions modal by tag name using Redux analytics data
+  const openTagTransactions = useCallback(async (tagName: string) => {
+    try {
+      setActiveTagName(tagName);
+      if (reduxAnalyticsData && reduxAnalyticsData.transactions) {
+        const txs: TransactionData[] = reduxAnalyticsData.transactions.filter((tx: TransactionData) =>
+          Array.isArray(tx.tags) && tx.tags.some((t: { name: string }) => t.name === tagName)
+        );
+        
+        // Debug: Log the first transaction to see what fields are available
+        if (txs.length > 0) {
+          console.log('🔍 First transaction data:', txs[0]);
+          console.log('🔍 Available fields:', Object.keys(txs[0]));
+          console.log('🔍 Description field value:', txs[0].Description);
+          console.log('🔍 Description field type:', typeof txs[0].Description);
+          console.log('🔍 All string fields:', Object.entries(txs[0]).filter(([, v]) => typeof v === 'string' && v.trim() !== '').map(([k, v]) => `${k}: "${v}"`));
+        }
+        
+        // Fetch user account numbers for unique accountIds
+        const uniqueAccountIds: string[] = Array.from(new Set(txs.map(t => t.accountId).filter((v): v is string => typeof v === 'string' && v.length > 0)));
+        const entries = await Promise.all(
+          uniqueAccountIds.map(async (accountId: string) => {
+            try {
+              const res = await fetch(`/api/account?accountId=${encodeURIComponent(accountId)}`);
+              if (!res.ok) return [accountId, null] as const;
+              const account = await res.json();
+              const acctNo: string | null = (account?.accountNumber as string) || null;
+              return [accountId, acctNo] as const;
+            } catch {
+              return [accountId, null] as const;
+            }
+          })
+        );
+        const idToUserAccountNo: { [id: string]: string | null } = Object.fromEntries(entries);
+        const enriched: TransactionData[] = txs.map((tx) => ({
+          ...tx,
+          userAccountNumber:
+            (tx.accountId && idToUserAccountNo[tx.accountId]) ||
+            tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A'
+        }));
+        setActiveTagTransactions(enriched);
+      } else {
+        setActiveTagTransactions([]);
+      }
+      setShowTagTransactionsModal(true);
+    } catch {
+      setActiveTagTransactions([]);
+      setShowTagTransactionsModal(true);
+    }
+  }, [reduxAnalyticsData]);
+
     return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10 px-4 overflow-y-auto">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-[1400px] mx-auto">
       {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="bg-blue-100 p-3 rounded-full text-blue-600 text-2xl shadow">
-            <RiBarChartLine />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Financial Reports
-            </h1>
-            <p className="text-gray-600 mt-1">Generate and view financial statements</p>
-          </div>
-        </div>
+        
 
         {/* Analytics Summary */}
-        {!analyticsLoading && !analyticsError && reduxAnalyticsData && (
-          <div className="mb-6">
-            <AnalyticsSummary
-              totalAmount={reduxAnalyticsData.totalAmount || 0}
-              totalCredit={reduxAnalyticsData.totalCredit || 0}
-              totalDebit={reduxAnalyticsData.totalDebit || 0}
-              totalTransactions={reduxAnalyticsData.totalTransactions || 0}
-              totalBanks={reduxAnalyticsData.totalBanks || 0}
-              totalAccounts={reduxAnalyticsData.totalAccounts || 0}
-              showBalance={true}
-            />
-          </div>
-        )}
+   
 
         {/* Loading and Error States */}
         {analyticsLoading && (
@@ -1579,69 +1772,33 @@ export default function ReportsPage() {
           </div>
         )}
 
-        {!analyticsLoading && !analyticsError && !reduxAnalyticsData && (
+        {/* {!analyticsLoading && !analyticsError && !reduxAnalyticsData && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-yellow-800">No analytics data available. Please visit Super Bank first to load data.</p>
           </div>
-        )}
+        )} */}
 
-        {/* Cashflow Statement */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden max-h-[70vh] overflow-y-auto">
-                     {/* Statement Header */}
-           <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 relative sticky top-0 z-10">
-             <div className="flex items-center justify-between">
-               <h2 className="text-2xl font-bold">CASHFLOW STATEMENT</h2>
-                               <div className="flex items-center gap-3">
-                  {isEditing ? (
-                    <>
+                 {/* Main Content - Two Column Layout */}
+         <div className="flex flex-col lg:flex-row gap-6 max-h-[90vh]">
+           {/* Mobile Toggle Buttons */}
+           <div className="lg:hidden flex gap-2">
         <button
-                        onClick={handleSave}
-                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2"
-        >
-                        <RiSaveLine size={16} />
-                        SAVE
-        </button>
-                      <button
-                        onClick={handleEdit}
-                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2"
-                      >
-                        <RiCloseLine size={16} />
-                        CANCEL
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={handleDownloadCSV}
-                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2"
-                        title="Download as CSV"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+               onClick={() => setIsOperationsPanelOpen(!isOperationsPanelOpen)}
+               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+             >
+               <svg className={`w-4 h-4 transition-transform ${isOperationsPanelOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                        DOWNLOAD
+               {isOperationsPanelOpen ? 'Hide Operations' : 'Show Operations'}
                       </button>
-                      <button
-                        onClick={handleRefreshTags}
-                        disabled={isRefreshing}
-                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Refresh tag balances from Super Bank"
-                      >
-                        <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        {isRefreshing ? 'REFRESHING...' : 'REFRESH TAGS'}
-                      </button>
-                      <button
-                        onClick={handleEdit}
-                        className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2"
-                      >
-                        <RiEdit2Line size={16} />
-                        EDIT
-                      </button>
-                    </>
-                  )}
       </div>
+
+          {/* Cashflow Statement (Center) */}
+          <div className="flex-1 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden overflow-y-auto">
+                       {/* Statement Header */}
+             <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 relative sticky top-0 z-10">
+               <div className="flex items-center justify-center">
+                 <h2 className="text-2xl font-bold">CASHFLOW STATEMENT</h2>
             </div>
       </div>
 
@@ -1744,7 +1901,7 @@ export default function ReportsPage() {
                                         {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
                                       </button>
                                     )}
-                                    <span>{item.particular}</span>
+                                    <span className="cursor-pointer hover:underline" onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>{item.particular}</span>
                                   </div>
                                   {item.createdByTag && item.tagData && (
                                     <div className="text-xs text-gray-500 mt-1">
@@ -1802,7 +1959,7 @@ export default function ReportsPage() {
                               <tr key={subItem.id} className="border-b border-gray-100 hover:bg-gray-50">
                                 <td className="py-2 px-12 text-gray-600 flex items-center justify-between">
                                   <div className="flex flex-col">
-                                    <span className="text-sm">{subItem.particular}</span>
+                                    <span className="text-sm cursor-pointer hover:underline" onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>{subItem.particular}</span>
                                     {subItem.createdByTag && subItem.tagData && (
                                       <div className="text-xs text-gray-500 mt-1">
                                         CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
@@ -1815,16 +1972,7 @@ export default function ReportsPage() {
                                     <div className="flex items-center gap-1">
                                       {/* Only show add button for sub-items that were created by name (not by tags) */}
                                       {!subItem.createdByTag && (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            openSubSubItemAddModal(cashFlowData[0].id, group.id, item.id, subItem.id);
-                                          }}
-                                          className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                                          title="Add sub-sub-item"
-                                        >
-                                          <RiAddLine size={14} />
-                                        </button>
+                                        <></>
                                       )}
                                       {/* Only show edit button for sub-items that were created by name (not by tags) */}
                                       {!subItem.createdByTag && (
@@ -1949,7 +2097,7 @@ export default function ReportsPage() {
                                          {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
                                        </button>
                                      )}
-                                     <span>{item.particular}</span>
+                                     <span className="cursor-pointer hover:underline" onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>{item.particular}</span>
                                    </div>
                                    {item.createdByTag && item.tagData && (
                                      <div className="text-xs text-gray-500 mt-1">
@@ -2007,7 +2155,7 @@ export default function ReportsPage() {
                                <tr key={subItem.id} className="border-b border-gray-100 hover:bg-gray-50">
                                  <td className="py-2 px-12 text-gray-600 flex items-center justify-between">
                                    <div className="flex flex-col">
-                                     <span className="text-sm">{subItem.particular}</span>
+                                     <span className="text-sm cursor-pointer hover:underline" onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>{subItem.particular}</span>
                                      {subItem.createdByTag && subItem.tagData && (
                                        <div className="text-xs text-gray-500 mt-1">
                                          CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
@@ -2079,24 +2227,237 @@ export default function ReportsPage() {
               </table>
           </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <h3 className="text-blue-700 font-semibold mb-2">Total Inflow</h3>
-                                    <p className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+
           </div>
-              <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                <h3 className="text-red-700 font-semibold mb-2">Total Outflow</h3>
-                                    <p className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
               </div>
-              <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                <h3 className="text-green-700 font-semibold mb-2">Net Cash Flow</h3>
-                <p className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+
+                            {/* Operations Panel */}
+                  <div className={`lg:w-80 w-full bg-white rounded-xl shadow-lg border border-gray-200 p-6 transition-all duration-300 ${
+                    isOperationsPanelOpen ? 'block' : 'hidden lg:block'
+                  }`}>
+            <div className="space-y-6">
+              {/* Header */}
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Operations</h3>
+              </div>
+
+              {/* Edit Mode Toggle */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Statement Mode</h4>
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <button
+                      onClick={handleSave}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    >
+                      <RiSaveLine size={16} />
+                      SAVE CHANGES
+                    </button>
+                    <button
+                      onClick={handleEdit}
+                      className="w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    >
+                      <RiCloseLine size={16} />
+                      CANCEL EDIT
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleEdit}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    <RiEdit2Line size={16} />
+                    EDIT MODE
+                  </button>
+                )}
+              </div>
+
+              {/* Export & Data Operations */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Export & Data</h4>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleDownloadCSV}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    title="Download as CSV"
+                  >
+                    <svg className="w-2 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    DOWNLOAD CSV
+                  </button>
+                  <button
+                    onClick={handleRefreshTags}
+                    disabled={isRefreshing}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Refresh tag balances from Super Bank"
+                  >
+                    <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                     </svg>
+                     {isRefreshing ? 'REFRESHING...' : 'REFRESH TAGS'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Quick Stats</h4>
+                <div className="space-y-3">
+                  <div className="relative group">
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
+                      <div className="text-blue-700 font-medium text-sm mb-1">Total Inflow</div>
+                      <div className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    {/* Inflow Tooltip */}
+                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                       <div className="text-sm font-semibold text-gray-800 mb-3">Inflow Breakdown by Banks</div>
+                      {getBankBreakdown('inflow').length > 0 ? (
+                        <div className="space-y-2">
+                          {getBankBreakdown('inflow').map((bank, index) => (
+                            <div key={index} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-700 font-medium">{bank.name}</span>
+                              <span className="text-blue-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No bank data available</div>
+                      )}
+                      <div className="mt-3 pt-2 border-t border-gray-200">
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span className="text-gray-800">Total</span>
+                          <span className="text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative group">
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors">
+                      <div className="text-red-700 font-medium text-sm mb-1">Total Outflow</div>
+                      <div className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    {/* Outflow Tooltip */}
+                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                       <div className="text-sm font-semibold text-gray-800 mb-3">Outflow Breakdown by Banks</div>
+                      {getBankBreakdown('outflow').length > 0 ? (
+                        <div className="space-y-2">
+                          {getBankBreakdown('outflow').map((bank, index) => (
+                            <div key={index} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-700 font-medium">{bank.name}</span>
+                              <span className="text-red-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No bank data available</div>
+                      )}
+                      <div className="mt-3 pt-2 border-t border-gray-200">
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span className="text-gray-800">Total</span>
+                          <span className="text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative group">
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
+                      <div className="text-green-700 font-medium text-sm mb-1">Net Cash Flow</div>
+                      <div className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
                   ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </p>
               </div>
           </div>
+                    {/* Net Flow Tooltip */}
+                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                       <div className="text-sm font-semibold text-gray-800 mb-3">Net Cash Flow by Banks</div>
+                      {getBankBreakdown('net').length > 0 ? (
+                        <div className="space-y-2">
+                          {getBankBreakdown('net').map((bank, index) => (
+                            <div key={index} className="flex justify-between items-center text-sm">
+                              <span className="text-gray-700 font-medium">{bank.name}</span>
+                              <span className={`font-bold ${bank.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                ₹{Math.abs(bank.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                {bank.amount >= 0 ? ' (Inflow)' : ' (Outflow)'}
+                              </span>
         </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No bank data available</div>
+                      )}
+                      <div className="mt-3 pt-2 border-t border-gray-200">
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span className="text-gray-800">Net Total</span>
+                          <span className={`${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                            ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* View Controls */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">View Controls</h4>
+                <div className="space-y-2">
+                  <button
+                    onClick={expandAllGroups}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    title="Expand all groups to show all items"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    EXPAND ALL
+                  </button>
+                  <button
+                    onClick={collapseAllGroups}
+                    className="w-full bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                    title="Collapse all groups to show only group totals"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    COLLAPSE ALL
+                  </button>
+                </div>
+              </div>
+
+              {/* Editing Tools */}
+              {/* {isEditing && (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Editing Tools</h4>
+                  <div className="text-sm text-gray-600 bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="font-medium mb-2">Editing Mode Active</p>
+                    <ul className="space-y-1 text-xs">
+                      <li>• Click group titles to expand/collapse</li>
+                      <li>• Use + buttons to add items</li>
+                      <li>• Use edit/delete buttons on items</li>
+                      <li>• Click "Add by Tags" to import from Super Bank</li>
+                    </ul>
+                  </div>
+                </div>
+              )} */}
+
+              {/* Information */}
+              {/* <div className="space-y-3">
+                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Information</h4>
+                <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <p className="font-medium mb-2">Cashflow Statement</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• Tracks money in and out of business</li>
+                    <li>• Groups transactions by category</li>
+                    <li>• Shows net cash position</li>
+                    <li>• Data syncs with Super Bank</li>
+                  </ul>
+                </div>
+              </div> */}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2105,7 +2466,7 @@ export default function ReportsPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">Add New Item</h3>
+                <h3 className="text-lg font-semibold text-gray-800">Add New Sub Group</h3>
                 <button
                   onClick={closeAddModal}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2117,13 +2478,13 @@ export default function ReportsPage() {
               <div className="space-y-4">
               <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Item Name
+                    Sub Group Name
                   </label>
                   <input
                     type="text"
                     value={newItemName}
                     onChange={(e) => setNewItemName(e.target.value)}
-                    placeholder="Enter item name"
+                    placeholder="Enter sub group name"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     autoFocus
                   />
@@ -2142,7 +2503,7 @@ export default function ReportsPage() {
                   disabled={!newItemName.trim()}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Add Item
+                  Add Sub Group
                 </button>
           </div>
             </div>
@@ -2246,7 +2607,7 @@ export default function ReportsPage() {
              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
                  <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-lg font-semibold text-gray-800">Add New Item</h3>
+                   <h3 className="text-lg font-semibold text-gray-800">Add Sub Group</h3>
                    <button
                      onClick={closeGroupOptionModal}
                      className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -2256,7 +2617,7 @@ export default function ReportsPage() {
                  </div>
                  
                  <div className="space-y-4">
-                   <p className="text-gray-600 mb-4">How would you like to add this item?</p>
+                   <p className="text-gray-600 mb-4">How would you like to add this sub group?</p>
                    
             <div className="space-y-3">
                      <button
@@ -2268,8 +2629,8 @@ export default function ReportsPage() {
                            <RiAddLine className="text-blue-600" size={20} />
               </div>
               <div>
-                           <h4 className="font-semibold text-gray-800">Add by Name</h4>
-                           <p className="text-sm text-gray-600">Create an item with a custom name</p>
+                           <h4 className="font-semibold text-gray-800">Add Sub Group by Name</h4>
+                           <p className="text-sm text-gray-600">Create a sub group with a custom name</p>
               </div>
             </div>
                      </button>
@@ -2284,7 +2645,7 @@ export default function ReportsPage() {
               </div>
               <div>
                            <h4 className="font-semibold text-gray-800">Add by Tags</h4>
-                           <p className="text-sm text-gray-600">Create an item using predefined tags</p>
+                           <p className="text-sm text-gray-600">Create a sub group using predefined tags</p>
               </div>
             </div>
                      </button>
@@ -2464,21 +2825,6 @@ export default function ReportsPage() {
               <p className="text-gray-600 mb-4">How would you like to add this sub-item?</p>
               
               <div className="space-y-3">
-                <button
-                  onClick={openSubItemAddNameModal}
-                  className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <RiAddLine className="text-blue-600" size={20} />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-800">Add by Name</h4>
-                      <p className="text-sm text-gray-600">Create a sub-item with a custom name</p>
-                    </div>
-                  </div>
-                </button>
-                
                 <button
                   onClick={openSubItemAddTagsModal}
                   className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
@@ -3108,6 +3454,120 @@ export default function ReportsPage() {
               >
                 Save Changes
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tag Transactions Modal */}
+      {showTagTransactionsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[120]">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Transactions for Tag{activeTagName ? `: ${activeTagName}` : ''}</h3>
+              <button onClick={() => setShowTagTransactionsModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <RiCloseLine size={20} />
+              </button>
+            </div>
+
+            {/* Totals Summary */}
+            {Array.isArray(activeTagTransactions) && activeTagTransactions.length > 0 && (
+              (() => {
+                let creditTotal = 0;
+                let debitTotal = 0;
+                activeTagTransactions.forEach((tx: TransactionData) => {
+                  const raw = typeof tx.AmountRaw === 'number'
+                    ? tx.AmountRaw
+                    : (typeof tx.Amount === 'string'
+                        ? parseFloat((tx.Amount || '0').toString().replace(/,/g, ''))
+                        : (typeof tx.amount === 'number' ? tx.amount : 0));
+                  const crdr = (tx['Dr./Cr.'] || '').toString().toUpperCase();
+                  const isCredit = crdr === 'CR' || raw > 0;
+                  const value = Math.abs(raw);
+                  if (isCredit) creditTotal += value; else debitTotal += value;
+                });
+                const balance = creditTotal - debitTotal;
+                return (
+                  <div className="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="text-xs text-green-700 font-medium">Total Credit</div>
+                      <div className="text-lg font-bold text-green-800">₹{creditTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <div className="text-xs text-red-700 font-medium">Total Debit</div>
+                      <div className="text-lg font-bold text-red-800">₹{debitTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-xs text-blue-700 font-medium">Balance</div>
+                      <div className={`text-lg font-bold ${balance >= 0 ? 'text-green-800' : 'text-red-800'}`}>₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  </div>
+                );
+              })()
+            )}
+
+            <div className="overflow-y-auto border rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-2 border-b">Date</th>
+                    <th className="text-left px-3 py-2 border-b">Description</th>
+                    <th className="text-left px-3 py-2 border-b">CR/DR</th>
+                    <th className="text-right px-3 py-2 border-b">Amount</th>
+                    <th className="text-left px-3 py-2 border-b">Bank</th>
+                    <th className="text-left px-3 py-2 border-b">Account No.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeTagTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center text-gray-600 py-6">No transactions found for this tag.</td>
+                    </tr>
+                  ) : (
+                    activeTagTransactions.map((tx: TransactionData, idx: number) => {
+                      const amountRaw = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : (typeof tx.Amount === 'string' ? parseFloat((tx.Amount || '0').toString().replace(/,/g, '')) : (typeof tx.amount === 'number' ? tx.amount : 0));
+                      const bankName = tx.bankName || tx.bankId || 'Unknown Bank';
+                      const crdr = (tx['Dr./Cr.'] || '').toString().toUpperCase();
+                      const isCredit = crdr === 'CR' || amountRaw > 0;
+                      const displayAmount = Math.abs(amountRaw);
+                      const dateStr = String(tx.Date || tx.date || '');
+                                             // Try multiple possible description fields
+                       const desc = String(
+                         tx.Description || 
+                         tx.description || 
+                         tx.Narration || 
+                         tx.narration ||
+                         tx['Transaction Description'] ||
+                         tx['transaction description'] ||
+                         tx.Particulars ||
+                         tx.particulars ||
+                         tx.Reference ||
+                         tx.reference ||
+                         tx['Reference No.'] ||
+                         tx['reference no.'] ||
+                         tx.Remarks ||
+                         tx.remarks ||
+                         ''
+                       );
+                      const accountNo = (tx.userAccountNumber || tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A') as string;
+                      return (
+                        <tr key={idx} className="border-b hover:bg-gray-50">
+                          <td className="px-3 py-2">{dateStr}</td>
+                          <td className="px-3 py-2">{desc}</td>
+                          <td className="px-3 py-2">{crdr || (isCredit ? 'CR' : 'DR')}</td>
+                          <td className={`px-3 py-2 text-right ${isCredit ? 'text-green-700' : 'text-red-700'}`}>₹{displayAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td className="px-3 py-2">{bankName}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{accountNo}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setShowTagTransactionsModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
             </div>
           </div>
         </div>

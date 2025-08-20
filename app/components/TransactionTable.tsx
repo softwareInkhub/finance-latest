@@ -440,7 +440,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             {rows.map((row, idx) => {
               const tx = transactions?.find(t => t.id === row.id);
               return (
-                <tr key={idx} data-row-idx={idx} className="hover:bg-blue-50 transition-colors duration-150">
+                <tr key={idx} data-row-idx={idx} data-transaction-id={row.id} className="hover:bg-blue-50 transition-colors duration-150">
                   <td className="border px-2 py-1 text-center" style={{ width: 40 }}>
                     <input
                       type="checkbox"

@@ -58,9 +58,9 @@ function StatementsContent() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('desc');
 
   // Advanced tag creation features - ADDED
-  const [selection, setSelection] = useState<{ text: string; x: number; y: number; rowIdx?: number } | null>(null);
+  const [selection, setSelection] = useState<{ text: string; x: number; y: number; rowIdx?: number; transactionId?: string } | null>(null);
   const [tagCreateMsg, setTagCreateMsg] = useState<string | null>(null);
-  const [pendingTag, setPendingTag] = useState<{ tagName: string; rowIdx: number; selectionText: string } | null>(null);
+  const [pendingTag, setPendingTag] = useState<{ tagName: string; rowIdx?: number; transactionId?: string; selectionText: string } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
 
@@ -110,13 +110,19 @@ function StatementsContent() {
         const range = sel.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         const containerRect = tableRef.current.getBoundingClientRect();
-        // Try to find the row index
+        // Try to find the row index and transaction ID
         let rowIdx: number | undefined = undefined;
+        let transactionId: string | undefined = undefined;
         let node = sel.anchorNode as HTMLElement | null;
         while (node && node !== tableRef.current) {
-          if (node instanceof HTMLTableRowElement && node.hasAttribute('data-row-idx')) {
-            rowIdx = parseInt(node.getAttribute('data-row-idx') || '', 10);
-            break;
+          if (node instanceof HTMLTableRowElement) {
+            if (node.hasAttribute('data-row-idx')) {
+              rowIdx = parseInt(node.getAttribute('data-row-idx') || '', 10);
+            }
+            if (node.hasAttribute('data-transaction-id')) {
+              transactionId = node.getAttribute('data-transaction-id') || undefined;
+            }
+            if (rowIdx !== undefined && transactionId) break;
           }
           node = node.parentElement;
         }
@@ -125,6 +131,7 @@ function StatementsContent() {
           x: rect.left - containerRect.left,
           y: rect.bottom - containerRect.top,
           rowIdx,
+          transactionId,
         });
       } else {
         setSelection(null);
@@ -159,6 +166,7 @@ function StatementsContent() {
       setPendingTag(selection.rowIdx !== undefined ? { 
         tagName: selection.text, 
         rowIdx: selection.rowIdx, 
+        transactionId: selection.transactionId,
         selectionText: selection.text 
       } : null);
       setSelection(null);
@@ -175,13 +183,17 @@ function StatementsContent() {
   // Advanced tag creation: Apply tag to only this transaction row - ADDED
   const handleApplyTagToRow = async () => {
     if (!pendingTag) return;
-    const { tagName, rowIdx } = pendingTag;
+    const { tagName, transactionId } = pendingTag;
     const tagObj = allTags.find(t => t.name === tagName);
     if (!tagObj) return setPendingTag(null);
-    const row = filteredTransactions[rowIdx];
-    if (!row || !row.id) return setPendingTag(null);
-    const tx = transactions.find(t => t.id === row.id);
-    if (!tx) return setPendingTag(null);
+    
+    // Find the transaction directly by ID
+    const tx = transactions.find(t => t.id === transactionId);
+    if (!tx) {
+      console.error('Transaction not found for ID:', transactionId);
+      setTagError('Transaction not found');
+      return;
+    }
     const tags = Array.isArray(tx.tags) ? [...tx.tags] : [];
     if (!tags.some((t) => t.id === tagObj.id)) tags.push(tagObj);
     await fetch('/api/transaction/update', {
@@ -212,14 +224,68 @@ function StatementsContent() {
     const { tagName, selectionText } = pendingTag;
     const tagObj = allTags.find(t => t.name === tagName);
     if (!tagObj) return setPendingTag(null);
+    
     // Find all matching transactions (case-insensitive)
-    const matching = transactions.filter((tx) => {
+    let matching = transactions.filter((tx) => {
       return Object.entries(tx).some(([key, val]) =>
         key !== 'tags' &&
         ((typeof val === 'string' && val.toLowerCase().includes(selectionText.toLowerCase())) ||
          (typeof val === 'number' && String(val).toLowerCase().includes(selectionText.toLowerCase())))
       );
     });
+
+    // Additional filtering: if the selection text contains common UPI patterns, be more specific
+    if (selectionText.toLowerCase().includes('upi/') || selectionText.toLowerCase().includes('neft') || selectionText.toLowerCase().includes('imps')) {
+      // For UPI/NEFT/IMPS transactions, prioritize exact matches in description field
+      const exactMatches = matching.filter(tx => 
+        typeof tx.description === 'string' && 
+        tx.description.toLowerCase().includes(selectionText.toLowerCase())
+      );
+      
+      if (exactMatches.length > 0) {
+        // If we have exact description matches, prefer those over other field matches
+        matching = exactMatches;
+      }
+    }
+
+    // Sort matches to prioritize exact matches and description field matches
+    matching.sort((a, b) => {
+      // Check for exact case-insensitive matches first
+      const aExact = Object.entries(a).some(([key, val]) => 
+        key !== 'tags' && 
+        typeof val === 'string' && 
+        val.toLowerCase() === selectionText.toLowerCase()
+      );
+      const bExact = Object.entries(b).some(([key, val]) => 
+        key !== 'tags' && 
+        typeof val === 'string' && 
+        val.toLowerCase() === selectionText.toLowerCase()
+      );
+      
+      if (aExact && !bExact) return -1;
+      if (!aExact && bExact) return 1;
+      
+      // Then prioritize description field matches
+      const aDescMatch = typeof a.description === 'string' && a.description.toLowerCase().includes(selectionText.toLowerCase());
+      const bDescMatch = typeof b.description === 'string' && b.description.toLowerCase().includes(selectionText.toLowerCase());
+      
+      if (aDescMatch && !bDescMatch) return -1;
+      if (!aDescMatch && bDescMatch) return 1;
+      
+      return 0;
+    });
+
+    // If there are multiple matches, show a confirmation dialog
+    if (matching.length > 1) {
+      const confirmed = window.confirm(
+        `Found ${matching.length} transactions containing "${selectionText}". ` +
+        `This will apply the tag "${tagName}" to all of them. Continue?`
+      );
+      if (!confirmed) {
+        setApplyingTagToAll(false);
+        return;
+      }
+    }
     await Promise.all(matching.map(async (tx) => {
       const tags = Array.isArray(tx.tags) ? [...tx.tags] : [];
       if (!tags.some((t) => t.id === tagObj.id)) tags.push(tagObj);

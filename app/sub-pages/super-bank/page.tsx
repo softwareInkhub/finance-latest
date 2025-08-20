@@ -1580,9 +1580,9 @@ export default function SuperBankPage() {
 
   const [tagFilters, setTagFilters] = useState<string[]>([]);
 
-  const [selection, setSelection] = useState<{ text: string; x: number; y: number; rowIdx?: number } | null>(null);
+  const [selection, setSelection] = useState<{ text: string; x: number; y: number; rowIdx?: number; transactionId?: string } | null>(null);
   const [tagCreateMsg, setTagCreateMsg] = useState<string | null>(null);
-  const [pendingTag, setPendingTag] = useState<{ tagName: string; rowIdx: number; selectionText: string } | null>(null);
+  const [pendingTag, setPendingTag] = useState<{ tagName: string; rowIdx?: number; transactionId?: string; selectionText: string } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Add state
@@ -1747,13 +1747,19 @@ export default function SuperBankPage() {
         const range = sel.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         const containerRect = tableRef.current.getBoundingClientRect();
-        // Try to find the row index
+        // Try to find the row index and transaction ID
         let rowIdx: number | undefined = undefined;
+        let transactionId: string | undefined = undefined;
         let node = sel.anchorNode as HTMLElement | null;
         while (node && node !== tableRef.current) {
-          if (node instanceof HTMLTableRowElement && node.hasAttribute('data-row-idx')) {
-            rowIdx = parseInt(node.getAttribute('data-row-idx') || '', 10);
-            break;
+          if (node instanceof HTMLTableRowElement) {
+            if (node.hasAttribute('data-row-idx')) {
+              rowIdx = parseInt(node.getAttribute('data-row-idx') || '', 10);
+            }
+            if (node.hasAttribute('data-transaction-id')) {
+              transactionId = node.getAttribute('data-transaction-id') || undefined;
+            }
+            if (rowIdx !== undefined && transactionId) break;
           }
           node = node.parentElement;
         }
@@ -1762,6 +1768,7 @@ export default function SuperBankPage() {
           x: rect.left - containerRect.left,
           y: rect.bottom - containerRect.top,
           rowIdx,
+          transactionId,
         });
       } else {
         setSelection(null);
@@ -1820,6 +1827,7 @@ export default function SuperBankPage() {
       setPendingTag(selection.rowIdx !== undefined ? { 
         tagName: selection.text, 
         rowIdx: selection.rowIdx, 
+        transactionId: selection.transactionId,
         selectionText: selection.text 
       } : null);
       setSelection(null);
@@ -1839,13 +1847,18 @@ export default function SuperBankPage() {
   const handleApplyTagToRow = async () => {
     if (!pendingTag) return;
     setApplyingTagToRow(true);
-    const { tagName, rowIdx } = pendingTag;
+    const { tagName, transactionId } = pendingTag;
     const tagObj = allTags.find(t => t.name === tagName);
     if (!tagObj) return setPendingTag(null);
-    const row = filteredRows[rowIdx];
-    if (!row || !row.id) return setPendingTag(null);
-    const tx = transactions.find(t => t.id === row.id);
-    if (!tx) return setPendingTag(null);
+    
+    // Find the transaction directly by ID
+    const tx = transactions.find(t => t.id === transactionId);
+    if (!tx) {
+      console.error('Transaction not found for ID:', transactionId);
+      setTagError('Transaction not found');
+      setApplyingTagToRow(false);
+      return;
+    }
     const tags = Array.isArray(tx.tags) ? [...tx.tags] : [];
     if (!tags.some((t) => t.id === tagObj.id)) tags.push(tagObj);
     try {
@@ -1880,12 +1893,12 @@ export default function SuperBankPage() {
     // Hide the preview modal immediately when starting
     setPendingTag(null);
     
-    const { tagName, selectionText } = pendingTag;
+    const { tagName, selectionText, transactionId } = pendingTag;
     const tagObj = allTags.find(t => t.name === tagName);
     if (!tagObj) return;
     
     // Find all matching transactions first
-    const matching = transactions.filter((tx) => {
+    let matching = transactions.filter((tx) => {
       // Check all primitive fields except arrays/objects and 'tags' for case-insensitive match
       return Object.entries(tx).some(([key, val]) =>
         key !== 'tags' &&
@@ -1893,8 +1906,75 @@ export default function SuperBankPage() {
          (typeof val === 'number' && String(val).toLowerCase().includes(selectionText.toLowerCase())))
       );
     });
+
+    // Additional filtering: if the selection text contains common UPI patterns, be more specific
+    if (selectionText.toLowerCase().includes('upi/') || selectionText.toLowerCase().includes('neft') || selectionText.toLowerCase().includes('imps')) {
+      // For UPI/NEFT/IMPS transactions, prioritize exact matches in description field
+      const exactMatches = matching.filter(tx => 
+        typeof tx.description === 'string' && 
+        tx.description.toLowerCase().includes(selectionText.toLowerCase())
+      );
+      
+      if (exactMatches.length > 0) {
+        // If we have exact description matches, prefer those over other field matches
+        matching = exactMatches;
+      }
+    }
+
+    // Sort matches to prioritize exact matches and description field matches
+    matching.sort((a, b) => {
+      // Check for exact case-insensitive matches first
+      const aExact = Object.entries(a).some(([key, val]) => 
+        key !== 'tags' && 
+        typeof val === 'string' && 
+        val.toLowerCase() === selectionText.toLowerCase()
+      );
+      const bExact = Object.entries(b).some(([key, val]) => 
+        key !== 'tags' && 
+        typeof val === 'string' && 
+        val.toLowerCase() === selectionText.toLowerCase()
+      );
+      
+      if (aExact && !bExact) return -1;
+      if (!aExact && bExact) return 1;
+      
+      // Then prioritize description field matches
+      const aDescMatch = typeof a.description === 'string' && a.description.toLowerCase().includes(selectionText.toLowerCase());
+      const bDescMatch = typeof b.description === 'string' && b.description.toLowerCase().includes(selectionText.toLowerCase());
+      
+      if (aDescMatch && !bDescMatch) return -1;
+      if (!aDescMatch && bDescMatch) return 1;
+      
+      return 0;
+    });
+
+    // If we have transactionId (specific transaction where text was selected), prioritize exact matches
+    // and add a warning if the selection might be too broad
+    if (transactionId && matching.length > 1) {
+      const selectedTransaction = transactions.find(t => t.id === transactionId);
+      if (selectedTransaction) {
+        // Check if the selected transaction is in the matching results
+        const isSelectedInMatches = matching.some(tx => tx.id === selectedTransaction.id);
+        if (!isSelectedInMatches) {
+          console.warn('Selected transaction not found in matches - this might indicate a bug');
+        }
+      }
+    }
     
     setMatchingTransactions(matching);
+    
+    // If there are multiple matches, show a confirmation dialog
+    if (matching.length > 1) {
+      const confirmed = window.confirm(
+        `Found ${matching.length} transactions containing "${selectionText}". ` +
+        `This will apply the tag "${tagName}" to all of them. Continue?`
+      );
+      if (!confirmed) {
+        setApplyingTagToAll(false);
+        setMatchingTransactions([]);
+        return;
+      }
+    }
     
     try {
       // Prepare bulk update data
@@ -2012,6 +2092,37 @@ export default function SuperBankPage() {
         const rawAmount = getValueForColumn(tx, String(tx.bankId), 'Amount');
         mappedRow.Amount = formatIndianAmount(rawAmount); // always Indian style for UI
         mappedRow.AmountRaw = parseIndianAmount(rawAmount); // for analytics
+      } else if (sh === 'Description') {
+        // Handle Description field more robustly - try multiple possible field names
+        const possibleDescFields = [
+          'Description', 'description', 'Narration', 'narration', 
+          'Transaction Description', 'transaction description',
+          'Particulars', 'particulars', 'Reference', 'reference',
+          'Reference No.', 'reference no.', 'Remarks', 'remarks'
+        ];
+        
+        let descValue = '';
+        for (const field of possibleDescFields) {
+          const bankHeader = reverseMap[field] || field;
+          const value = tx[bankHeader];
+          if (value && typeof value === 'string' && value.trim() !== '') {
+            descValue = value.trim();
+            break;
+          }
+        }
+        
+        // If still no value, try direct field access
+        if (!descValue) {
+          for (const field of possibleDescFields) {
+            const value = tx[field];
+            if (value && typeof value === 'string' && value.trim() !== '') {
+              descValue = value.trim();
+              break;
+            }
+          }
+        }
+        
+        mappedRow[sh] = descValue;
       } else {
         const bankHeader = reverseMap[sh];
         const value = bankHeader ? tx[bankHeader] : tx[sh];
