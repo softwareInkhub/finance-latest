@@ -451,7 +451,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   <td className="border px-2 py-1 text-center" style={{ width: 40 }}>{idx + 1}</td>
                   {headers.map((sh) => (
                     <td key={sh} className="border px-2 py-1 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}>
-                      {sh.toLowerCase() === 'tags' && Array.isArray(row[sh]) ? (
+                      {(sh.toLowerCase() === 'tags' || sh === 'Tags') && Array.isArray(row[sh]) ? (
                         <div className="flex gap-1">
                           {(row[sh] as Tag[]).map((tag, tagIdx: number) => (
                             <span

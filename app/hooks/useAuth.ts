@@ -34,7 +34,7 @@ export function useAuth() {
         return;
       }
 
-      // Only fetch user details if we don't have them yet
+      // Check if we need to fetch user details
       if (!user || !user.email) {
         fetch(`/api/users?id=${userId}`)
           .then(res => res.json())
@@ -71,7 +71,7 @@ export function useAuth() {
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [user]);
+  }, [user]); // user dependency is needed since we check user.email
 
   const login = (userData: User) => {
     localStorage.setItem('isLoggedIn', 'true');

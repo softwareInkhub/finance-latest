@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, getBankTransactionTable } from '../../aws-client';
+import { recomputeAndSaveTagsSummary } from '../../reports/tags-summary/aggregate';
 
 export const runtime = 'nodejs';
 
@@ -45,6 +46,15 @@ export async function POST(request: Request) {
         ExpressionAttributeValues: exprAttrValues,
       })
     );
+    // Fire-and-forget recompute of user tag summary if userId is present in transactionData
+    try {
+      const userId = (transactionData && (transactionData as Record<string, unknown>).userId) as string | undefined;
+      if (userId) {
+        await recomputeAndSaveTagsSummary(userId);
+      }
+    } catch (e) {
+      console.warn('Tags summary recompute after transaction update failed (non-blocking):', e);
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating transaction:', error);

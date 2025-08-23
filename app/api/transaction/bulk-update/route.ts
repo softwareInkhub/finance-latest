@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, getBankTransactionTable } from '../../aws-client';
+import { recomputeAndSaveTagsSummary } from '../../reports/tags-summary/aggregate';
 
 export const runtime = 'nodejs';
 
@@ -85,6 +86,17 @@ export async function POST(request: Request) {
 
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
+
+    // Attempt to recompute tag summary if a single userId is provided in any update.transactionData
+    try {
+      const anyWithUserId = (updates || []).find(u => u.transactionData && typeof (u.transactionData as Record<string, unknown>).userId === 'string');
+      const userId = anyWithUserId ? (anyWithUserId.transactionData as Record<string, unknown>).userId as string : undefined;
+      if (userId) {
+        await recomputeAndSaveTagsSummary(userId);
+      }
+    } catch (e) {
+      console.warn('Tags summary recompute after bulk update failed (non-blocking):', e);
+    }
 
     return NextResponse.json({ 
       success: true, 

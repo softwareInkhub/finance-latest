@@ -20,13 +20,27 @@ export default function TagsPage() {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState({ current: 0, total: 0 });
 
   const fetchTags = async () => {
     setLoading(true);
     setError(null);
     try {
       const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setError('User ID not found. Please log in again.');
+        setTags([]);
+        return;
+      }
+      
       const res = await fetch(`/api/tags?userId=${userId}`);
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const data = await res.json();
       if (Array.isArray(data)) {
         setTags(data);
@@ -34,9 +48,10 @@ export default function TagsPage() {
         setTags([]);
         setError(data.error || 'Failed to fetch tags');
       }
-    } catch {
+    } catch (error) {
+      console.error('Error fetching tags:', error);
       setTags([]);
-      setError('Failed to fetch tags');
+      setError(error instanceof Error ? error.message : 'Failed to fetch tags');
     } finally {
       setLoading(false);
     }
@@ -62,41 +77,114 @@ export default function TagsPage() {
     }
   };
 
+  const [singleDeleteTag, setSingleDeleteTag] = useState<Tag | null>(null);
+
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this tag?')) return;
+    const tag = tags.find(t => t.id === id);
+    if (tag) {
+      setSingleDeleteTag(tag);
+    }
+  };
+
+  const confirmSingleDelete = async () => {
+    if (!singleDeleteTag) return;
+    
+    setDeleting(true);
+    setError(null); // Clear any previous errors
     try {
-      await fetch('/api/tags', {
+      const res = await fetch('/api/tags', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id: singleDeleteTag.id }),
       });
-      fetchTags();
-    } catch {
-      setError('Failed to delete tag');
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${res.status}: ${res.statusText}`);
+      }
+      
+      // Tag deletion initiated successfully - backend will handle cleanup asynchronously
+      console.log(`Tag deletion initiated for: ${singleDeleteTag.name}`);
+      
+      // Wait a bit longer for backend operations to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await fetchTags();
+      
+      // Show success message
+      setError(null);
+      // You could add a success state here if needed
+    } catch (error) {
+      console.error('Error deleting tag:', error);
+      setError(error instanceof Error ? error.message : 'Failed to delete tag');
+    } finally {
+      setDeleting(false);
+      setSingleDeleteTag(null);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedTags.size === 0) return;
-    if (!window.confirm(`Delete ${selectedTags.size} selected tag(s)?`)) return;
     
+    // Show custom modal instead of browser confirm
+    setShowDeleteModal(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    setShowDeleteModal(false);
     setDeleting(true);
+    setDeleteProgress({ current: 0, total: selectedTags.size });
+    setError(null); // Clear any previous errors
+    
     try {
-      const deletePromises = Array.from(selectedTags).map(id =>
-        fetch('/api/tags', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id }),
-        })
-      );
+      const selectedTagsArray = Array.from(selectedTags);
+      let successCount = 0;
+      let errorCount = 0;
       
-      await Promise.all(deletePromises);
+      for (let i = 0; i < selectedTagsArray.length; i++) {
+        const id = selectedTagsArray[i];
+        try {
+          const res = await fetch('/api/tags', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id }),
+          });
+          
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${res.status}: ${res.statusText}`);
+          }
+          
+          successCount++;
+          console.log(`Tag deletion initiated for ID: ${id}`);
+        } catch (error) {
+          console.error(`Error deleting tag ${id}:`, error);
+          errorCount++;
+        }
+        
+        // Update progress
+        setDeleteProgress({ current: i + 1, total: selectedTagsArray.length });
+        
+        // Small delay to show progress
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       setSelectedTags(new Set());
-      fetchTags();
-    } catch {
+      
+      // Wait longer for backend operations to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await fetchTags();
+      
+      if (errorCount > 0) {
+        setError(`Deleted ${successCount} tags successfully. ${errorCount} tags failed to delete.`);
+      } else {
+        setError(null); // Clear any previous errors
+      }
+    } catch (error) {
+      console.error('Error in bulk delete:', error);
       setError('Failed to delete some tags');
     } finally {
       setDeleting(false);
+      setDeleteProgress({ current: 0, total: 0 });
     }
   };
 
@@ -289,6 +377,124 @@ export default function TagsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Custom Delete Modal for Bulk Delete */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Confirm Deletion</h3>
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <RiCloseLine size={20} />
+                </button>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to delete <span className="font-semibold text-red-600">{selectedTags.size} selected tag(s)</span>?
+                </p>
+                <p className="text-sm text-gray-500">
+                  This action cannot be undone. All references to these tags will also be removed.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBulkDelete}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
+                >
+                  Delete {selectedTags.size} Tag(s)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Delete Modal for Single Tag */}
+        {singleDeleteTag && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">Confirm Deletion</h3>
+                <button
+                  onClick={() => setSingleDeleteTag(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <RiCloseLine size={20} />
+                </button>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-600 mb-4">
+                  Are you sure you want to delete the tag <span className="font-semibold text-red-600">&quot;{singleDeleteTag.name}&quot;</span>?
+                </p>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="inline-block w-6 h-6 rounded border border-gray-200" style={{ background: singleDeleteTag.color }}></span>
+                  <span className="text-gray-800">{singleDeleteTag.name}</span>
+                </div>
+                <p className="text-sm text-gray-500">
+                  This action cannot be undone. All references to this tag will also be removed.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSingleDeleteTag(null)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmSingleDelete}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-semibold"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Tag'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Progress Modal for Bulk Delete */}
+        {deleting && deleteProgress.total > 0 && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Deleting Tags</h3>
+                
+                <div className="mb-6">
+                  <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <span>Progress</span>
+                    <span>{deleteProgress.current} / {deleteProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-sm text-gray-500 mt-2">
+                    {Math.round((deleteProgress.current / deleteProgress.total) * 100)}% Complete
+                  </div>
+                </div>
+
+                <div className="text-sm text-gray-600">
+                  Please wait while tags are being deleted...
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

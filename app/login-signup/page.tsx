@@ -1,125 +1,249 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { useRouter } from "next/navigation";
 
 export default function LoginSignupPage() {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const router = useRouter();
   const { user, login } = useAuth();
+  const router = useRouter();
 
-  // Check if user is already logged in
-  useEffect(() => {
-    if (user) {
-      router.push('/dashboard');
+  // Redirect if already logged in
+  if (user) {
+    router.push('/');
+    return null;
+  }
+
+  const validateForm = () => {
+    if (!email.trim()) {
+      setError("Email is required");
+      return false;
     }
-  }, [user, router]);
+    if (!password.trim()) {
+      setError("Password is required");
+      return false;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return false;
+    }
+    if (mode === 'signup' && !name.trim()) {
+      setError("Name is required for signup");
+      return false;
+    }
+    if (!email.includes('@')) {
+      setError("Please enter a valid email address");
+      return false;
+    }
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
+    setError("");
     
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const res = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           action: mode,
-          email,
-          password,
-          name: mode === 'signup' ? name : undefined,
+          email: email.trim(),
+          password: password.trim(),
+          name: name.trim(),
         }),
       });
-      const data = await res.json();
-      
-      if (!res.ok) {
-        setError(data.error || "Something went wrong");
-      } else {
-        if (mode === 'login') {
-          // Login immediately without showing success message
-          login({
-            userId: data.user?.userId || "",
-            email: data.user?.email || "",
-            name: data.user?.name || ""
-          });
-          // Navigate immediately without setTimeout
-          router.push('/dashboard');
-        } else {
-          // Only show success for signup
-          setSuccess("Signup successful!");
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'An error occurred');
+        return;
+      }
+
+      if (data.success) {
+        if (mode === 'login' && data.user) {
+          // Login successful
+          login(data.user);
+          router.push('/');
+        } else if (mode === 'signup') {
+          // Signup successful, switch to login mode
+          setMode('login');
+          setPassword("");
+          setError("");
+          alert('Account created successfully! Please log in.');
         }
       }
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (err) {
+      setError('Network error. Please try again.');
+      console.error('Auth error:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  const clearForm = () => {
+    setEmail("");
+    setPassword("");
+    setName("");
+    setError("");
+  };
+
+  const handleModeChange = (newMode: 'login' | 'signup') => {
+    setMode(newMode);
+    clearForm();
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-white to-purple-100">
       <div className="bg-white rounded-xl shadow-xl p-8 w-full max-w-md">
+        <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">
+          {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+        </h1>
+        
         <div className="flex justify-center mb-6">
           <button
-            className={`px-4 py-2 rounded-l-lg font-semibold transition-all ${mode === 'login' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-blue-700'}`}
-            onClick={() => setMode('login')}
-            disabled={mode === 'login'}
+            className={`px-4 py-2 rounded-l-lg font-semibold transition-all ${
+              mode === 'login' 
+                ? 'bg-blue-600 text-white shadow-md' 
+                : 'bg-gray-100 text-blue-700 hover:bg-gray-200'
+            }`}
+            onClick={() => handleModeChange('login')}
+            disabled={loading}
           >
             Login
           </button>
           <button
-            className={`px-4 py-2 rounded-r-lg font-semibold transition-all ${mode === 'signup' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-blue-700'}`}
-            onClick={() => setMode('signup')}
-            disabled={mode === 'signup'}
+            className={`px-4 py-2 rounded-r-lg font-semibold transition-all ${
+              mode === 'signup' 
+                ? 'bg-blue-600 text-white shadow-md' 
+                : 'bg-gray-100 text-blue-700 hover:bg-gray-200'
+            }`}
+            onClick={() => handleModeChange('signup')}
+            disabled={loading}
           >
             Sign Up
           </button>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {mode === 'signup' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Full Name
+              </label>
+              <input
+                type="text"
+                placeholder="Enter your full name"
+                className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                disabled={loading}
+                required
+              />
+            </div>
+          )}
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Email Address
+            </label>
             <input
-              type="text"
-              placeholder="Name"
-              className="border px-4 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-              value={name}
-              onChange={e => setName(e.target.value)}
+              type="email"
+              placeholder="Enter your email"
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              disabled={loading}
               required
             />
-          )}
-          <input
-            type="email"
-            placeholder="Email"
-            className="border px-4 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            className="border px-4 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              placeholder="Enter your password"
+              className="w-full border border-gray-300 px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              disabled={loading}
+              required
+              minLength={6}
+            />
+            {mode === 'signup' && (
+              <p className="text-xs text-gray-500 mt-1">
+                Password must be at least 6 characters long
+              </p>
+            )}
+          </div>
+          
           <button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded shadow transition-all disabled:opacity-50"
             disabled={loading}
+            className={`w-full font-semibold py-3 rounded-lg shadow transition-all ${
+              loading
+                ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg'
+            }`}
           >
-            {loading ? (mode === 'login' ? 'Logging in...' : 'Signing up...') : (mode === 'login' ? 'Login' : 'Sign Up')}
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                {mode === 'login' ? 'Signing In...' : 'Creating Account...'}
+              </div>
+            ) : (
+              mode === 'login' ? 'Sign In' : 'Create Account'
+            )}
           </button>
-          {error && <div className="text-red-600 text-sm text-center">{error}</div>}
-          {success && <div className="text-green-600 text-sm text-center">{success}</div>}
         </form>
+
+        <div className="mt-6 text-center text-sm text-gray-600">
+          {mode === 'login' ? (
+                          <p>
+                Don&apos;t have an account?{' '}
+                <button
+                  onClick={() => handleModeChange('signup')}
+                  className="text-blue-600 hover:text-blue-700 font-medium"
+                  disabled={loading}
+                >
+                  Sign up here
+                </button>
+              </p>
+          ) : (
+            <p>
+              Already have an account?{' '}
+              <button
+                onClick={() => handleModeChange('login')}
+                className="text-blue-600 hover:text-blue-700 font-medium"
+                disabled={loading}
+              >
+                Sign in here
+              </button>
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -24,6 +24,8 @@ export async function GET(request: Request) {
     );
     const allTags = tagsResult.Items || [];
     const tagsMap = new Map(allTags.map(tag => [tag.id, tag]));
+    
+
 
     // Fetch transactions from all bank tables with pagination
     const allTransactions: Record<string, unknown>[] = [];

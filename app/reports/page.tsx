@@ -1,9 +1,9 @@
 'use client';
 
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
 import { Tag } from '../types/transaction';
-import { useAppSelector } from '../store/hooks';
 
 interface CashFlowItem {
   id: string;
@@ -70,10 +70,6 @@ interface CashFlowSection {
 }
 
 export default function ReportsPage() {
-  // Get analytics data from Redux
-  const reduxAnalyticsData = useAppSelector(state => state.analytics.data);
-  const analyticsLoading = useAppSelector(state => state.analytics.loading);
-  const analyticsError = useAppSelector(state => state.analytics.error);
 
   // Initial data
   const initialData: CashFlowSection[] = [
@@ -202,6 +198,7 @@ export default function ReportsPage() {
 
   const [modalSelectedTags, setModalSelectedTags] = useState<Tag[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
+  const [isTagsModalLoading, setIsTagsModalLoading] = useState(false);
   
   // New state variables for sub-item operations
   const [showSubItemOptionModal, setShowSubItemOptionModal] = useState(false);
@@ -229,6 +226,33 @@ export default function ReportsPage() {
   const [showSubSubItemAddModal, setShowSubSubItemAddModal] = useState(false);
   const [newSubSubItemName, setNewSubSubItemName] = useState('');
   const [showSubSubItemTagsModal, setShowSubSubItemTagsModal] = useState(false);
+
+  // Backend tags summary state (persisted in brmh-fintech-user-reports)
+  const [tagsSummary, setTagsSummary] = useState<{
+    id?: string;
+    type?: string;
+    userId?: string;
+    updatedAt?: string;
+    createdAt?: string;
+    tags: Array<{
+      tagId: string;
+      tagName: string;
+      credit: number;
+      debit: number;
+      balance: number;
+      transactionCount: number;
+      statementIds: string[];
+    }>;
+  } | null>(null);
+
+  const tagsSummaryMap = useMemo(() => {
+    const map = new Map<string, { credit: number; debit: number; balance: number }>();
+    const list = tagsSummary?.tags || [];
+    for (const t of list) {
+      map.set(t.tagName.toLowerCase(), { credit: t.credit, debit: t.debit, balance: t.balance });
+    }
+    return map;
+  }, [tagsSummary]);
 
   // Debounced backend persist handle
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -273,6 +297,7 @@ export default function ReportsPage() {
         if (!res.ok) return;
         const remoteData: CashFlowSection[] | null = await res.json();
         if (remoteData && Array.isArray(remoteData)) {
+          console.log('Loaded cashFlowData from backend:', remoteData);
           setCashFlowData(remoteData);
           // Save locally but avoid immediate re-persist to backend to prevent loops
           saveCashFlowData(remoteData, false);
@@ -284,73 +309,86 @@ export default function ReportsPage() {
     fetchRemote();
   }, [saveCashFlowData]);
 
-
-
-  // Function to fetch tag financial data - using Redux data
-  const fetchTagFinancialData = useCallback(async (tagName: string) => {
-    try {
-      if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) {
-        console.error('No transactions data available in Redux');
-        return { credit: 0, debit: 0, balance: 0 };
+  // Load tags summary from backend on mount
+  useEffect(() => {
+    const load = async () => {
+      try {
+        if (typeof window === 'undefined') return;
+        const userId = localStorage.getItem('userId');
+        console.log('Loading tags summary for userId:', userId);
+        if (!userId) {
+          console.log('No userId found in localStorage');
+          return;
+        }
+        const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
+        console.log('Tags summary response status:', res.status);
+        if (!res.ok) {
+          console.log('Tags summary response not ok:', res.statusText);
+          return;
+        }
+        const summary = await res.json();
+        console.log('Tags summary loaded:', summary);
+        if (summary) setTagsSummary(summary);
+      } catch (err) {
+        console.error('Failed to load tags summary:', err);
       }
+    };
+    load();
+  }, []);
 
-      const transactions = reduxAnalyticsData.transactions;
-      console.log(`Using ${transactions.length} transactions from Redux for tag: ${tagName}`);
+  // Recompute tags summary on backend and reload
+  const recomputeAndLoadTagsSummary = useCallback(async () => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const userId = localStorage.getItem('userId');
+      console.log('Recomputing tags summary for userId:', userId);
+      if (!userId) {
+        console.log('No userId found for recompute');
+        return null;
+      }
       
-      // Use exact same logic as Super Bank
-      const txs: TransactionData[] = transactions.filter((tx: TransactionData) =>
-        Array.isArray(tx.tags) && tx.tags.some((t: { name: string }) => t.name === tagName)
-      );
-      console.log(`Found ${txs.length} transactions for tag ${tagName}`);
-      
-      let totalAmount = 0, totalCredit = 0, totalDebit = 0;
-      
-      txs.forEach((tx: TransactionData) => {
-        // Get amount from AmountRaw or parse from Amount field - EXACT SAME LOGIC AS SUPER BANK
-        let amount = 0;
-        if (typeof tx.AmountRaw === 'number') {
-          amount = tx.AmountRaw || 0;
-        } else {
-          // Fallback to parsing Amount field
-          const amountField = tx.Amount || tx.amount || 0;
-          // Simple parsing without parseIndianAmount
-          if (typeof amountField === 'number') {
-            amount = amountField;
-          } else if (typeof amountField === 'string') {
-            const cleaned = amountField.replace(/,/g, '').trim();
-            const num = parseFloat(cleaned);
-            amount = isNaN(num) ? 0 : num;
-          } else {
-            amount = 0;
-          }
-        }
-        
-        // Use Math.round to avoid floating point precision issues
-        amount = Math.round(amount * 100) / 100;
-        totalAmount = Math.round((totalAmount + amount) * 100) / 100;
-        
-        const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
-        console.log(`Transaction for ${tagName}: AmountRaw=${tx.AmountRaw}, Amount=${tx.Amount}, ParsedAmount=${amount}, Dr./Cr.=${crdr}`);
-        
-        if (crdr === 'CR') {
-          totalCredit = Math.round((totalCredit + Math.abs(amount)) * 100) / 100;
-        } else if (crdr === 'DR') {
-          totalDebit = Math.round((totalDebit + Math.abs(amount)) * 100) / 100;
-        }
+      console.log('Sending POST to recompute tags summary...');
+      const postRes = await fetch('/api/reports/tags-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
       });
+      console.log('POST response status:', postRes.status);
       
-      console.log(`Final calculation for ${tagName}: Credit=${totalCredit}, Debit=${totalDebit}, Balance=${totalCredit - totalDebit}`);
+      if (!postRes.ok) {
+        console.log('POST failed:', postRes.statusText);
+        return null;
+      }
       
-      return {
-        credit: Math.round(totalCredit * 100) / 100,
-        debit: Math.round(totalDebit * 100) / 100,
-        balance: Math.round((totalCredit - totalDebit) * 100) / 100
-      };
-    } catch (error) {
-      console.error('Error calculating tag financial data:', error);
-      return { credit: 0, debit: 0, balance: 0 };
+      console.log('Fetching updated tags summary...');
+      const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
+      console.log('GET response status:', res.status);
+      
+      if (!res.ok) {
+        console.log('GET failed:', res.statusText);
+        return null;
+      }
+      
+      const summary = await res.json();
+      console.log('Updated summary received:', summary);
+      setTagsSummary(summary);
+      return summary as typeof tagsSummary;
+    } catch (err) {
+      console.error('Failed to recompute/load tags summary:', err);
+      return null;
     }
-  }, [reduxAnalyticsData]);
+  }, []);
+
+  // Function to fetch tag financial data - using backend summary
+  const fetchTagFinancialData = useCallback(async (tagName: string, ensureFresh: boolean = false) => {
+    // Only recompute if explicitly requested and not during modal operations
+    if (ensureFresh) {
+      await recomputeAndLoadTagsSummary();
+    }
+    const rec = tagsSummaryMap.get(tagName.toLowerCase());
+    if (rec) return { credit: rec.credit, debit: rec.debit, balance: rec.balance };
+      return { credit: 0, debit: 0, balance: 0 };
+  }, [tagsSummaryMap, recomputeAndLoadTagsSummary]);
 
   // Keep a ref of latest cashFlowData to avoid effect dependency loops
   const cashFlowDataRef = useRef<CashFlowSection[]>(cashFlowData);
@@ -365,6 +403,18 @@ export default function ReportsPage() {
   const [showTagTransactionsModal, setShowTagTransactionsModal] = useState(false);
   const [activeTagName, setActiveTagName] = useState<string | null>(null);
   const [activeTagTransactions, setActiveTagTransactions] = useState<TransactionData[]>([]);
+  const [isTagModalLoading, setIsTagModalLoading] = useState(false);
+
+  // Recompute tags summary once on mount and refresh tag-based amounts in cashflow
+  const hasRecomputedOnMountRef = useRef(false);
+  useEffect(() => {
+    if (hasRecomputedOnMountRef.current) return;
+    hasRecomputedOnMountRef.current = true;
+    (async () => {
+      await recomputeAndLoadTagsSummary();
+      // Don't call handleRefreshTags here as it will be triggered by the tags summary change
+    })();
+  }, [recomputeAndLoadTagsSummary]);
 
   // Manual refresh function to sync latest tag changes from Super Bank
   const handleRefreshTags = useCallback(async () => {
@@ -375,12 +425,8 @@ export default function ReportsPage() {
     }
 
     try {
+      console.log('Starting tag refresh...');
       setIsRefreshing(true);
-      
-      if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) {
-        console.log('No Redux data available for refresh');
-        return;
-      }
       
       // Collect unique tag names present in the current cashflow that were created from tags
       const tagNames = new Set<string>();
@@ -398,6 +444,8 @@ export default function ReportsPage() {
         });
       });
       
+      console.log('Found tag-based items:', Array.from(tagNames));
+      
       if (tagNames.size === 0) {
         console.log('No tag-based items found to refresh');
         return;
@@ -405,14 +453,25 @@ export default function ReportsPage() {
 
       console.log(`Refreshing ${tagNames.size} tag-based items:`, Array.from(tagNames));
 
-      // Compute latest CR/DR/Bal for each tag using Redux transactions
-      const entries = await Promise.all(
-        Array.from(tagNames).map(async (name) => {
-          const data = await fetchTagFinancialData(name);
-          return [name, data] as const;
+      // Recompute backend summary and build lookup
+      const summary = await recomputeAndLoadTagsSummary();
+      console.log('Recomputed summary:', summary);
+      
+      if (!summary) {
+        console.log('Failed to recompute summary');
+        return;
+      }
+      
+      const lookup = new Map<string, { credit: number; debit: number; balance: number }>(
+        (summary?.tags || []).map((t: Record<string, unknown>) => [t.tagName as string, { credit: t.credit as number, debit: t.debit as number, balance: t.balance as number }])
+      );
+      const tagToData = new Map(
+        Array.from(tagNames).map((name) => {
+          const rec = lookup.get(name.toLowerCase());
+          console.log(`Tag ${name}:`, rec);
+          return [name, rec || { credit: 0, debit: 0, balance: 0 }] as const;
         })
       );
-      const tagToData = new Map(entries);
 
       // Update all tag-created items with fresh balances
       setCashFlowData(prev => {
@@ -426,6 +485,7 @@ export default function ReportsPage() {
                 if (node.createdByTag) {
                   const data = tagToData.get(node.particular);
                   if (data) {
+                    console.log(`Updating ${node.particular} with data:`, data);
                     next = { ...next, amount: data.balance, tagData: data };
                   }
                 }
@@ -453,17 +513,59 @@ export default function ReportsPage() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [reduxAnalyticsData, cashFlowData, fetchTagFinancialData, saveCashFlowData, isRefreshing]);
+  }, [cashFlowData, recomputeAndLoadTagsSummary, saveCashFlowData, isRefreshing]);
 
-  // Auto-refresh tag-based rows whenever analytics Redux data changes
+  // Function to clear all tag-based items from cashflow
+  const handleClearAllTagItems = useCallback(async () => {
+    if (isRefreshing) {
+      console.log('Operation already in progress, skipping...');
+      return;
+    }
+
+    try {
+      console.log('Starting to clear all tag-based items...');
+      setIsRefreshing(true);
+      
+      // Get userId from localStorage
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        console.error('No userId found');
+        return;
+      }
+      
+      // Call the API to clear all tag-based items
+      const response = await fetch('/api/tags', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          clearAllTagItems: userId 
+        })
+      });
+      
+      if (response.ok) {
+        console.log('Successfully cleared all tag-based items');
+        // Reload the cashflow data to reflect changes
+        const res = await fetch(`/api/reports/cashflow?userId=${encodeURIComponent(userId)}`);
+        if (res.ok) {
+          const remoteData: CashFlowSection[] | null = await res.json();
+          if (remoteData && Array.isArray(remoteData)) {
+            console.log('Reloaded cashFlowData after clearing tags:', remoteData);
+            setCashFlowData(remoteData);
+            saveCashFlowData(remoteData, false);
+          }
+        }
+      } else {
+        console.error('Failed to clear tag-based items');
+      }
+    } catch (error) {
+      console.error('Error clearing tag-based items:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, saveCashFlowData]);
+
+  // When backend tags summary changes, refresh tag-based rows from it
   useEffect(() => {
-    // Skip if no Redux data or if we're already processing
-    if (!reduxAnalyticsData || !reduxAnalyticsData.transactions) return;
-    
-    // Debounce the refresh to prevent excessive calls
-    const timeoutId = setTimeout(() => {
-      const refreshTagItems = async () => {
-        try {
           // Collect unique tag names present in the current cashflow that were created from tags
           const tagNames = new Set<string>();
           const scanData = cashFlowDataRef.current || [];
@@ -482,16 +584,13 @@ export default function ReportsPage() {
           });
           if (tagNames.size === 0) return;
 
-          // Compute latest CR/DR/Bal for each tag using Redux transactions
-          const entries = await Promise.all(
-            Array.from(tagNames).map(async (name) => {
-              const data = await fetchTagFinancialData(name);
-              return [name, data] as const;
-            })
-          );
-          const tagToData = new Map(entries);
+    const tagToData = new Map(
+      Array.from(tagNames).map((name) => {
+        const rec = tagsSummaryMap.get(name.toLowerCase());
+        return [name, rec ? { credit: rec.credit, debit: rec.debit, balance: rec.balance } : { credit: 0, debit: 0, balance: 0 }];
+      })
+    );
 
-          // Update all tag-created items with fresh balances
           setCashFlowData(prev => {
             const updated = prev.map(section => ({
               ...section,
@@ -523,50 +622,36 @@ export default function ReportsPage() {
             saveCashFlowData(updated);
             return updated;
           });
-        } catch (err) {
-          console.error('Failed to refresh tag-based items:', err);
-        }
-      };
+  }, [tagsSummaryMap, saveCashFlowData]);
 
-      refreshTagItems();
-    }, 1000); // 1 second debounce
-
-    return () => clearTimeout(timeoutId);
-  }, [reduxAnalyticsData, saveCashFlowData, fetchTagFinancialData]);
-
-  // Auto-refresh tags when page loads/becomes visible (additional to Redux changes)
+  // Auto-refresh tags when page loads/becomes visible (backend-driven)
   useEffect(() => {
-    // Debounce visibility change handler to prevent excessive calls
     let visibilityTimeoutId: NodeJS.Timeout;
     
     const handleVisibilityChange = () => {
-      if (!document.hidden && reduxAnalyticsData && reduxAnalyticsData.transactions && !isRefreshing) {
-        // Clear any pending timeout
+      if (!document.hidden && !isRefreshing) {
         clearTimeout(visibilityTimeoutId);
-        // Debounce the refresh call
         visibilityTimeoutId = setTimeout(() => {
+          // Only refresh if we have tag-based items
+          const hasTagItems = cashFlowData.some(section => 
+            section.groups.some(group => 
+              group.items.some(item => item.createdByTag || 
+                item.subItems?.some(sub => sub.createdByTag) ||
+                item.subItems?.some(sub => sub.subItems?.some(ss => ss.createdByTag))
+              )
+            )
+          );
+          if (hasTagItems) {
           handleRefreshTags();
+          }
         }, 500);
       }
     };
 
-    // Refresh on page load/focus (only once)
-    if (reduxAnalyticsData && reduxAnalyticsData.transactions && !isRefreshing) {
-      // Delay initial refresh to prevent blocking page load
-      const initialTimeoutId = setTimeout(() => {
-        handleRefreshTags();
-      }, 1000);
-      
-      return () => {
-        clearTimeout(initialTimeoutId);
-        clearTimeout(visibilityTimeoutId);
-      };
-    }
+    // Don't do initial refresh here - it's already handled by the mount effect
+    // Only refresh when page becomes visible
 
-    // Listen for page visibility changes (when user switches back to tab)
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Listen for window focus (when user switches back to window)
     window.addEventListener('focus', handleVisibilityChange);
 
     return () => {
@@ -574,7 +659,7 @@ export default function ReportsPage() {
       window.removeEventListener('focus', handleVisibilityChange);
       clearTimeout(visibilityTimeoutId);
     };
-  }, [reduxAnalyticsData, handleRefreshTags, isRefreshing]); // Include isRefreshing to prevent conflicts
+  }, [handleRefreshTags, isRefreshing, cashFlowData]);
 
       // Helper function to calculate item total including sub-items
   const calculateItemTotal = useCallback((item: CashFlowItem): number => {
@@ -602,101 +687,198 @@ export default function ReportsPage() {
     return { totalInflow: inflow, totalOutflow: outflow, netFlow: net };
   }, [cashFlowData, calculateGroupTotal]);
 
-  // Function to get bank breakdown for tooltips
+    // Function to get bank breakdown using tags summary data, aligned with cashFlowData groups
   const getBankBreakdown = (type: 'inflow' | 'outflow' | 'net') => {
-    const bankData: { name: string; amount: number }[] = [];
+    const bankTotals = new Map<string, { amount: number; accounts: Set<string> }>();
+    const processedTagNames = new Set<string>();
+    const bankData: { name: string; amount: number; accounts: string[] }[] = [];
+
+    // Determine which cashFlowData section to use for group titles
+    const cashFlowGroups = type === 'inflow' ? cashFlowData[0]?.groups : cashFlowData[1]?.groups;
     
-    // Get bank data from Redux analytics data
-    if (reduxAnalyticsData && reduxAnalyticsData.transactions) {
-      const transactions = reduxAnalyticsData.transactions;
+    console.log(`getBankBreakdown(${type}) - cashFlowData sections:`, {
+      inflow: cashFlowData[0]?.groups?.length || 0,
+      outflow: cashFlowData[1]?.groups?.length || 0,
+      selectedGroups: cashFlowGroups?.length || 0
+    });
+
+    cashFlowGroups?.forEach(group => {
+      const groupTitle = group.title;
+      console.log(`Processing group "${groupTitle}" for ${type}`);
       
-      // Create a map to store bank totals
-      const bankTotals: { [bankName: string]: number } = {};
-      
-      transactions.forEach((tx: TransactionData) => {
-        // Get bank name from transaction
-        const bankName = tx.bankName || tx.bankId || 'Unknown Bank';
-        
-        // Get amount from transaction
-        let amount = 0;
-        if (typeof tx.AmountRaw === 'number') {
-          amount = tx.AmountRaw || 0;
+      // Process each sub-item (actual tag) within the group
+      group.items?.forEach(item => {
+        const tagName = item.particular; // This is the actual tag name like "Boo"
+        if (!tagName || processedTagNames.has(tagName)) return; // Skip if no tag name or already processed
+        processedTagNames.add(tagName);
+
+        console.log(`Processing sub-item "${tagName}" in group "${groupTitle}"`);
+        const tagInfo = tagsSummary?.tags.find((tag: Record<string, unknown>) => tag.tagName === tagName);
+        console.log(`Found tagInfo for "${tagName}":`, tagInfo);
+        console.log(`Tag "${tagName}" bankBreakdown:`, (tagInfo as Record<string, unknown>)?.bankBreakdown);
+
+                if (tagInfo && (tagInfo as Record<string, unknown>).bankBreakdown) {
+          const bankBreakdown = (tagInfo as Record<string, unknown>).bankBreakdown as Record<string, Record<string, unknown>>;
+          Object.entries(bankBreakdown).forEach(([bankName, bankEntryDetails]) => {
+        if (type === 'inflow') {
+              // For inflow, show all banks regardless of credit/debit
+              const credit = (bankEntryDetails.credit as number) || 0;
+              const debit = (bankEntryDetails.debit as number) || 0;
+              const amount = credit > 0 ? credit : debit;
+              const accounts = (bankEntryDetails.accounts as string[]) || [];
+              
+              if (accounts.length > 0) {
+                // Show individual accounts
+                accounts.forEach((account: string) => {
+                  const accountKey = `${bankName} - ${account}`;
+                  if (!bankTotals.has(accountKey)) {
+                    bankTotals.set(accountKey, { amount: 0, accounts: new Set<string>() });
+                  }
+                  const accountTotal = bankTotals.get(accountKey)!;
+                  accountTotal.amount += amount / accounts.length; // Distribute amount equally
+                  accountTotal.accounts.add(account);
+                });
+              } else {
+                // No accounts, show bank total
+                if (!bankTotals.has(bankName)) {
+                  bankTotals.set(bankName, { amount: 0, accounts: new Set<string>() });
+                }
+                const bankTotal = bankTotals.get(bankName)!;
+                bankTotal.amount += amount;
+              }
+            } else if (type === 'outflow' && (bankEntryDetails.debit as number) > 0) {
+              const debit = bankEntryDetails.debit as number;
+              const accounts = (bankEntryDetails.accounts as string[]) || [];
+              
+              if (accounts.length > 0) {
+                // Show individual accounts
+                accounts.forEach((account: string) => {
+                  const accountKey = `${bankName} - ${account}`;
+                  if (!bankTotals.has(accountKey)) {
+                    bankTotals.set(accountKey, { amount: 0, accounts: new Set<string>() });
+                  }
+                  const accountTotal = bankTotals.get(accountKey)!;
+                  accountTotal.amount += debit / accounts.length; // Distribute amount equally
+                  accountTotal.accounts.add(account);
+                });
+              } else {
+                // No accounts, show bank total
+                if (!bankTotals.has(bankName)) {
+                  bankTotals.set(bankName, { amount: 0, accounts: new Set<string>() });
+                }
+                const bankTotal = bankTotals.get(bankName)!;
+                bankTotal.amount += debit;
+              }
+            }
+          });
         } else {
-          const amountField = tx.Amount || tx.amount || 0;
-          if (typeof amountField === 'number') {
-            amount = amountField;
-          } else if (typeof amountField === 'string') {
-            const cleaned = amountField.replace(/,/g, '').trim();
-            const num = parseFloat(cleaned);
-            amount = isNaN(num) ? 0 : num;
+          // Fallback: if no bank breakdown for the tag, use the item's amount
+          const itemAmount = item.amount || 0;
+          if (type === 'inflow' && itemAmount > 0) {
+            // For fallback, we don't know the bank, so we'll use a generic name
+            const fallbackBankName = 'Unknown Bank';
+            if (!bankTotals.has(fallbackBankName)) {
+              bankTotals.set(fallbackBankName, { amount: 0, accounts: new Set<string>() });
+            }
+            const bankTotal = bankTotals.get(fallbackBankName)!;
+            bankTotal.amount += itemAmount;
+          } else if (type === 'outflow' && itemAmount !== 0) {
+            const fallbackBankName = 'Unknown Bank';
+            if (!bankTotals.has(fallbackBankName)) {
+              bankTotals.set(fallbackBankName, { amount: 0, accounts: new Set<string>() });
+            }
+            const bankTotal = bankTotals.get(fallbackBankName)!;
+            bankTotal.amount += Math.abs(itemAmount);
           }
         }
         
-        // Determine if it's inflow or outflow based on Dr./Cr.
-        const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
-        let isInflow = false;
-        
-        if (crdr === 'CR') {
-          isInflow = true;
-        } else if (crdr === 'DR') {
-          isInflow = false;
-        } else {
-          // If no Dr./Cr. specified, assume positive amounts are inflow
-          isInflow = amount > 0;
-        }
-        
-        // Add to bank totals based on type
-        if (type === 'inflow' && isInflow) {
-          bankTotals[bankName] = (bankTotals[bankName] || 0) + Math.abs(amount);
-        } else if (type === 'outflow' && !isInflow) {
-          bankTotals[bankName] = (bankTotals[bankName] || 0) + Math.abs(amount);
-        } else if (type === 'net') {
-          const currentTotal = bankTotals[bankName] || 0;
-          bankTotals[bankName] = currentTotal + (isInflow ? amount : -amount);
+        // Debug: Log what we found for this tag
+        console.log(`Tag "${tagName}" processing complete:`, {
+          hasBankBreakdown: !!(tagInfo && (tagInfo as Record<string, unknown>).bankBreakdown),
+          bankBreakdownKeys: tagInfo && (tagInfo as Record<string, unknown>).bankBreakdown ? Object.keys((tagInfo as Record<string, unknown>).bankBreakdown as Record<string, unknown>) : [],
+          bankTotalsSize: bankTotals.size
+        });
+      });
+    });
+
+    // For 'net', we need to aggregate all tags' net balances per bank
+    if (type === 'net') {
+      const netBankTotals = new Map<string, { amount: number; accounts: Set<string> }>();
+      tagsSummary?.tags.forEach((tag: Record<string, unknown>) => {
+        if ((tag as Record<string, unknown>).bankBreakdown) {
+          const bankBreakdown = (tag as Record<string, unknown>).bankBreakdown as Record<string, Record<string, unknown>>;
+          Object.entries(bankBreakdown).forEach(([bankName, bankEntryDetails]) => {
+            if (!netBankTotals.has(bankName)) {
+              netBankTotals.set(bankName, { amount: 0, accounts: new Set<string>() });
+            }
+            const current = netBankTotals.get(bankName)!;
+            const credit = (bankEntryDetails.credit as number) || 0;
+            const debit = (bankEntryDetails.debit as number) || 0;
+            current.amount += credit - debit;
+            const accounts = (bankEntryDetails.accounts as string[]) || [];
+            accounts.forEach((acc: string) => current.accounts.add(acc));
+          });
         }
       });
-      
-      // Convert to array format
-      Object.entries(bankTotals).forEach(([bankName, total]) => {
-        if (Math.abs(total) > 0) {
-          bankData.push({ name: bankName, amount: total });
+      netBankTotals.forEach((value, key) => {
+        if (value.amount !== 0) {
+          bankData.push({ name: key, amount: value.amount, accounts: Array.from(value.accounts) });
         }
       });
     }
-    
-    // If no bank data available, fall back to group data
-    if (bankData.length === 0) {
-      if (type === 'inflow') {
-        cashFlowData[0]?.groups?.forEach(group => {
-          const groupTotal = group.items.reduce((sum, item) => sum + (item.amount || 0), 0);
-          if (groupTotal > 0) {
-            bankData.push({ name: group.title, amount: groupTotal });
+
+    // Convert bankTotals back to bankData format
+    bankTotals.forEach((value, bankName) => {
+      bankData.push({
+        name: bankName,
+        amount: value.amount,
+        accounts: Array.from(value.accounts)
+      });
+    });
+
+    // If no data found using cashFlowData approach, fallback to tagsSummary approach
+    if (bankData.length === 0 && tagsSummary?.tags) {
+      console.log(`No data found using cashFlowData for ${type}, falling back to tagsSummary approach`);
+      
+      // For outflow, show all tags that have any debit amounts, regardless of balance
+      if (type === 'outflow') {
+        tagsSummary.tags.forEach((tag: Record<string, unknown>) => {
+          if ((tag as Record<string, unknown>).bankBreakdown) {
+            const bankBreakdown = (tag as Record<string, unknown>).bankBreakdown as Record<string, Record<string, unknown>>;
+            Object.entries(bankBreakdown).forEach(([bankName, bankEntryDetails]) => {
+              if ((bankEntryDetails.debit as number) > 0) {
+                bankData.push({
+                  name: bankName, // Just show bank name, not tag-bank
+                  amount: bankEntryDetails.debit as number,
+                  accounts: (bankEntryDetails.accounts as string[]) || []
+                });
+              }
+            });
           }
         });
-      } else if (type === 'outflow') {
-        cashFlowData[1]?.groups?.forEach(group => {
-          const groupTotal = group.items.reduce((sum, item) => sum + (item.amount || 0), 0);
-          if (groupTotal > 0) {
-            bankData.push({ name: group.title, amount: groupTotal });
-          }
-        });
-      } else if (type === 'net') {
-        const inflowByGroup = getBankBreakdown('inflow');
-        const outflowByGroup = getBankBreakdown('outflow');
-        
-        const allGroups = new Set([...inflowByGroup.map(b => b.name), ...outflowByGroup.map(b => b.name)]);
-        
-        allGroups.forEach(groupName => {
-          const inflow = inflowByGroup.find(b => b.name === groupName)?.amount || 0;
-          const outflow = outflowByGroup.find(b => b.name === groupName)?.amount || 0;
-          const net = inflow - outflow;
-          if (net !== 0) {
-            bankData.push({ name: groupName, amount: net });
+      } else if (type === 'inflow') {
+        tagsSummary.tags.forEach((tag: Record<string, unknown>) => {
+          const tagBalance = (tag.balance as number) || 0;
+          
+          if (tagBalance > 0) {
+            if ((tag as Record<string, unknown>).bankBreakdown) {
+              const bankBreakdown = (tag as Record<string, unknown>).bankBreakdown as Record<string, Record<string, unknown>>;
+              Object.entries(bankBreakdown).forEach(([bankName, bankEntryDetails]) => {
+                if ((bankEntryDetails.credit as number) > 0) {
+                  bankData.push({
+                    name: bankName, // Just show bank name, not tag-bank
+                    amount: bankEntryDetails.credit as number,
+                    accounts: (bankEntryDetails.accounts as string[]) || []
+                  });
+                }
+              });
+            }
           }
         });
       }
     }
-    
+
+    console.log(`getBankBreakdown(${type}) result:`, bankData);
     return bankData.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   };
 
@@ -1053,10 +1235,18 @@ export default function ReportsPage() {
     setShowGroupOptionModal(false);
   };
 
-  const openAddGroupTagsModal = () => {
+  const openAddGroupTagsModal = async () => {
+    // Don't recompute tags summary on modal open - use existing data
+    // This was causing the slow performance
+    setIsTagsModalLoading(true);
     setShowTagsModal(true);
     setShowGroupOptionModal(false);
-    fetchTags();
+    
+    try {
+      await fetchTags();
+    } finally {
+      setIsTagsModalLoading(false);
+    }
   };
 
   const fetchTags = async () => {
@@ -1144,8 +1334,8 @@ export default function ReportsPage() {
       const newItems: CashFlowItem[] = [];
       
       for (const tag of modalSelectedTags) {
-        // Fetch tag financial data
-        const tagData = await fetchTagFinancialData(tag.name);
+        // Fetch tag financial data (use cached data, don't recompute)
+        const tagData = await fetchTagFinancialData(tag.name, false);
         console.log('Tag financial data for', tag.name, ':', tagData);
         
         // Create a new item with the tag name and financial data
@@ -1218,8 +1408,8 @@ export default function ReportsPage() {
       const newSubItems: CashFlowItem[] = [];
       
       for (const tag of modalSelectedTags) {
-        // Fetch tag financial data
-        const tagData = await fetchTagFinancialData(tag.name);
+        // Fetch tag financial data (use cached data, don't recompute)
+        const tagData = await fetchTagFinancialData(tag.name, false);
         console.log('Tag financial data for', tag.name, ':', tagData);
         
         // Create a new sub-item with the tag name and financial data
@@ -1629,8 +1819,8 @@ export default function ReportsPage() {
       const newSubSubItems: CashFlowItem[] = [];
       
       for (const tag of modalSelectedTags) {
-        // Fetch tag financial data
-        const tagData = await fetchTagFinancialData(tag.name);
+        // Fetch tag financial data (use cached data, don't recompute)
+        const tagData = await fetchTagFinancialData(tag.name, false);
         console.log('Tag financial data for', tag.name, ':', tagData);
         
         // Create a new sub-sub-item with the tag name and financial data
@@ -1699,32 +1889,29 @@ export default function ReportsPage() {
     }
   };
 
-  // Helper: open tag transactions modal by tag name using Redux analytics data
+  // Helper: open tag transactions modal by tag name (no Redux) – fetch from backend per-bank tables
   const openTagTransactions = useCallback(async (tagName: string) => {
     try {
       setActiveTagName(tagName);
-      if (reduxAnalyticsData && reduxAnalyticsData.transactions) {
-        const txs: TransactionData[] = reduxAnalyticsData.transactions.filter((tx: TransactionData) =>
-          Array.isArray(tx.tags) && tx.tags.some((t: { name: string }) => t.name === tagName)
-        );
-        
-        // Debug: Log the first transaction to see what fields are available
-        if (txs.length > 0) {
-          console.log('🔍 First transaction data:', txs[0]);
-          console.log('🔍 Available fields:', Object.keys(txs[0]));
-          console.log('🔍 Description field value:', txs[0].Description);
-          console.log('🔍 Description field type:', typeof txs[0].Description);
-          console.log('🔍 All string fields:', Object.entries(txs[0]).filter(([, v]) => typeof v === 'string' && v.trim() !== '').map(([k, v]) => `${k}: "${v}"`));
-        }
-        
+      setActiveTagTransactions([]);
+      setIsTagModalLoading(true);
+      setShowTagTransactionsModal(true); // open immediately
+      // Fetch all transactions for user across banks from backend, then filter client-side by tag name for the modal
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+      const res = await fetch(userId ? `/api/transactions/all?userId=${encodeURIComponent(userId)}` : `/api/transactions/all`);
+      let txs: TransactionData[] = [];
+      if (res.ok) {
+        const allTx = await res.json();
+        txs = Array.isArray(allTx) ? allTx.filter((tx: Record<string, unknown>) => Array.isArray(tx.tags) && tx.tags.some((t: Record<string, unknown>) => t?.name === tagName)) : [];
+      }
         // Fetch user account numbers for unique accountIds
-        const uniqueAccountIds: string[] = Array.from(new Set(txs.map(t => t.accountId).filter((v): v is string => typeof v === 'string' && v.length > 0)));
+      const uniqueAccountIds: string[] = Array.from(new Set(txs.map((t: TransactionData) => t.accountId as string).filter((v): v is string => typeof v === 'string' && v.length > 0)));
         const entries = await Promise.all(
           uniqueAccountIds.map(async (accountId: string) => {
             try {
-              const res = await fetch(`/api/account?accountId=${encodeURIComponent(accountId)}`);
-              if (!res.ok) return [accountId, null] as const;
-              const account = await res.json();
+            const r = await fetch(`/api/account?accountId=${encodeURIComponent(accountId)}`);
+            if (!r.ok) return [accountId, null] as const;
+            const account = await r.json();
               const acctNo: string | null = (account?.accountNumber as string) || null;
               return [accountId, acctNo] as const;
             } catch {
@@ -1733,50 +1920,142 @@ export default function ReportsPage() {
           })
         );
         const idToUserAccountNo: { [id: string]: string | null } = Object.fromEntries(entries);
-        const enriched: TransactionData[] = txs.map((tx) => ({
+      const enriched: TransactionData[] = txs.map((tx: TransactionData) => ({
           ...tx,
           userAccountNumber:
             (tx.accountId && idToUserAccountNo[tx.accountId]) ||
             tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A'
         }));
         setActiveTagTransactions(enriched);
-      } else {
-        setActiveTagTransactions([]);
-      }
-      setShowTagTransactionsModal(true);
     } catch {
       setActiveTagTransactions([]);
-      setShowTagTransactionsModal(true);
+    } finally {
+      setIsTagModalLoading(false);
     }
-  }, [reduxAnalyticsData]);
+  }, []);
+
+  // Normalize amounts and CR/DR across various bank schemas for the tag modal
+  const extractAmountAndTypeFromTx = (
+    tx: TransactionData
+  ): { amountAbs: number; crdr: 'CR' | 'DR' | '' } => {
+    const toNumber = (val: unknown): number => {
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      if (typeof val === 'string') {
+        const match = val.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+        if (match) return parseFloat(match[0]);
+      }
+      return 0;
+    };
+
+    const txAny = tx as Record<string, unknown>;
+    const unified =
+      tx?.AmountRaw ??
+      tx?.Amount ??
+      tx?.amount ??
+      txAny?.['Transaction Amount'] ??
+      txAny?.['transaction amount'];
+
+    const crdrField = (
+      tx?.['Dr./Cr.'] ??
+      txAny?.['Dr/Cr'] ??
+      txAny?.['DR/CR'] ??
+      txAny?.['dr/cr'] ??
+      txAny?.['Type'] ??
+      txAny?.['type'] ??
+      // Add the exact field names from Kotak bank
+      txAny?.['Dr / Cr'] ??
+      txAny?.['Dr / Cr_1'] ??
+      txAny?.['DR / CR'] ??
+      txAny?.['DR / CR_1'] ??
+      ''
+    )
+      .toString()
+      .trim()
+      .toUpperCase();
+
+    if (unified !== undefined && unified !== null) {
+      const num = toNumber(unified);
+      const abs = Math.abs(num);
+      if (crdrField === 'CR' || crdrField === 'DR')
+        return { amountAbs: abs, crdr: crdrField as 'CR' | 'DR' };
+      if (num > 0) return { amountAbs: abs, crdr: 'CR' };
+      if (num < 0) return { amountAbs: abs, crdr: 'DR' };
+    }
+
+    let credit = 0;
+    let debit = 0;
+    for (const [rawKey, value] of Object.entries(tx || {})) {
+      const key = rawKey.toLowerCase();
+      const n = toNumber(value);
+      if (!n) continue;
+      if (
+        key.includes('credit') ||
+        key.includes('deposit') ||
+        key.includes('cr amount') ||
+        /(^|\W)cr(\W|$)/.test(key)
+      ) {
+        credit += Math.abs(n);
+      }
+      if (
+        key.includes('debit') ||
+        key.includes('withdraw') ||
+        key.includes('dr amount') ||
+        /(^|\W)dr(\W|$)/.test(key)
+      ) {
+        debit += Math.abs(n);
+      }
+    }
+    if (credit > 0 && debit === 0)
+      return { amountAbs: Math.round(credit * 100) / 100, crdr: 'CR' };
+    if (debit > 0 && credit === 0)
+      return { amountAbs: Math.round(debit * 100) / 100, crdr: 'DR' };
+    return {
+      amountAbs: 0,
+      crdr: crdrField === 'CR' || crdrField === 'DR' ? (crdrField as 'CR' | 'DR') : ''
+    };
+  };
+
+  // Function to get transaction counts by bank (unused - kept for potential future use)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const getTransactionCountsByBank = () => {
+    const bankCounts = new Map<string, { count: number; accounts: Set<string> }>();
+    
+    if (!tagsSummary?.tags) return [];
+    
+    tagsSummary.tags.forEach((tag: Record<string, unknown>) => {
+      if ((tag as Record<string, unknown>).bankBreakdown) {
+        const bankBreakdown = (tag as Record<string, unknown>).bankBreakdown as Record<string, Record<string, unknown>>;
+        Object.entries(bankBreakdown).forEach(([bankName, bankEntryDetails]) => {
+          if (!bankCounts.has(bankName)) {
+            bankCounts.set(bankName, { count: 0, accounts: new Set<string>() });
+          }
+          const bankCount = bankCounts.get(bankName)!;
+          bankCount.count += (bankEntryDetails.transactionCount as number) || 0;
+          const accounts = (bankEntryDetails.accounts as string[]) || [];
+          accounts.forEach((acc: string) => bankCount.accounts.add(acc));
+        });
+      }
+    });
+    
+    return Array.from(bankCounts.entries()).map(([bankName, data]) => ({
+      name: bankName,
+      count: data.count,
+      accounts: Array.from(data.accounts)
+    })).sort((a, b) => b.count - a.count);
+  };
 
     return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10 px-4 overflow-y-auto">
-      <div className="max-w-[1400px] mx-auto">
+      <div className="max-w-7xl mx-auto">
       {/* Header */}
         
 
         {/* Analytics Summary */}
    
 
-        {/* Loading and Error States */}
-        {analyticsLoading && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-blue-800">Loading analytics data from Super Bank...</p>
-          </div>
-        )}
+        {/* No Redux loading/error UI */}
 
-        {analyticsError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800">Error loading analytics: {analyticsError}</p>
-          </div>
-        )}
-
-        {/* {!analyticsLoading && !analyticsError && !reduxAnalyticsData && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p className="text-yellow-800">No analytics data available. Please visit Super Bank first to load data.</p>
-          </div>
-        )} */}
+        {/* No Redux warning */}
 
                  {/* Main Content - Two Column Layout */}
          <div className="flex flex-col lg:flex-row gap-6 max-h-[90vh]">
@@ -1842,7 +2121,7 @@ export default function ReportsPage() {
                           className="border-b border-gray-300 hover:bg-gray-50 cursor-pointer"
                           onClick={() => toggleGroup(cashFlowData[0].id, group.id)}
                         >
-                                                     <td className="py-2 px-4 font-semibold text-gray-800 flex items-center gap-2">
+                                                     <td className="py-2 pl-4 pr-4 font-semibold text-gray-800 flex items-center gap-2">
                              {group.isExpanded ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
                              {group.title}
                              {isEditing && (
@@ -1890,7 +2169,7 @@ export default function ReportsPage() {
                           <React.Fragment key={item.id}>
                             {/* Main Item */}
                             <tr className="border-b border-gray-200 hover:bg-gray-50">
-                              <td className="py-2 px-8 text-gray-700 flex items-center justify-between">
+                              <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-2">
                                     {item.subItems && item.subItems.length > 0 && (
@@ -1956,8 +2235,8 @@ export default function ReportsPage() {
                             
                             {/* Sub-Items */}
                             {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
-                              <tr key={subItem.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                <td className="py-2 px-12 text-gray-600 flex items-center justify-between">
+                              <tr key={subItem.id} className="border-b border-gray-300 border-dotted hover:bg-gray-50">
+                                <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
                                   <div className="flex flex-col">
                                     <span className="text-sm cursor-pointer hover:underline" onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>{subItem.particular}</span>
                                     {subItem.createdByTag && subItem.tagData && (
@@ -2038,7 +2317,7 @@ export default function ReportsPage() {
                           className="border-b border-gray-300 hover:bg-gray-50 cursor-pointer"
                           onClick={() => toggleGroup(cashFlowData[1].id, group.id)}
                         >
-                                                   <td className="py-2 px-4 font-semibold text-gray-800 flex items-center gap-2">
+                                                   <td className="py-2 pl-4 pr-4 font-semibold text-gray-800 flex items-center gap-2">
                              {group.isExpanded ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
                              {group.title}
                              {isEditing && (
@@ -2086,7 +2365,7 @@ export default function ReportsPage() {
                            <React.Fragment key={item.id}>
                              {/* Main Item */}
                              <tr className="border-b border-gray-200 hover:bg-gray-50">
-                               <td className="py-2 px-8 text-gray-700 flex items-center justify-between">
+                               <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
                                  <div className="flex flex-col">
                                    <div className="flex items-center gap-2">
                                      {item.subItems && item.subItems.length > 0 && (
@@ -2153,7 +2432,7 @@ export default function ReportsPage() {
                              {/* Sub-Items */}
                              {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
                                <tr key={subItem.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                 <td className="py-2 px-12 text-gray-600 flex items-center justify-between">
+                                 <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
                                    <div className="flex flex-col">
                                      <span className="text-sm cursor-pointer hover:underline" onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>{subItem.particular}</span>
                                      {subItem.createdByTag && subItem.tagData && (
@@ -2236,14 +2515,133 @@ export default function ReportsPage() {
                     isOperationsPanelOpen ? 'block' : 'hidden lg:block'
                   }`}>
             <div className="space-y-6">
-              {/* Header */}
+              {/* Quick Stats */}
+              <div className="space-y-3">
+                <div className="space-y-3">
+                  <div className="relative group">
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
+                      <div className="text-blue-700 font-medium text-sm mb-1">Total Inflow</div>
+                      <div className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    {/* Inflow Tooltip */}
+                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                       <div className="text-sm font-semibold text-gray-800 mb-3">Inflow Breakdown by Banks</div>
+                      {getBankBreakdown('inflow').length > 0 ? (
+                        <div className="space-y-2">
+                          {getBankBreakdown('inflow').map((bank, index) => (
+                            <div key={index} className="text-sm mb-2">
+                              <div className="flex justify-between items-center">
+                              <span className="text-gray-700 font-medium">{bank.name}</span>
+                              <span className="text-blue-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              {bank.accounts && bank.accounts.length > 0 && (
+                                <div className="text-xs text-gray-500 mt-1 ml-2">
+                                  Accounts: {bank.accounts.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No bank data available</div>
+                      )}
+                      <div className="mt-3 pt-2 border-t border-gray-200">
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span className="text-gray-800">Total</span>
+                          <span className="text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative group">
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors">
+                      <div className="text-red-700 font-medium text-sm mb-1">Total Outflow</div>
+                      <div className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    {/* Outflow Tooltip */}
+                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                       <div className="text-sm font-semibold text-gray-800 mb-3">Outflow Breakdown by Banks</div>
+                      {getBankBreakdown('outflow').length > 0 ? (
+                        <div className="space-y-2">
+                          {getBankBreakdown('outflow').map((bank, index) => (
+                            <div key={index} className="text-sm mb-2">
+                              <div className="flex justify-between items-center">
+                              <span className="text-gray-700 font-medium">{bank.name}</span>
+                              <span className="text-red-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                              {bank.accounts && bank.accounts.length > 0 && (
+                                <div className="text-xs text-gray-500 mt-1 ml-2">
+                                  Accounts: {bank.accounts.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No bank data available</div>
+                      )}
+                      <div className="mt-3 pt-2 border-t border-gray-200">
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span className="text-gray-800">Total</span>
+                          <span className="text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="relative group">
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
+                      <div className="text-green-700 font-medium text-sm mb-1">Net Cash Flow</div>
+                      <div className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                  ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+          </div>
+                    {/* Net Flow Tooltip */}
+                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                       <div className="text-sm font-semibold text-gray-800 mb-3">Net Cash Flow by Banks</div>
+                      {getBankBreakdown('net').length > 0 ? (
+                        <div className="space-y-2">
+                          {getBankBreakdown('net').map((bank, index) => (
+                            <div key={index} className="text-sm mb-2">
+                              <div className="flex justify-between items-center">
+                              <span className="text-gray-700 font-medium">{bank.name}</span>
+                              <span className={`font-bold ${bank.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                ₹{Math.abs(bank.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                {bank.amount >= 0 ? ' (Inflow)' : ' (Outflow)'}
+                              </span>
+                              </div>
+                              {bank.accounts && bank.accounts.length > 0 && (
+                                <div className="text-xs text-gray-500 mt-1 ml-2">
+                                  Accounts: {bank.accounts.join(', ')}
+                                </div>
+                              )}
+        </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No bank data available</div>
+                      )}
+                      <div className="mt-3 pt-2 border-t border-gray-200">
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span className="text-gray-800">Net Total</span>
+                          <span className={`${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                            ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Operations Title */}
               <div>
                 <h3 className="text-xl font-bold text-gray-800 mb-4">Operations</h3>
               </div>
 
               {/* Edit Mode Toggle */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Statement Mode</h4>
                 {isEditing ? (
                   <div className="space-y-2">
                     <button
@@ -2273,136 +2671,42 @@ export default function ReportsPage() {
               </div>
 
               {/* Export & Data Operations */}
-              <div className="space-y-3">
-                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Export & Data</h4>
-                <div className="space-y-2">
-                  <button
-                    onClick={handleDownloadCSV}
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
-                    title="Download as CSV"
-                  >
-                    <svg className="w-2 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    DOWNLOAD CSV
-                  </button>
-                  <button
-                    onClick={handleRefreshTags}
-                    disabled={isRefreshing}
-                    className="w-full bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Refresh tag balances from Super Bank"
-                  >
-                    <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                     </svg>
-                     {isRefreshing ? 'REFRESHING...' : 'REFRESH TAGS'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="space-y-3">
-                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">Quick Stats</h4>
-                <div className="space-y-3">
-                  <div className="relative group">
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
-                      <div className="text-blue-700 font-medium text-sm mb-1">Total Inflow</div>
-                      <div className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                    </div>
-                    {/* Inflow Tooltip */}
-                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                       <div className="text-sm font-semibold text-gray-800 mb-3">Inflow Breakdown by Banks</div>
-                      {getBankBreakdown('inflow').length > 0 ? (
-                        <div className="space-y-2">
-                          {getBankBreakdown('inflow').map((bank, index) => (
-                            <div key={index} className="flex justify-between items-center text-sm">
-                              <span className="text-gray-700 font-medium">{bank.name}</span>
-                              <span className="text-blue-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">No bank data available</div>
-                      )}
-                      <div className="mt-3 pt-2 border-t border-gray-200">
-                        <div className="flex justify-between items-center text-sm font-semibold">
-                          <span className="text-gray-800">Total</span>
-                          <span className="text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
-                    <div className="bg-red-50 rounded-lg p-4 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors">
-                      <div className="text-red-700 font-medium text-sm mb-1">Total Outflow</div>
-                      <div className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-                    </div>
-                    {/* Outflow Tooltip */}
-                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                       <div className="text-sm font-semibold text-gray-800 mb-3">Outflow Breakdown by Banks</div>
-                      {getBankBreakdown('outflow').length > 0 ? (
-                        <div className="space-y-2">
-                          {getBankBreakdown('outflow').map((bank, index) => (
-                            <div key={index} className="flex justify-between items-center text-sm">
-                              <span className="text-gray-700 font-medium">{bank.name}</span>
-                              <span className="text-red-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">No bank data available</div>
-                      )}
-                      <div className="mt-3 pt-2 border-t border-gray-200">
-                        <div className="flex justify-between items-center text-sm font-semibold">
-                          <span className="text-gray-800">Total</span>
-                          <span className="text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="relative group">
-                    <div className="bg-green-50 rounded-lg p-4 border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
-                      <div className="text-green-700 font-medium text-sm mb-1">Net Cash Flow</div>
-                      <div className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                  ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </div>
-          </div>
-                    {/* Net Flow Tooltip */}
-                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                       <div className="text-sm font-semibold text-gray-800 mb-3">Net Cash Flow by Banks</div>
-                      {getBankBreakdown('net').length > 0 ? (
-                        <div className="space-y-2">
-                          {getBankBreakdown('net').map((bank, index) => (
-                            <div key={index} className="flex justify-between items-center text-sm">
-                              <span className="text-gray-700 font-medium">{bank.name}</span>
-                              <span className={`font-bold ${bank.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                ₹{Math.abs(bank.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                {bank.amount >= 0 ? ' (Inflow)' : ' (Outflow)'}
-                              </span>
-        </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">No bank data available</div>
-                      )}
-                      <div className="mt-3 pt-2 border-t border-gray-200">
-                        <div className="flex justify-between items-center text-sm font-semibold">
-                          <span className="text-gray-800">Net Total</span>
-                          <span className={`${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                            ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <button
+                  onClick={handleDownloadCSV}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
+                  title="Download as CSV"
+                >
+                  <svg className="w-2 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  DOWNLOAD CSV
+                </button>
+                <button
+                  onClick={handleRefreshTags}
+                  disabled={isRefreshing}
+                  className="w-full bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Refresh tag balances from Super Bank"
+                >
+                  <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                   </svg>
+                   {isRefreshing ? 'REFRESHING...' : 'REFRESH TAGS'}
+                </button>
+                <button
+                  onClick={handleClearAllTagItems}
+                  disabled={isRefreshing}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Clear all tag-based items from cashflow"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  CLEAR TAG ITEMS
+                </button>
               </div>
 
               {/* View Controls */}
-              <div className="space-y-3">
-                <h4 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">View Controls</h4>
                 <div className="space-y-2">
                   <button
                     onClick={expandAllGroups}
@@ -2424,7 +2728,6 @@ export default function ReportsPage() {
                     </svg>
                     COLLAPSE ALL
                   </button>
-                </div>
               </div>
 
               {/* Editing Tools */}
@@ -2681,6 +2984,16 @@ export default function ReportsPage() {
                  <div className="space-y-4 flex-1 overflow-y-auto">
                    <p className="text-gray-600 mb-4">Choose a tag to create a new item:</p>
                    
+                   {/* Loading State */}
+                   {isTagsModalLoading && (
+                     <div className="flex items-center justify-center py-8">
+                       <div className="flex items-center space-x-2 text-blue-600">
+                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                         <span>Loading tags...</span>
+                       </div>
+                     </div>
+                   )}
+                   
                    {/* Search Bar */}
                    <div className="relative">
                      <input
@@ -2743,9 +3056,11 @@ export default function ReportsPage() {
                      </div>
                    )}
                    
+                   {!isTagsModalLoading && (
                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
                      {filteredTags.map((tag) => {
                        const isAlreadyAdded = isTagAlreadyAdded(tag.name);
+                       const rec = tagsSummaryMap.get((tag.name || '').toLowerCase());
                        return (
                          <button
                            key={tag.id}
@@ -2771,12 +3086,18 @@ export default function ReportsPage() {
                                <span className="text-xs text-gray-500 ml-auto">✓ Added</span>
                              )}
                            </div>
+                           <div className="text-xs text-gray-500 mt-1">
+                             {rec
+                               ? <>CR: ₹{(rec.credit || 0).toLocaleString('en-IN')} | DR: ₹{(rec.debit || 0).toLocaleString('en-IN')} | Bal: ₹{(rec.balance || 0).toLocaleString('en-IN')}</>
+                               : 'CR: ₹0 | DR: ₹0 | Bal: ₹0'}
+                           </div>
                          </button>
                        );
                      })}
                    </div>
+                   )}
                    
-                   {filteredTags.length === 0 && (
+                   {filteredTags.length === 0 && !isTagsModalLoading && (
                      <div className="text-center py-8 text-gray-500">
                        <p>
                          {tagSearchQuery 
@@ -2988,6 +3309,7 @@ export default function ReportsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
                 {filteredTags.map((tag) => {
                   const isAlreadyAdded = isTagAlreadyAdded(tag.name);
+                  const rec = tagsSummaryMap.get((tag.name || '').toLowerCase());
                   return (
                     <button
                       key={tag.id}
@@ -3012,6 +3334,11 @@ export default function ReportsPage() {
                         {isAlreadyAdded && (
                           <span className="text-xs text-gray-500 ml-auto">✓ Added</span>
                         )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {rec
+                          ? <>CR: ₹{(rec.credit || 0).toLocaleString('en-IN')} | DR: ₹{(rec.debit || 0).toLocaleString('en-IN')} | Bal: ₹{(rec.balance || 0).toLocaleString('en-IN')}</>
+                          : 'CR: ₹0 | DR: ₹0 | Bal: ₹0'}
                       </div>
                     </button>
                   );
@@ -3248,6 +3575,7 @@ export default function ReportsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
                 {filteredTags.map((tag) => {
                   const isAlreadyAdded = isTagAlreadyAdded(tag.name);
+                  const rec = tagsSummaryMap.get((tag.name || '').toLowerCase());
                   return (
                     <button
                       key={tag.id}
@@ -3272,6 +3600,11 @@ export default function ReportsPage() {
                         {isAlreadyAdded && (
                           <span className="text-xs text-gray-500 ml-auto">✓ Added</span>
                         )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {rec
+                          ? <>CR: ₹{(rec.credit || 0).toLocaleString('en-IN')} | DR: ₹{(rec.debit || 0).toLocaleString('en-IN')} | Bal: ₹{(rec.balance || 0).toLocaleString('en-IN')}</>
+                          : 'CR: ₹0 | DR: ₹0 | Bal: ₹0'}
                       </div>
                     </button>
                   );
@@ -3471,20 +3804,20 @@ export default function ReportsPage() {
             </div>
 
             {/* Totals Summary */}
-            {Array.isArray(activeTagTransactions) && activeTagTransactions.length > 0 && (
+            {isTagModalLoading ? (
+              <div className="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 animate-pulse h-16" />
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 animate-pulse h-16" />
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 animate-pulse h-16" />
+              </div>
+            ) : Array.isArray(activeTagTransactions) && activeTagTransactions.length > 0 ? (
               (() => {
                 let creditTotal = 0;
                 let debitTotal = 0;
                 activeTagTransactions.forEach((tx: TransactionData) => {
-                  const raw = typeof tx.AmountRaw === 'number'
-                    ? tx.AmountRaw
-                    : (typeof tx.Amount === 'string'
-                        ? parseFloat((tx.Amount || '0').toString().replace(/,/g, ''))
-                        : (typeof tx.amount === 'number' ? tx.amount : 0));
-                  const crdr = (tx['Dr./Cr.'] || '').toString().toUpperCase();
-                  const isCredit = crdr === 'CR' || raw > 0;
-                  const value = Math.abs(raw);
-                  if (isCredit) creditTotal += value; else debitTotal += value;
+                  const { amountAbs, crdr } = extractAmountAndTypeFromTx(tx);
+                  if (crdr === 'CR') creditTotal += amountAbs;
+                  else if (crdr === 'DR') debitTotal += amountAbs;
                 });
                 const balance = creditTotal - debitTotal;
                 return (
@@ -3504,7 +3837,7 @@ export default function ReportsPage() {
                   </div>
                 );
               })()
-            )}
+            ) : null}
 
             <div className="overflow-y-auto border rounded-lg">
               <table className="w-full text-sm">
@@ -3519,17 +3852,20 @@ export default function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeTagTransactions.length === 0 ? (
+                  {isTagModalLoading ? (
+                    <tr>
+                      <td colSpan={6} className="text-center text-gray-600 py-6">Loading transactions…</td>
+                    </tr>
+                  ) : activeTagTransactions.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-center text-gray-600 py-6">No transactions found for this tag.</td>
                     </tr>
                   ) : (
                     activeTagTransactions.map((tx: TransactionData, idx: number) => {
-                      const amountRaw = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : (typeof tx.Amount === 'string' ? parseFloat((tx.Amount || '0').toString().replace(/,/g, '')) : (typeof tx.amount === 'number' ? tx.amount : 0));
+                      const { amountAbs, crdr } = extractAmountAndTypeFromTx(tx);
                       const bankName = tx.bankName || tx.bankId || 'Unknown Bank';
-                      const crdr = (tx['Dr./Cr.'] || '').toString().toUpperCase();
-                      const isCredit = crdr === 'CR' || amountRaw > 0;
-                      const displayAmount = Math.abs(amountRaw);
+                      const isCredit = crdr === 'CR';
+                      const displayAmount = amountAbs;
                       const dateStr = String(tx.Date || tx.date || '');
                                              // Try multiple possible description fields
                        const desc = String(

@@ -12,8 +12,6 @@ import TagFilterPills from '../components/TagFilterPills';
 import TransactionTable from '../components/TransactionTable';
 import { Transaction, TransactionRow, Tag } from '../types/transaction';
 import Modal from '../components/Modals/Modal';
-import { useAppDispatch } from '../store/hooks';
-import { setAnalyticsData } from '../store/slices/analyticsSlice';
 import { convertToISOFormat, parseDate, formatDateForCSV } from '../utils/dateUtils';
 
 
@@ -1661,7 +1659,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
 }
 
 export default function SuperBankPage() {
-  const dispatch = useAppDispatch();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1732,6 +1730,9 @@ export default function SuperBankPage() {
   const [failedTransactions, setFailedTransactions] = useState<{ id: string; error: string; description?: string }[]>([]);
   const [showRetryButton, setShowRetryButton] = useState(false);
   
+  // Force refresh state for tag count updates (unused - kept for potential future use)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [forceRefresh, setForceRefresh] = useState(0);
 
 
   // Helper function to extract tag IDs for API calls
@@ -2510,19 +2511,27 @@ export default function SuperBankPage() {
       setSelectedTagId("");
       setSelectedRows(new Set());
       setTimeout(() => setTagSuccess(null), 1500);
+      
+      // Force refresh transactions to update tag counts immediately
+      console.log('🔄 Refreshing transactions after tag application...');
       setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
-        })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      const userId = localStorage.getItem("userId") || "";
+      const refreshResponse = await fetch("/api/transactions/all?userId=" + userId);
+      const refreshData = await refreshResponse.json();
+      
+      if (Array.isArray(refreshData)) {
+        setTransactions(refreshData);
+        console.log('✅ Transactions refreshed, new count:', refreshData.length);
+        // Force a re-render by updating a state that triggers filteredRows recalculation
+        setForceRefresh(prev => prev + 1);
+      } else {
+        setError(refreshData.error || "Failed to fetch transactions");
+      }
     } catch (e) {
       setTagError(e instanceof Error ? e.message : 'Failed to add tag');
     } finally {
       setTagging(false);
+      setLoading(false);
     }
   };
 
@@ -2610,18 +2619,9 @@ export default function SuperBankPage() {
       console.log('Total Accounts:', stats.totalAccounts);
       console.log('=====================================');
 
-      dispatch(setAnalyticsData({
-        totalAmount,
-        totalCredit,
-        totalDebit,
-        totalTransactions: filteredRows.length,
-        totalBanks: stats.totalBanks,
-        totalAccounts: stats.totalAccounts,
-        transactions: mappedRowsWithConditions,
-        lastUpdated: new Date().toISOString()
-      }));
+
     }
-  }, [filteredRows, totalAmount, totalCredit, totalDebit, stats.totalBanks, stats.totalAccounts, loading, dispatch, mappedRowsWithConditions]);
+  }, [filteredRows, totalAmount, totalCredit, totalDebit, stats.totalBanks, stats.totalAccounts, loading, mappedRowsWithConditions]);
 
   let tagged = 0, untagged = 0;
   filteredRows.forEach(row => {
@@ -2709,26 +2709,42 @@ export default function SuperBankPage() {
   };
 
   // Compute tag statistics for filteredRows (for pills and summary)
-  const filteredTagStats: Record<string, number> = {};
-  filteredRows.forEach(row => {
-    if (Array.isArray(row.tags)) {
-      row.tags.forEach(tag => {
-        if (tag && tag.name) {
-          filteredTagStats[tag.name] = (filteredTagStats[tag.name] || 0) + 1;
-        }
-      });
-    }
-  });
-  // Optionally, ensure all tags show a count (including zero)
-  allTags.forEach(tag => {
-    if (!(tag.name in filteredTagStats)) {
-      filteredTagStats[tag.name] = 0;
-    }
-  });
-  // Note: filteredTotalTags was calculated but not used in the component
+  const filteredTagStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    
+    // Count tags in filtered rows
+    filteredRows.forEach(row => {
+      if (Array.isArray(row.tags)) {
+        row.tags.forEach(tag => {
+          if (tag && tag.name) {
+            stats[tag.name] = (stats[tag.name] || 0) + 1;
+          }
+        });
+      }
+    });
+    
+    // Ensure all tags show a count (including zero)
+    allTags.forEach(tag => {
+      if (!(tag.name in stats)) {
+        stats[tag.name] = 0;
+      }
+    });
+    
+    // Debug: Log tag counts for troubleshooting
+    console.log('🔍 Tag counts in filteredRows:', stats);
+    console.log('🔍 Total filteredRows:', filteredRows.length);
+    console.log('🔍 Sample row tags:', filteredRows.slice(0, 3).map(row => ({
+      id: row.id,
+      tags: row.tags
+    })));
+    
+    return stats;
+  }, [filteredRows, allTags]);
 
   // Sort allTags by usage count descending (use filteredTagStats for current view)
-  const sortedTags = [...allTags].sort((a, b) => (filteredTagStats[b.name] || 0) - (filteredTagStats[a.name] || 0));
+  const sortedTags = useMemo(() => {
+    return [...allTags].sort((a, b) => (filteredTagStats[b.name] || 0) - (filteredTagStats[a.name] || 0));
+  }, [allTags, filteredTagStats]);
 
   // New handleTagDeleted function
   const handleTagDeleted = () => {
