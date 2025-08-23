@@ -721,10 +721,17 @@ export default function ReportsPage() {
           const bankBreakdown = (tagInfo as Record<string, unknown>).bankBreakdown as Record<string, Record<string, unknown>>;
           Object.entries(bankBreakdown).forEach(([bankName, bankEntryDetails]) => {
         if (type === 'inflow') {
-              // For inflow, show all banks regardless of credit/debit
+              // For inflow, only use credit amounts (positive inflows)
               const credit = (bankEntryDetails.credit as number) || 0;
               const debit = (bankEntryDetails.debit as number) || 0;
-              const amount = credit > 0 ? credit : debit;
+              const amount = credit; // Only credit amounts for inflow
+              
+              // Debug logging for inflow calculation
+              console.log(`Inflow calculation for ${bankName}: credit=${credit}, debit=${debit}, amount=${amount}`);
+              
+              // Only include banks with positive credit amounts for inflow
+              if (amount <= 0) return;
+              
               const accounts = (bankEntryDetails.accounts as string[]) || [];
               
               if (accounts.length > 0) {
@@ -1953,7 +1960,8 @@ export default function ReportsPage() {
       tx?.Amount ??
       tx?.amount ??
       txAny?.['Transaction Amount'] ??
-      txAny?.['transaction amount'];
+      txAny?.['transaction amount'] ??
+      txAny?.['Transaction Amount(INR)'];
 
     const crdrField = (
       tx?.['Dr./Cr.'] ??
@@ -1967,6 +1975,11 @@ export default function ReportsPage() {
       txAny?.['Dr / Cr_1'] ??
       txAny?.['DR / CR'] ??
       txAny?.['DR / CR_1'] ??
+      // Add ICICI specific field names
+      txAny?.['Cr/Dr'] ??
+      txAny?.['Cr / Dr'] ??
+      txAny?.['CR/DR'] ??
+      txAny?.['CR / DR'] ??
       ''
     )
       .toString()
@@ -2524,34 +2537,40 @@ export default function ReportsPage() {
                       <div className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                     </div>
                     {/* Inflow Tooltip */}
-                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                       <div className="text-sm font-semibold text-gray-800 mb-3">Inflow Breakdown by Banks</div>
-                      {getBankBreakdown('inflow').length > 0 ? (
-                        <div className="space-y-2">
-                          {getBankBreakdown('inflow').map((bank, index) => (
-                            <div key={index} className="text-sm mb-2">
-                              <div className="flex justify-between items-center">
-                              <span className="text-gray-700 font-medium">{bank.name}</span>
-                              <span className="text-blue-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              {bank.accounts && bank.accounts.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1 ml-2">
-                                  Accounts: {bank.accounts.join(', ')}
+                    {(() => {
+                      const inflowBreakdown = getBankBreakdown('inflow');
+                      const inflowTotal = inflowBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
+                      return (
+                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                          <div className="text-sm font-semibold text-gray-800 mb-3">Inflow Breakdown by Banks</div>
+                          {inflowBreakdown.length > 0 ? (
+                            <div className="space-y-2">
+                              {inflowBreakdown.map((bank, index) => (
+                                <div key={index} className="text-sm mb-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className="text-blue-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  {bank.accounts && bank.accounts.length > 0 && (
+                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                      Accounts: {bank.accounts.join(', ')}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            <div className="text-sm text-gray-500">No bank data available</div>
+                          )}
+                          <div className="mt-3 pt-2 border-t border-gray-200">
+                            <div className="flex justify-between items-center text-sm font-semibold">
+                              <span className="text-gray-800">Total</span>
+                              <span className="text-blue-800">₹{inflowTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">No bank data available</div>
-                      )}
-                      <div className="mt-3 pt-2 border-t border-gray-200">
-                        <div className="flex justify-between items-center text-sm font-semibold">
-                          <span className="text-gray-800">Total</span>
-                          <span className="text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="relative group">
@@ -2560,34 +2579,40 @@ export default function ReportsPage() {
                       <div className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                     </div>
                     {/* Outflow Tooltip */}
-                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                       <div className="text-sm font-semibold text-gray-800 mb-3">Outflow Breakdown by Banks</div>
-                      {getBankBreakdown('outflow').length > 0 ? (
-                        <div className="space-y-2">
-                          {getBankBreakdown('outflow').map((bank, index) => (
-                            <div key={index} className="text-sm mb-2">
-                              <div className="flex justify-between items-center">
-                              <span className="text-gray-700 font-medium">{bank.name}</span>
-                              <span className="text-red-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                              </div>
-                              {bank.accounts && bank.accounts.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1 ml-2">
-                                  Accounts: {bank.accounts.join(', ')}
+                    {(() => {
+                      const outflowBreakdown = getBankBreakdown('outflow');
+                      const outflowTotal = outflowBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
+                      return (
+                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                          <div className="text-sm font-semibold text-gray-800 mb-3">Outflow Breakdown by Banks</div>
+                          {outflowBreakdown.length > 0 ? (
+                            <div className="space-y-2">
+                              {outflowBreakdown.map((bank, index) => (
+                                <div key={index} className="text-sm mb-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className="text-red-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                  </div>
+                                  {bank.accounts && bank.accounts.length > 0 && (
+                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                      Accounts: {bank.accounts.join(', ')}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
+                              ))}
                             </div>
-                          ))}
+                          ) : (
+                            <div className="text-sm text-gray-500">No bank data available</div>
+                          )}
+                          <div className="mt-3 pt-2 border-t border-gray-200">
+                            <div className="flex justify-between items-center text-sm font-semibold">
+                              <span className="text-gray-800">Total</span>
+                              <span className="text-red-800">₹{outflowTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">No bank data available</div>
-                      )}
-                      <div className="mt-3 pt-2 border-t border-gray-200">
-                        <div className="flex justify-between items-center text-sm font-semibold">
-                          <span className="text-gray-800">Total</span>
-                          <span className="text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="relative group">
@@ -2598,39 +2623,45 @@ export default function ReportsPage() {
               </div>
           </div>
                     {/* Net Flow Tooltip */}
-                    <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                       <div className="text-sm font-semibold text-gray-800 mb-3">Net Cash Flow by Banks</div>
-                      {getBankBreakdown('net').length > 0 ? (
-                        <div className="space-y-2">
-                          {getBankBreakdown('net').map((bank, index) => (
-                            <div key={index} className="text-sm mb-2">
-                              <div className="flex justify-between items-center">
-                              <span className="text-gray-700 font-medium">{bank.name}</span>
-                              <span className={`font-bold ${bank.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                ₹{Math.abs(bank.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                {bank.amount >= 0 ? ' (Inflow)' : ' (Outflow)'}
-                              </span>
-                              </div>
-                              {bank.accounts && bank.accounts.length > 0 && (
-                                <div className="text-xs text-gray-500 mt-1 ml-2">
-                                  Accounts: {bank.accounts.join(', ')}
+                    {(() => {
+                      const netBreakdown = getBankBreakdown('net');
+                      const netTotal = netBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
+                      return (
+                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
+                          <div className="text-sm font-semibold text-gray-800 mb-3">Net Cash Flow by Banks</div>
+                          {netBreakdown.length > 0 ? (
+                            <div className="space-y-2">
+                              {netBreakdown.map((bank, index) => (
+                                <div key={index} className="text-sm mb-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className={`font-bold ${bank.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      ₹{Math.abs(bank.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                      {bank.amount >= 0 ? ' (Inflow)' : ' (Outflow)'}
+                                    </span>
+                                  </div>
+                                  {bank.accounts && bank.accounts.length > 0 && (
+                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                      Accounts: {bank.accounts.join(', ')}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-        </div>
-                          ))}
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-500">No bank data available</div>
+                          )}
+                          <div className="mt-3 pt-2 border-t border-gray-200">
+                            <div className="flex justify-between items-center text-sm font-semibold">
+                              <span className="text-gray-800">Net Total</span>
+                              <span className={`${netTotal >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                                ₹{netTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">No bank data available</div>
-                      )}
-                      <div className="mt-3 pt-2 border-t border-gray-200">
-                        <div className="flex justify-between items-center text-sm font-semibold">
-                          <span className="text-gray-800">Net Total</span>
-                          <span className={`${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                            ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

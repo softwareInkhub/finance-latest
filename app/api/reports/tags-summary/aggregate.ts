@@ -21,6 +21,9 @@ type TransactionItem = Record<string, unknown> & {
   'Dr/Cr'?: string;
   'DR/CR'?: string;
   'Type'?: string;
+  // ICICI specific fields
+  'Cr/Dr'?: string;
+  'Transaction Amount(INR)'?: number | string;
 };
 
 function toNumber(val: unknown): number {
@@ -37,9 +40,9 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
   const txId = tx.id;
   const bankId = tx.bankId as string | undefined;
   
-  // Enhanced debugging for Kotak transactions specifically
-  if (bankId && bankId.toLowerCase().includes('kotak')) {
-    console.log('🔍 KOTAK Transaction fields:', {
+  // Enhanced debugging for ICICI and Kotak transactions specifically
+  if (bankId && (bankId.toLowerCase().includes('kotak') || bankId.toLowerCase().includes('icici'))) {
+    console.log(`🔍 ${bankId.toUpperCase()} Transaction fields:`, {
       id: txId,
       bankId: bankId,
       allFields: Object.keys(tx),
@@ -50,12 +53,15 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
       drCrField2: tx['Dr/Cr' as keyof typeof tx],
       drCrField3: tx['DR/CR' as keyof typeof tx],
       typeField: tx['Type' as keyof typeof tx],
-      amountField: tx.AmountRaw ?? tx.Amount ?? tx.amount
+      amountField: tx.AmountRaw ?? tx.Amount ?? tx.amount,
+      // ICICI specific fields
+      iciciCrDr: tx['Cr/Dr' as keyof typeof tx],
+      iciciAmount: tx['Transaction Amount(INR)' as keyof typeof tx]
     });
   }
 
-  // Prefer unified amount fields if present
-  const unified = tx.AmountRaw ?? tx.Amount ?? tx.amount;
+  // Prefer unified amount fields if present (including ICICI specific field)
+  const unified = tx.AmountRaw ?? tx.Amount ?? tx.amount ?? tx['Transaction Amount(INR)' as keyof typeof tx];
 
   // Enhanced CR/DR field detection
   const findCrDr = (): string => {
@@ -79,7 +85,12 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
       'Dr / Cr',
       'Dr / Cr_1',
       'DR / CR',
-      'DR / CR_1'
+      'DR / CR_1',
+      // Add ICICI specific field names
+      'Cr/Dr',
+      'Cr / Dr',
+      'CR/DR',
+      'CR / DR'
     ];
     
     for (const field of possibleFields) {
@@ -87,7 +98,7 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
       if (value != null && value !== '') {
         const norm = String(value).trim().toUpperCase();
         if (norm === 'CR' || norm === 'DR' || norm === 'DEBIT' || norm === 'CREDIT') {
-          if (bankId && bankId.toLowerCase().includes('kotak')) {
+          if (bankId && (bankId.toLowerCase().includes('kotak') || bankId.toLowerCase().includes('icici'))) {
             console.log(`🔍 Found CR/DR field "${field}": "${value}" -> "${norm}"`);
           }
           return norm === 'DEBIT' ? 'DR' : norm === 'CREDIT' ? 'CR' : norm;
@@ -102,18 +113,18 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
         const v = tx[k as keyof typeof tx];
         if (v != null && v !== '') {
           const norm = String(v).trim().toUpperCase();
-          if (norm === 'CR' || norm === 'DR' || norm === 'DEBIT' || norm === 'CREDIT') {
-            if (bankId && bankId.toLowerCase().includes('kotak')) {
-              console.log(`🔍 Found CR/DR via key scan "${k}": "${v}" -> "${norm}"`);
-            }
-            return norm === 'DEBIT' ? 'DR' : norm === 'CREDIT' ? 'CR' : norm;
+                  if (norm === 'CR' || norm === 'DR' || norm === 'DEBIT' || norm === 'CREDIT') {
+          if (bankId && (bankId.toLowerCase().includes('kotak') || bankId.toLowerCase().includes('icici'))) {
+            console.log(`🔍 Found CR/DR via key scan "${k}": "${v}" -> "${norm}"`);
           }
+          return norm === 'DEBIT' ? 'DR' : norm === 'CREDIT' ? 'CR' : norm;
+        }
         }
       }
     }
     
-    if (bankId && bankId.toLowerCase().includes('kotak')) {
-      console.log('🔍 No CR/DR field found for Kotak transaction');
+    if (bankId && (bankId.toLowerCase().includes('kotak') || bankId.toLowerCase().includes('icici'))) {
+      console.log(`🔍 No CR/DR field found for ${bankId} transaction`);
     }
     return '';
   };
@@ -125,8 +136,8 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
     const abs = Math.abs(num);
     if (crdrField === 'CR' || crdrField === 'DR') {
       const result = { amountAbs: abs, crdr: crdrField as 'CR' | 'DR' };
-      if (bankId && bankId.toLowerCase().includes('kotak')) {
-        console.log('🔍 Kotak: Using explicit CR/DR field:', result);
+      if (bankId && (bankId.toLowerCase().includes('kotak') || bankId.toLowerCase().includes('icici'))) {
+        console.log(`🔍 ${bankId}: Using explicit CR/DR field:`, result);
       }
       return result;
     }
@@ -151,8 +162,8 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
   if (debit > 0 && credit === 0) return { amountAbs: Math.round(debit * 100) / 100, crdr: 'DR' };
 
   // If we still can't determine, return 0 to skip this transaction
-  if (bankId && bankId.toLowerCase().includes('kotak')) {
-    console.log('🔍 Kotak: Could not determine CR/DR, skipping transaction');
+  if (bankId && (bankId.toLowerCase().includes('kotak') || bankId.toLowerCase().includes('icici'))) {
+    console.log(`🔍 ${bankId}: Could not determine CR/DR, skipping transaction`);
   }
   return { amountAbs: 0, crdr: '' };
 }
