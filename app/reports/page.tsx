@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
+import { FiChevronDown } from 'react-icons/fi';
 import { Tag } from '../types/transaction';
 
 interface CashFlowItem {
@@ -405,6 +406,366 @@ export default function ReportsPage() {
   const [activeTagTransactions, setActiveTagTransactions] = useState<TransactionData[]>([]);
   const [isTagModalLoading, setIsTagModalLoading] = useState(false);
 
+  // Filter states for tag transactions table
+  const [dateFilter, setDateFilter] = useState<string>('');
+  const [drCrFilter, setDrCrFilter] = useState<'DR' | 'CR' | ''>('');
+  const [accountFilter, setAccountFilter] = useState<string>('');
+  const [sortDropdownOpen, setSortDropdownOpen] = useState<string | null>(null);
+  const [dateSortOrder, setDateSortOrder] = useState<'newest' | 'oldest' | ''>('');
+
+  // Filter handlers for tag transactions table
+  // const handleDateFilter = (date: string | 'clear') => {
+  //   if (date === 'clear') {
+  //     setDateFilter('');
+  //   } else {
+  //     setDateFilter(date);
+  //   }
+  // };
+
+  const handleDateSort = (order: 'newest' | 'oldest' | 'clear') => {
+    if (order === 'clear') {
+      setDateSortOrder('');
+    } else {
+      setDateSortOrder(order);
+    }
+  };
+
+  const handleDrCrFilter = (type: 'DR' | 'CR' | 'clear') => {
+    if (type === 'clear') {
+      setDrCrFilter('');
+    } else {
+      setDrCrFilter(type);
+    }
+  };
+
+  const handleAccountFilter = (accountNumber: string | 'clear') => {
+    if (accountNumber === 'clear') {
+      setAccountFilter('');
+    } else {
+      setAccountFilter(accountNumber);
+    }
+  };
+
+  const handleSortDropdownToggle = (column: string) => {
+    setSortDropdownOpen(sortDropdownOpen === column ? null : column);
+  };
+
+  // Function to get dropdown positioning class based on column
+  const getDropdownPositionClass = (column: string) => {
+    // For the Account No. column (rightmost), position from right to prevent overflow
+    if (column === 'Account No.') {
+      return 'absolute top-full right-0 mt-1 z-[9999]';
+    }
+    // For other columns, use left alignment
+    return 'absolute top-full left-0 mt-1 z-[9999]';
+  };
+
+  // Function to format date consistently
+  const formatDate = (date: string | number | undefined): string => {
+    if (!date || date === 'N/A') return 'N/A';
+    
+    console.log('🔍 Formatting date:', { original: date, type: typeof date });
+    
+    try {
+      // Handle different date formats
+      let dateObj: Date;
+      
+      if (typeof date === 'string') {
+        // If it's already in dd-mm-yyyy format, convert it properly
+        if (date.match(/^\d{2}-\d{2}-\d{4}$/)) {
+          const [dd, mm, yyyy] = date.split('-');
+          dateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+        } else if (date.match(/^\d{2}\/\d{2}\/\d{2}$/)) {
+          const [dd, mm, yy] = date.split('/');
+          // Convert 2-digit year to 4-digit year
+          const yyyy = parseInt(yy) < 50 ? 2000 + parseInt(yy) : 1900 + parseInt(yy);
+          dateObj = new Date(yyyy, parseInt(mm) - 1, parseInt(dd));
+        } else if (date.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+          // If it's already in dd/mm/yyyy format
+          const [dd, mm, yyyy] = date.split('/');
+          dateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+        } else {
+          // Try standard Date constructor
+          dateObj = new Date(date);
+        }
+      } else {
+        dateObj = new Date(date);
+      }
+      
+      if (!isNaN(dateObj.getTime())) {
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const yyyy = dateObj.getFullYear();
+        const formatted = `${dd}/${mm}/${yyyy}`;
+        console.log('🔍 Formatted date:', { original: date, formatted });
+        return formatted;
+      }
+    } catch (error) {
+      console.log('🔍 Date parsing error:', { date, error });
+    }
+    
+    console.log('🔍 Returning original date:', date);
+    return String(date);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!(event.target as Element).closest('.sort-dropdown')) {
+        setSortDropdownOpen(null);
+      }
+    };
+
+    if (sortDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [sortDropdownOpen]);
+
+  // Get available accounts for filtering
+  const availableAccounts = useMemo(() => {
+    if (!activeTagTransactions || activeTagTransactions.length === 0) return [];
+    
+    const accountMap = new Map<string, { bankName: string; accountNumber: string; count: number }>();
+    
+    activeTagTransactions.forEach(tx => {
+      const accountNo = tx.userAccountNumber || tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A';
+      const bankName = tx.bankName || tx.bankId || 'Unknown Bank';
+      
+      if (accountNo && typeof accountNo === 'string') {
+        const key = `${bankName}-${accountNo}`;
+        if (accountMap.has(key)) {
+          accountMap.get(key)!.count++;
+        } else {
+          accountMap.set(key, {
+            bankName,
+            accountNumber: accountNo,
+            count: 1
+          });
+        }
+      }
+    });
+    
+    return Array.from(accountMap.values()).sort((a, b) => {
+      if (a.bankName !== b.bankName) {
+        return a.bankName.localeCompare(b.bankName);
+      }
+      return a.accountNumber.localeCompare(b.accountNumber);
+    });
+  }, [activeTagTransactions]);
+
+  // Normalize amounts and CR/DR across various bank schemas for the tag modal
+  const extractAmountAndTypeFromTx = (
+    tx: TransactionData
+  ): { amountAbs: number; crdr: 'CR' | 'DR' | '' } => {
+    const toNumber = (val: unknown): number => {
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      if (typeof val === 'string') {
+        const match = val.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+        if (match) return parseFloat(match[0]);
+      }
+      return 0;
+    };
+
+    const txAny = tx as Record<string, unknown>;
+    const unified =
+      tx?.AmountRaw ??
+      tx?.Amount ??
+      tx?.amount ??
+      txAny?.['Transaction Amount'] ??
+      txAny?.['transaction amount'] ??
+      txAny?.['Transaction Amount(INR)'];
+
+    // Try to find CR/DR field with more comprehensive field name matching
+    let crdrField = '';
+    const possibleCrdrFields = [
+      tx?.['Dr./Cr.'],
+      txAny?.['Dr/Cr'],
+      txAny?.['DR/CR'],
+      txAny?.['dr/cr'],
+      txAny?.['Type'],
+      txAny?.['type'],
+      // Add the exact field names from Kotak bank
+      txAny?.['Dr / Cr'],
+      txAny?.['Dr / Cr_1'],
+      txAny?.['DR / CR'],
+      txAny?.['DR / CR_1'],
+      // Add ICICI specific field names
+      txAny?.['Cr/Dr'],
+      txAny?.['Cr / Dr'],
+      txAny?.['CR/DR'],
+      txAny?.['CR / DR'],
+      // Add more variations
+      txAny?.['Transaction Type'],
+      txAny?.['transaction type'],
+      txAny?.['Txn Type'],
+      txAny?.['txn type'],
+      txAny?.['Debit/Credit'],
+      txAny?.['debit/credit'],
+      txAny?.['Debit Credit'],
+      txAny?.['debit credit']
+    ];
+
+    for (const field of possibleCrdrFields) {
+      if (field && typeof field === 'string' && field.trim()) {
+        crdrField = field.toString().trim().toUpperCase();
+        break;
+      }
+    }
+
+    if (unified !== undefined && unified !== null) {
+      const num = toNumber(unified);
+      const abs = Math.abs(num);
+      if (crdrField === 'CR' || crdrField === 'DR') {
+        console.log('🔍 Found explicit CR/DR field:', { crdrField, amount: num, description: tx.Description || tx.description });
+        return { amountAbs: abs, crdr: crdrField as 'CR' | 'DR' };
+      }
+      if (num > 0) {
+        console.log('🔍 Inferring CR from positive amount:', { amount: num, description: tx.Description || tx.description });
+        return { amountAbs: abs, crdr: 'CR' };
+      }
+      if (num < 0) {
+        console.log('🔍 Inferring DR from negative amount:', { amount: num, description: tx.Description || tx.description });
+        return { amountAbs: abs, crdr: 'DR' };
+      }
+    }
+
+    let credit = 0;
+    let debit = 0;
+    for (const [rawKey, value] of Object.entries(tx || {})) {
+      const key = rawKey.toLowerCase();
+      const n = toNumber(value);
+      if (!n) continue;
+      if (
+        key.includes('credit') ||
+        key.includes('deposit') ||
+        key.includes('cr amount') ||
+        /(^|\W)cr(\W|$)/.test(key)
+      ) {
+        credit += Math.abs(n);
+      }
+      if (
+        key.includes('debit') ||
+        key.includes('withdraw') ||
+        key.includes('dr amount') ||
+        /(^|\W)dr(\W|$)/.test(key)
+      ) {
+        debit += Math.abs(n);
+      }
+    }
+    if (credit > 0 && debit === 0)
+      return { amountAbs: Math.round(credit * 100) / 100, crdr: 'CR' };
+    if (debit > 0 && credit === 0)
+      return { amountAbs: Math.round(debit * 100) / 100, crdr: 'DR' };
+    return {
+      amountAbs: 0,
+      crdr: crdrField === 'CR' || crdrField === 'DR' ? (crdrField as 'CR' | 'DR') : ''
+    };
+  };
+
+      // Filter transactions based on selected filters
+    const filteredTagTransactions = useMemo(() => {
+      if (!activeTagTransactions || activeTagTransactions.length === 0) return [];
+      
+      const filtered = activeTagTransactions.filter(tx => {
+      // Date filter
+      if (dateFilter) {
+        const txDate = tx.Date || tx.date;
+        if (!txDate || String(txDate) !== dateFilter) {
+          return false;
+        }
+      }
+      
+      // CR/DR filter
+      if (drCrFilter) {
+        const { crdr } = extractAmountAndTypeFromTx(tx);
+        console.log('🔍 CR/DR Filter Debug:', { 
+          filter: drCrFilter, 
+          transactionCrdr: crdr, 
+          description: tx.Description || tx.description || 'N/A',
+          amount: tx.AmountRaw || tx.Amount || tx.amount
+        });
+        // Only filter if we have a valid CR/DR value, skip transactions with empty CR/DR
+        if (crdr && crdr !== drCrFilter) {
+          return false;
+        }
+        // If crdr is empty, we can't determine the type, so exclude from filtering
+        if (!crdr) {
+          return false;
+        }
+      }
+      
+      // Account filter
+      if (accountFilter) {
+        const txAccount = tx.userAccountNumber || tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A';
+        if (txAccount !== accountFilter) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+
+    // Apply date sorting
+    if (dateSortOrder) {
+      console.log('🔍 Applying date sorting:', { dateSortOrder, filteredCount: filtered.length });
+      filtered.sort((a, b) => {
+        // Use the same date parsing logic as the formatDate function
+        const getDateValue = (dateStr: string | number | undefined): Date => {
+          if (!dateStr || dateStr === 'N/A') return new Date(0);
+          
+          try {
+            if (typeof dateStr === 'string') {
+              // If it's already in dd/mm/yy format, convert it properly
+              if (dateStr.match(/^\d{2}\/\d{2}\/\d{2}$/)) {
+                const [dd, mm, yy] = dateStr.split('/');
+                const yyyy = parseInt(yy) < 50 ? 2000 + parseInt(yy) : 1900 + parseInt(yy);
+                return new Date(yyyy, parseInt(mm) - 1, parseInt(dd));
+              } else if (dateStr.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                // If it's already in dd/mm/yyyy format
+                const [dd, mm, yyyy] = dateStr.split('/');
+                return new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+              } else if (dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                // If it's in dd-mm-yyyy format
+                const [dd, mm, yyyy] = dateStr.split('-');
+                return new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
+              }
+            }
+            return new Date(dateStr);
+          } catch {
+            return new Date(0);
+          }
+        };
+        
+        const dateA = getDateValue(a.Date || a.date);
+        const dateB = getDateValue(b.Date || b.date);
+        
+        console.log('🔍 Comparing dates:', { 
+          a: a.Date || a.date, 
+          b: b.Date || b.date, 
+          dateA: dateA.toISOString(), 
+          dateB: dateB.toISOString() 
+        });
+        
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+          return 0; // Keep original order if dates are invalid
+        }
+        
+        if (dateSortOrder === 'newest') {
+          return dateB.getTime() - dateA.getTime(); // Newest first
+        } else {
+          return dateA.getTime() - dateB.getTime(); // Oldest first
+        }
+      });
+      console.log('🔍 Sorting completed');
+    }
+
+    return filtered;
+  }, [activeTagTransactions, dateFilter, drCrFilter, accountFilter, dateSortOrder]);
+
   // Recompute tags summary once on mount and refresh tag-based amounts in cashflow
   const hasRecomputedOnMountRef = useRef(false);
   useEffect(() => {
@@ -516,53 +877,53 @@ export default function ReportsPage() {
   }, [cashFlowData, recomputeAndLoadTagsSummary, saveCashFlowData, isRefreshing]);
 
   // Function to clear all tag-based items from cashflow
-  const handleClearAllTagItems = useCallback(async () => {
-    if (isRefreshing) {
-      console.log('Operation already in progress, skipping...');
-      return;
-    }
+  // const handleClearAllTagItems = useCallback(async () => {
+  //   if (isRefreshing) {
+  //     console.log('Operation already in progress, skipping...');
+  //     return;
+  //   }
 
-    try {
-      console.log('Starting to clear all tag-based items...');
-      setIsRefreshing(true);
+  //   try {
+  //     console.log('Starting to clear all tag-based items...');
+  //     setIsRefreshing(true);
       
-      // Get userId from localStorage
-      const userId = localStorage.getItem('userId');
-      if (!userId) {
-        console.error('No userId found');
-        return;
-      }
+  //     // Get userId from localStorage
+  //     const userId = localStorage.getItem('userId');
+  //     if (!userId) {
+  //       console.error('No userId found');
+  //       return;
+  //     }
       
-      // Call the API to clear all tag-based items
-      const response = await fetch('/api/tags', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          clearAllTagItems: userId 
-        })
-      });
+  //     // Call the API to clear all tag-based items
+  //     const response = await fetch('/api/tags', {
+  //       method: 'DELETE',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ 
+  //         clearAllTagItems: userId 
+  //       })
+  //     });
       
-      if (response.ok) {
-        console.log('Successfully cleared all tag-based items');
-        // Reload the cashflow data to reflect changes
-        const res = await fetch(`/api/reports/cashflow?userId=${encodeURIComponent(userId)}`);
-        if (res.ok) {
-          const remoteData: CashFlowSection[] | null = await res.json();
-          if (remoteData && Array.isArray(remoteData)) {
-            console.log('Reloaded cashFlowData after clearing tags:', remoteData);
-            setCashFlowData(remoteData);
-            saveCashFlowData(remoteData, false);
-          }
-        }
-      } else {
-        console.error('Failed to clear tag-based items');
-      }
-    } catch (error) {
-      console.error('Error clearing tag-based items:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [isRefreshing, saveCashFlowData]);
+  //     if (response.ok) {
+  //       console.log('Successfully cleared all tag-based items');
+  //       // Reload the cashflow data to reflect changes
+  //       const res = await fetch(`/api/reports/cashflow?userId=${encodeURIComponent(userId)}`);
+  //       if (res.ok) {
+  //         const remoteData: CashFlowSection[] | null = await res.json();
+  //         if (remoteData && Array.isArray(remoteData)) {
+  //           console.log('Reloaded cashFlowData after clearing tags:', remoteData);
+  //           setCashFlowData(remoteData);
+  //           saveCashFlowData(remoteData, false);
+  //           }
+  //         }
+  //       } else {
+  //         console.error('Failed to clear tag-based items');
+  //       }
+  //     } catch (error) {
+  //       console.error('Error clearing tag-based items:', error);
+  //     } finally {
+  //       setIsRefreshing(false);
+  //     }
+  //   }, [isRefreshing, saveCashFlowData]);
 
   // When backend tags summary changes, refresh tag-based rows from it
   useEffect(() => {
@@ -1941,93 +2302,6 @@ export default function ReportsPage() {
     }
   }, []);
 
-  // Normalize amounts and CR/DR across various bank schemas for the tag modal
-  const extractAmountAndTypeFromTx = (
-    tx: TransactionData
-  ): { amountAbs: number; crdr: 'CR' | 'DR' | '' } => {
-    const toNumber = (val: unknown): number => {
-      if (typeof val === 'number' && !isNaN(val)) return val;
-      if (typeof val === 'string') {
-        const match = val.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
-        if (match) return parseFloat(match[0]);
-      }
-      return 0;
-    };
-
-    const txAny = tx as Record<string, unknown>;
-    const unified =
-      tx?.AmountRaw ??
-      tx?.Amount ??
-      tx?.amount ??
-      txAny?.['Transaction Amount'] ??
-      txAny?.['transaction amount'] ??
-      txAny?.['Transaction Amount(INR)'];
-
-    const crdrField = (
-      tx?.['Dr./Cr.'] ??
-      txAny?.['Dr/Cr'] ??
-      txAny?.['DR/CR'] ??
-      txAny?.['dr/cr'] ??
-      txAny?.['Type'] ??
-      txAny?.['type'] ??
-      // Add the exact field names from Kotak bank
-      txAny?.['Dr / Cr'] ??
-      txAny?.['Dr / Cr_1'] ??
-      txAny?.['DR / CR'] ??
-      txAny?.['DR / CR_1'] ??
-      // Add ICICI specific field names
-      txAny?.['Cr/Dr'] ??
-      txAny?.['Cr / Dr'] ??
-      txAny?.['CR/DR'] ??
-      txAny?.['CR / DR'] ??
-      ''
-    )
-      .toString()
-      .trim()
-      .toUpperCase();
-
-    if (unified !== undefined && unified !== null) {
-      const num = toNumber(unified);
-      const abs = Math.abs(num);
-      if (crdrField === 'CR' || crdrField === 'DR')
-        return { amountAbs: abs, crdr: crdrField as 'CR' | 'DR' };
-      if (num > 0) return { amountAbs: abs, crdr: 'CR' };
-      if (num < 0) return { amountAbs: abs, crdr: 'DR' };
-    }
-
-    let credit = 0;
-    let debit = 0;
-    for (const [rawKey, value] of Object.entries(tx || {})) {
-      const key = rawKey.toLowerCase();
-      const n = toNumber(value);
-      if (!n) continue;
-      if (
-        key.includes('credit') ||
-        key.includes('deposit') ||
-        key.includes('cr amount') ||
-        /(^|\W)cr(\W|$)/.test(key)
-      ) {
-        credit += Math.abs(n);
-      }
-      if (
-        key.includes('debit') ||
-        key.includes('withdraw') ||
-        key.includes('dr amount') ||
-        /(^|\W)dr(\W|$)/.test(key)
-      ) {
-        debit += Math.abs(n);
-      }
-    }
-    if (credit > 0 && debit === 0)
-      return { amountAbs: Math.round(credit * 100) / 100, crdr: 'CR' };
-    if (debit > 0 && credit === 0)
-      return { amountAbs: Math.round(debit * 100) / 100, crdr: 'DR' };
-    return {
-      amountAbs: 0,
-      crdr: crdrField === 'CR' || crdrField === 'DR' ? (crdrField as 'CR' | 'DR') : ''
-    };
-  };
-
   // Function to get transaction counts by bank (unused - kept for potential future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getTransactionCountsByBank = () => {
@@ -2724,17 +2998,7 @@ export default function ReportsPage() {
                    </svg>
                    {isRefreshing ? 'REFRESHING...' : 'REFRESH TAGS'}
                 </button>
-                <button
-                  onClick={handleClearAllTagItems}
-                  disabled={isRefreshing}
-                  className="w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Clear all tag-based items from cashflow"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  CLEAR TAG ITEMS
-                </button>
+
               </div>
 
               {/* View Controls */}
@@ -3825,8 +4089,8 @@ export default function ReportsPage() {
 
       {/* Tag Transactions Modal */}
       {showTagTransactionsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[120]">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl mx-4 max-h-[80vh] flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-7xl mx-4 max-h-[95vh] flex flex-col relative">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-800">Transactions for Tag{activeTagName ? `: ${activeTagName}` : ''}</h3>
               <button onClick={() => setShowTagTransactionsModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -3841,11 +4105,11 @@ export default function ReportsPage() {
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 animate-pulse h-16" />
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 animate-pulse h-16" />
               </div>
-            ) : Array.isArray(activeTagTransactions) && activeTagTransactions.length > 0 ? (
+            ) : Array.isArray(filteredTagTransactions) && filteredTagTransactions.length > 0 ? (
               (() => {
                 let creditTotal = 0;
                 let debitTotal = 0;
-                activeTagTransactions.forEach((tx: TransactionData) => {
+                filteredTagTransactions.forEach((tx: TransactionData) => {
                   const { amountAbs, crdr } = extractAmountAndTypeFromTx(tx);
                   if (crdr === 'CR') creditTotal += amountAbs;
                   else if (crdr === 'DR') debitTotal += amountAbs;
@@ -3870,16 +4134,240 @@ export default function ReportsPage() {
               })()
             ) : null}
 
-            <div className="overflow-y-auto border rounded-lg">
+            {/* Active Filters Display */}
+            {(dateFilter || drCrFilter || accountFilter || dateSortOrder) && (
+              <div className="flex items-center gap-2 mb-4 text-sm text-gray-600">
+                <span className="text-gray-500">Active filters:</span>
+                {dateFilter && (
+                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                    Date: {dateFilter}
+                  </span>
+                )}
+                {dateSortOrder && (
+                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
+                    Sort: {dateSortOrder === 'newest' ? 'Newest First' : 'Oldest First'}
+                  </span>
+                )}
+                {drCrFilter && (
+                  <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">
+                    Type: {drCrFilter}
+                  </span>
+                )}
+                {accountFilter && (
+                  <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs">
+                    Account: {accountFilter}
+                  </span>
+                )}
+                <button
+                  onClick={() => {
+                    setDateFilter('');
+                    setDrCrFilter('');
+                    setAccountFilter('');
+                    setDateSortOrder('');
+                  }}
+                  className="text-red-600 hover:text-red-800 text-xs underline"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+
+            <div className="overflow-y-auto border rounded-lg relative flex-1 min-h-[200px] max-h-[60vh]">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="text-left px-3 py-2 border-b">Date</th>
+                    <th className="text-left px-3 py-2 border-b relative">
+                      <div className="flex items-center justify-between">
+                        <span>Date</span>
+                        <div className="relative sort-dropdown">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSortDropdownToggle('Date');
+                            }}
+                            className="sort-button p-1 hover:bg-gray-200 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300"
+                            title="Filter by date"
+                          >
+                            <FiChevronDown className="w-3 h-3 text-gray-400" />
+                          </button>
+                          
+                          {sortDropdownOpen === 'Date' && (
+                            <div className={`sort-dropdown ${getDropdownPositionClass('Date')} bg-white border border-gray-300 rounded shadow-lg min-w-[200px] max-h-64 overflow-y-auto`}>
+                              {/* Date Sorting Options */}
+                              <div className="px-3 py-2 text-xs font-medium text-gray-700 bg-gray-50 border-b">
+                                Sort by Date
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDateSort('newest');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center justify-between"
+                              >
+                                <span>Newest to Oldest</span>
+                                {dateSortOrder === 'newest' && (
+                                  <span className="text-blue-600">✓</span>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDateSort('oldest');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center justify-between"
+                              >
+                                <span>Oldest to Newest</span>
+                                {dateSortOrder === 'oldest' && (
+                                  <span className="text-blue-600">✓</span>
+                                )}
+                              </button>
+                              
+                              <div className="border-t border-gray-200 my-1"></div>
+                              
+                              {/* Clear Options */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDateSort('clear');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-gray-500"
+                              >
+                                Clear sort
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </th>
                     <th className="text-left px-3 py-2 border-b">Description</th>
-                    <th className="text-left px-3 py-2 border-b">CR/DR</th>
+                    <th className="text-left px-3 py-2 border-b relative">
+                      <div className="flex items-center justify-between">
+                        <span>CR/DR</span>
+                        <div className="relative sort-dropdown">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSortDropdownToggle('CR/DR');
+                            }}
+                            className="sort-button p-1 hover:bg-gray-200 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300"
+                            title="Filter by transaction type"
+                          >
+                            <FiChevronDown className="w-3 h-3 text-gray-400" />
+                          </button>
+                          
+                          {sortDropdownOpen === 'CR/DR' && (
+                            <div className={`sort-dropdown ${getDropdownPositionClass('CR/DR')} bg-white border border-gray-300 rounded shadow-lg min-w-[100px] max-h-48 overflow-y-auto`}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDrCrFilter('CR');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100"
+                              >
+                                CR
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDrCrFilter('DR');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100"
+                              >
+                                DR
+                              </button>
+                              <div className="border-t border-gray-200 my-1"></div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleDrCrFilter('clear');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-gray-500"
+                              >
+                                Clear filter
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </th>
                     <th className="text-right px-3 py-2 border-b">Amount</th>
                     <th className="text-left px-3 py-2 border-b">Bank</th>
-                    <th className="text-left px-3 py-2 border-b">Account No.</th>
+                    <th className="text-left px-3 py-2 border-b relative">
+                      <div className="flex items-center justify-between">
+                        <span>Account No.</span>
+                        <div className="relative sort-dropdown">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSortDropdownToggle('Account No.');
+                            }}
+                            className="sort-button p-1 hover:bg-gray-200 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-300"
+                            title="Filter by account number"
+                          >
+                            <FiChevronDown className="w-3 h-3 text-gray-400" />
+                          </button>
+                          
+                          {sortDropdownOpen === 'Account No.' && (
+                            <div className={`sort-dropdown ${getDropdownPositionClass('Account No.')} bg-white border border-gray-300 rounded shadow-lg min-w-[200px] max-h-48 overflow-y-auto`}>
+                              {availableAccounts.map((account) => (
+                                <button
+                                  key={`${account.bankName}-${account.accountNumber}`}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleAccountFilter(account.accountNumber);
+                                    setSortDropdownOpen(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center justify-between"
+                                >
+                                  <span className="truncate">{account.accountNumber}</span>
+                                  <span className="text-gray-500 text-xs ml-2">({account.count})</span>
+                                  <span className="text-gray-400 text-xs ml-1">- {account.bankName}</span>
+                                </button>
+                              ))}
+                              <div className="border-t border-gray-200 my-1"></div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleAccountFilter('clear');
+                                  setSortDropdownOpen(null);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 text-gray-500"
+                              >
+                                Clear filter
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3887,17 +4375,17 @@ export default function ReportsPage() {
                     <tr>
                       <td colSpan={6} className="text-center text-gray-600 py-6">Loading transactions…</td>
                     </tr>
-                  ) : activeTagTransactions.length === 0 ? (
+                  ) : filteredTagTransactions.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-center text-gray-600 py-6">No transactions found for this tag.</td>
                     </tr>
                   ) : (
-                    activeTagTransactions.map((tx: TransactionData, idx: number) => {
+                    filteredTagTransactions.map((tx: TransactionData, idx: number) => {
                       const { amountAbs, crdr } = extractAmountAndTypeFromTx(tx);
                       const bankName = tx.bankName || tx.bankId || 'Unknown Bank';
                       const isCredit = crdr === 'CR';
                       const displayAmount = amountAbs;
-                      const dateStr = String(tx.Date || tx.date || '');
+                      const dateStr = formatDate(tx.Date || tx.date);
                                              // Try multiple possible description fields
                        const desc = String(
                          tx.Description || 

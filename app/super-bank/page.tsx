@@ -751,6 +751,8 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
 }) {
   // Selection state for tag rows
   const [selectedTagRows, setSelectedTagRows] = useState<Set<string>>(new Set());
+  // State for selected tags in summary table
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   // State for 4th page (tag transactions)
   const [selectedTagForPage4, setSelectedTagForPage4] = useState<{
     tagName: string;
@@ -759,7 +761,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
   } | null>(null);
   // Move all hooks to the top, before any early return
   const A4_HEIGHT_PX = 1122; // 297mm at 96dpi
-  const A4_WIDTH_PX = 794;   // 210mm at 96dpi
+  const A4_WIDTH_PX = 1200;   // Increased width for better table display
   const [page, setPage] = useState(0);
   const [exportingAllPages, setExportingAllPages] = useState(false);
   const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
@@ -1178,13 +1180,43 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
     <div key="tag-summary" style={{ width: exportingAllPages ? `${A4_WIDTH_PX}px` : '100%', minHeight: `${A4_HEIGHT_PX}px`, padding: 0, boxSizing: 'border-box', background: 'transparent', pageBreakAfter: 'always' }}>
       <div>
         <h3 className="text-xl font-bold mb-4 text-blue-700 tracking-tight">Tag Summary</h3>
-        <div className="text-xs text-gray-500 mb-2">
-          Showing all tags with their total credits, debits, and balance
+        <div className="flex justify-between items-center mb-2">
+          <div className="text-xs text-gray-500">
+            Showing all tags with their total credits, debits, and balance
+          </div>
+          <div className="flex gap-2 text-xs">
+            <button
+              onClick={() => setSelectedTags(new Set(statsArr.map(s => s.label)))}
+              className="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+            >
+              Select All
+            </button>
+            <button
+              onClick={() => setSelectedTags(new Set())}
+              className="px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+            >
+              Clear All
+            </button>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full border text-sm rounded-xl overflow-hidden">
+        <div>
+          <table className="w-full border text-sm rounded-xl overflow-hidden">
             <thead>
               <tr className="bg-blue-50">
+                <th className="border px-4 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedTags.size === statsArr.length && statsArr.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedTags(new Set(statsArr.map(s => s.label)));
+                      } else {
+                        setSelectedTags(new Set());
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                </th>
                 <th className="border px-4 py-2">Tag</th>
                 <th className="border px-4 py-2">Total Txns</th>
                 <th className="border px-4 py-2">Total Amount</th>
@@ -1198,9 +1230,31 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
                   <tr 
                     key={s.label + i} 
                     className="hover:bg-blue-50 transition cursor-pointer group"
-                    onClick={() => handleTagRowClick(s.label)}
+                    onClick={(e) => {
+                      // Don't trigger row click if clicking on checkbox
+                      if (!(e.target as HTMLElement).closest('input[type="checkbox"]')) {
+                        handleTagRowClick(s.label);
+                      }
+                    }}
                     title={`Click to view all transactions for tag "${s.label}"`}
                   >
+                    <td className="border px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedTags.has(s.label)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          const newSelected = new Set(selectedTags);
+                          if (e.target.checked) {
+                            newSelected.add(s.label);
+                          } else {
+                            newSelected.delete(s.label);
+                          }
+                          setSelectedTags(newSelected);
+                        }}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="border px-4 py-2 font-semibold">
                       <div className="flex items-center gap-2">
                         <span className="group-hover:text-blue-700 transition-colors">{s.label}</span>
@@ -1366,15 +1420,15 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
                         );
                       })()}
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full">
+                    <div>
+                      <table className="w-full">
                         <thead>
                           <tr className="bg-gray-50">
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[300px]">Description</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account Name</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Account No.</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">Account No.</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                             <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tags</th>
@@ -1412,10 +1466,10 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
                                     return date;
                                   })()}
                                 </td>
-                                <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">{description}</td>
+                                <td className="px-6 py-4 text-sm text-gray-900 min-w-[300px] max-w-[400px] break-words">{description}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{reference}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-medium">{accountName}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{accountNumber}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 min-w-[120px]">{accountNumber}</td>
                                 <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
                                   crdr === 'CR' ? 'text-green-600' : 'text-red-600'
                                 }`}>
@@ -1465,40 +1519,246 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
     await new Promise(resolve => setTimeout(resolve, 100)); // Wait for DOM update
     if (!reportContainerRef.current) return;
     const html2pdf = (await import('html2pdf.js')).default;
+    
+    // Create filtered pages for selected tags
+    const tagsToExport = selectedTags.size > 0 ? selectedTags : new Set(statsArr.map(s => s.label));
+    const filteredStatsArr = statsArr.filter(stat => tagsToExport.has(stat.label));
+    
+    // Get all transactions for selected tags
+    const selectedTransactions = transactions.filter(tx => {
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      return tags.some((tag: Tag) => tagsToExport.has(tag.name));
+    });
+    
+    // Sort transactions by date (oldest to newest)
+    selectedTransactions.sort((a, b) => {
+      const getDateValue = (tx: Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string }) => {
+        const dateField = tx.Date || tx['Transaction Date'];
+        if (typeof dateField === 'string') return dateField;
+        if (typeof dateField === 'number') return String(dateField);
+        return '';
+      };
+      const dateA = new Date(getDateValue(a));
+      const dateB = new Date(getDateValue(b));
+      return dateA.getTime() - dateB.getTime();
+    });
+    
+    // Create filtered pages array
+    const filteredPages = [
+      // Tag Summary Page (filtered)
+      <div key="tag-summary-filtered" style={{ width: exportingAllPages ? `${A4_WIDTH_PX}px` : '100%', minHeight: `${A4_HEIGHT_PX}px`, padding: 0, boxSizing: 'border-box', background: 'transparent', pageBreakAfter: 'always' }}>
+        <div>
+          <h3 className="text-xl font-bold mb-4 text-blue-700 tracking-tight">Tag Summary</h3>
+          <div className="text-xs text-gray-500 mb-2">
+            Showing {filteredStatsArr.length} selected tags with their total credits, debits, and balance
+          </div>
+          <div>
+            <table className="w-full border text-sm rounded-xl overflow-hidden">
+              <thead>
+                <tr className="bg-blue-50">
+                  <th className="border px-4 py-2">Tag</th>
+                  <th className="border px-4 py-2">Total Txns</th>
+                  <th className="border px-4 py-2">Total Amount</th>
+                  <th className="border px-4 py-2">Credit</th>
+                  <th className="border px-4 py-2">Debit</th>
+                  <th className="border px-4 py-2">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStatsArr.map((s, i) => (
+                  <tr key={s.label + i} className="hover:bg-blue-50 transition cursor-pointer group">
+                    <td className="border px-4 py-2 font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span className="group-hover:text-blue-700 transition-colors">{s.label}</span>
+                        <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </div>
+                    </td>
+                    <td className="border px-4 py-2 text-center">{s.totalTransactions}</td>
+                    <td className="border px-4 py-2 text-right">{s.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="border px-4 py-2 text-right text-green-700">{s.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="border px-4 py-2 text-right text-red-700">{s.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className={`border px-4 py-2 text-right font-semibold ${
+                      s.totalCredit > s.totalDebit ? 'text-emerald-700' : 'text-amber-700'
+                    }`}>
+                      {s.totalCredit - s.totalDebit > 0 ? '+' : ''}
+                      {(s.totalCredit - s.totalDebit).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>,
+      // Transactions Page
+      <div key="transactions-filtered" style={{ width: exportingAllPages ? `${A4_WIDTH_PX}px` : '100%', minHeight: `${A4_HEIGHT_PX}px`, padding: 0, boxSizing: 'border-box', background: 'transparent', pageBreakAfter: 'always' }}>
+        <div>
+          <h3 className="text-xl font-bold mb-4 text-blue-700 tracking-tight">Individual Transactions</h3>
+          <div className="text-xs text-gray-500 mb-2">
+            Showing {selectedTransactions.length} transactions for selected tags
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border text-xs rounded-xl overflow-hidden">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className="border px-2 py-1">Tag</th>
+                  <th className="border px-2 py-1">Bank</th>
+                  <th className="border px-2 py-1">Date</th>
+                  <th className="border px-2 py-1">Description</th>
+                  <th className="border px-2 py-1">Amount</th>
+                  <th className="border px-2 py-1">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedTransactions.map((tx, idx) => {
+                  const tags = Array.isArray(tx.tags) ? tx.tags : [];
+                  const tagNames = tags.map((tag: Tag) => tag.name).join('; ');
+                  const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+                  const description = (tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A') as string;
+                  const date = (tx.Date || tx['Transaction Date'] || 'N/A') as string;
+                  const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+                  const bankName = bankIdNameMap[tx.bankId] || tx.bankId;
+                  
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="border px-2 py-1 text-xs">{tagNames}</td>
+                      <td className="border px-2 py-1 text-xs">{bankName}</td>
+                      <td className="border px-2 py-1 text-xs">{date}</td>
+                      <td className="border px-2 py-1 text-xs max-w-[200px] truncate">{description}</td>
+                      <td className={`border px-2 py-1 text-xs text-right ${crdr === 'CR' ? 'text-green-600' : 'text-red-600'}`}>
+                        ₹{amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="border px-2 py-1 text-xs text-center">{crdr}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    ];
+    
+    // Temporarily replace the content for PDF generation
+    if (!reportContainerRef.current) return;
+    const originalContent = reportContainerRef.current.innerHTML;
+    reportContainerRef.current.innerHTML = '';
+    
+    // Create temporary container for filtered content
+    const tempContainer = document.createElement('div');
+    tempContainer.style.width = `${A4_WIDTH_PX}px`;
+    tempContainer.style.minHeight = `${A4_HEIGHT_PX}px`;
+    tempContainer.style.background = 'white';
+    tempContainer.style.boxSizing = 'border-box';
+    tempContainer.style.padding = '16px';
+    tempContainer.style.borderRadius = '16px';
+    tempContainer.style.boxShadow = '0 2px 16px rgba(0,0,0,0.08)';
+    
+    // Render filtered content
+    const { renderToString } = await import('react-dom/server');
+    tempContainer.innerHTML = renderToString(filteredPages[0]);
+    reportContainerRef.current.appendChild(tempContainer);
+    
+    const fileName = selectedTags.size > 0 ? `selected-tags-report-${selectedTags.size}-tags.pdf` : 'super-bank-report.pdf';
+    
     html2pdf()
       .set({
         margin: 0,
-        filename: 'super-bank-report.pdf',
+        filename: fileName,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, allowTaint: true },
         jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
       })
-      .from(reportContainerRef.current)
+      .from(tempContainer)
       .save()
-      .finally(() => setExportingAllPages(false));
+      .finally(() => {
+        // Restore original content
+        if (reportContainerRef.current) {
+          reportContainerRef.current.innerHTML = originalContent;
+        }
+        setExportingAllPages(false);
+      });
   };
 
   const handleDownloadCSV = () => {
     // Create CSV data for the current view
     const csvData = [];
     
+    // Filter stats based on selected tags, or use all if none selected
+    const tagsToExport = selectedTags.size > 0 ? selectedTags : new Set(statsArr.map(s => s.label));
+    
     // Add Tag Summary
     csvData.push(['Tag Summary']);
     csvData.push(['Tag', 'Total Txns', 'Total Amount', 'Credit', 'Debit', 'Balance']);
     
     statsArr.forEach(stat => {
-      const balance = stat.totalCredit - stat.totalDebit;
-      csvData.push([
-        stat.label,
-        stat.totalTransactions,
-        stat.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-        stat.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-        stat.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
-        balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })
-      ]);
+      if (tagsToExport.has(stat.label)) {
+        const balance = stat.totalCredit - stat.totalDebit;
+        csvData.push([
+          stat.label,
+          stat.totalTransactions,
+          stat.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+          stat.totalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+          stat.totalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+          balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })
+        ]);
+      }
     });
     
-
+    // Add empty row for separation
+    csvData.push([]);
+    
+    // Add Individual Transactions for each selected tag
+    csvData.push(['Individual Transactions']);
+    csvData.push(['Tag', 'Bank', 'Account Name', 'Account Number', 'Date', 'Description', 'Reference', 'Amount', 'Type', 'Transaction ID']);
+    
+    // Get all transactions for selected tags
+    const selectedTransactions = transactions.filter(tx => {
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      return tags.some((tag: Tag) => tagsToExport.has(tag.name));
+    });
+    
+    // Sort transactions by date (oldest to newest)
+    selectedTransactions.sort((a, b) => {
+      const getDateValue = (tx: Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string }) => {
+        const dateField = tx.Date || tx['Transaction Date'];
+        if (typeof dateField === 'string') return dateField;
+        if (typeof dateField === 'number') return String(dateField);
+        return '';
+      };
+      const dateA = new Date(getDateValue(a));
+      const dateB = new Date(getDateValue(b));
+      return dateA.getTime() - dateB.getTime();
+    });
+    
+    // Add each transaction
+    selectedTransactions.forEach(tx => {
+      const tags = Array.isArray(tx.tags) ? tx.tags : [];
+      const tagNames = tags.map((tag: Tag) => tag.name).join('; ');
+      const amount = typeof tx.AmountRaw === 'number' ? tx.AmountRaw : 0;
+      const description = tx.Description || tx['Transaction Description'] || tx['Narration'] || 'N/A';
+      const reference = tx['Reference No.'] || tx['Reference'] || tx['Cheque No.'] || 'N/A';
+      const date = tx.Date || tx['Transaction Date'] || 'N/A';
+      const crdr = (tx['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      const bankName = bankIdNameMap[tx.bankId] || tx.bankId;
+      const accountName = tx.accountName || tx.accountHolderName || 'N/A';
+      const accountNumber = tx.accountNumber || 'N/A';
+      
+      csvData.push([
+        tagNames,
+        bankName,
+        accountName,
+        accountNumber,
+        date,
+        description,
+        reference,
+        amount.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+        crdr,
+        tx.id || 'N/A'
+      ]);
+    });
     
     // Convert to CSV string
     const csvContent = csvData.map(row => 
@@ -1510,7 +1770,8 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', 'super-bank-report.csv');
+    const fileName = selectedTags.size > 0 ? `selected-tags-transactions-${selectedTags.size}-tags.csv` : 'super-bank-transactions.csv';
+    link.setAttribute('download', fileName);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -1518,16 +1779,21 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Super Bank Report" maxWidthClass="max-w-[1200px]">
+    <Modal isOpen={isOpen} onClose={onClose} title="Super Bank Reports" maxWidthClass="max-w-[1500px]">
       {/* Download Dropdown */}
       <div className="relative">
         <div className="absolute top-4 right-4 z-10">
           <div className="relative" ref={dropdownRef}>
-        <button
+                    <button
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow transition-all text-sm flex items-center gap-2"
               onClick={() => setShowDownloadDropdown(!showDownloadDropdown)}
             >
               <span>Download</span>
+              {selectedTags.size > 0 && (
+                <span className="bg-yellow-500 text-black text-xs px-2 py-1 rounded-full font-bold">
+                  {selectedTags.size} selected
+                </span>
+              )}
               <svg className={`w-4 h-4 transition-transform ${showDownloadDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
@@ -1573,7 +1839,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
       {/* A4-sized paginated report */}
       <div
         ref={reportContainerRef}
-        className={exportingAllPages ? "w-full bg-transparent p-0 m-0" : "flex justify-center items-start w-full bg-transparent p-0 m-0"}
+        className={exportingAllPages ? "w-full bg-transparent p-0 m-0" : "flex justify-center items-start w-full bg-transparent p-0 m-0 overflow-x-auto"}
         style={{ margin: 0 }}
       >
         {exportingAllPages
@@ -1599,7 +1865,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
               </div>
             )
           : (
-              <div style={{ width: `${A4_WIDTH_PX}px`, minHeight: `${A4_HEIGHT_PX}px`, background: 'white', boxSizing: 'border-box', pageBreakAfter: 'always', padding: '16px', borderRadius: '16px', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
+              <div style={{ width: `${A4_WIDTH_PX}px`, minHeight: `${A4_HEIGHT_PX}px`, background: 'white', boxSizing: 'border-box', pageBreakAfter: 'always', padding: '16px', borderRadius: '16px', boxShadow: '0 2px 16px rgba(0,0,0,0.08)', minWidth: '1400px' }}>
                 {pages[page]}
               </div>
             )}
