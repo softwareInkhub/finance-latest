@@ -457,7 +457,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                                   className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center justify-between"
                                 >
                                   <span className="truncate">{account.accountNumber}</span>
-                                  <span className="text-gray-500 text-xs ml-2">({account.count})</span>
                                   <span className="text-gray-400 text-xs ml-1">- {account.bankName}</span>
                                 </button>
                               ))}

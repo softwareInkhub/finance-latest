@@ -221,6 +221,9 @@ export default function ReportsPage() {
   const [editingMainItem, setEditingMainItem] = useState<{sectionId: string, groupId: string, itemId: string, currentName: string} | null>(null);
   const [editMainItemName, setEditMainItemName] = useState('');
 
+  // State to track if all groups are expanded
+  const [allExpanded, setAllExpanded] = useState(false);
+
   // Sub-sub-item state variables
   const [showSubSubItemOptionModal, setShowSubSubItemOptionModal] = useState(false);
   const [pendingSubSubItemAdd, setPendingSubSubItemAdd] = useState<{sectionId: string, groupId: string, parentItemId: string, subItemId: string} | null>(null);
@@ -464,15 +467,23 @@ export default function ReportsPage() {
   const formatDate = (date: string | number | undefined): string => {
     if (!date || date === 'N/A') return 'N/A';
     
-    console.log('🔍 Formatting date:', { original: date, type: typeof date });
+
     
     try {
       // Handle different date formats
-      let dateObj: Date;
+      let dateObj: Date | undefined;
       
       if (typeof date === 'string') {
-        // If it's already in dd-mm-yyyy format, convert it properly
-        if (date.match(/^\d{2}-\d{2}-\d{4}$/)) {
+        // Normalize IDFC dd-MMM-yyyy (e.g., 28-Feb-2025)
+        if (/^\d{2}-[A-Za-z]{3}-\d{4}$/.test(date)) {
+          const [dd, mon, yyyy] = date.split('-');
+          const months: { [k: string]: number } = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+          const m = months[mon.toLowerCase()];
+          if (m !== undefined) {
+            dateObj = new Date(parseInt(yyyy), m, parseInt(dd));
+          }
+        } else if (date.match(/^\d{2}-\d{2}-\d{4}$/)) {
+          // If it's already in dd-mm-yyyy format, convert it properly
           const [dd, mm, yyyy] = date.split('-');
           dateObj = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
         } else if (date.match(/^\d{2}\/\d{2}\/\d{2}$/)) {
@@ -492,19 +503,17 @@ export default function ReportsPage() {
         dateObj = new Date(date);
       }
       
-      if (!isNaN(dateObj.getTime())) {
+      if (dateObj && !isNaN(dateObj.getTime())) {
         const dd = String(dateObj.getDate()).padStart(2, '0');
         const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
         const yyyy = dateObj.getFullYear();
         const formatted = `${dd}/${mm}/${yyyy}`;
-        console.log('🔍 Formatted date:', { original: date, formatted });
         return formatted;
       }
-    } catch (error) {
-      console.log('🔍 Date parsing error:', { date, error });
+    } catch {
+      // Date parsing failed
     }
     
-    console.log('🔍 Returning original date:', date);
     return String(date);
   };
 
@@ -673,7 +682,7 @@ export default function ReportsPage() {
       const filtered = activeTagTransactions.filter(tx => {
       // Date filter
       if (dateFilter) {
-        const txDate = tx.Date || tx.date;
+        const txDate = tx.Date || tx.date || (tx as Record<string, unknown>)['Transaction Date'] || (tx as Record<string, unknown>)['Value Date'];
         if (!txDate || String(txDate) !== dateFilter) {
           return false;
         }
@@ -682,12 +691,7 @@ export default function ReportsPage() {
       // CR/DR filter
       if (drCrFilter) {
         const { crdr } = extractAmountAndTypeFromTx(tx);
-        console.log('🔍 CR/DR Filter Debug:', { 
-          filter: drCrFilter, 
-          transactionCrdr: crdr, 
-          description: tx.Description || tx.description || 'N/A',
-          amount: tx.AmountRaw || tx.Amount || tx.amount
-        });
+
         // Only filter if we have a valid CR/DR value, skip transactions with empty CR/DR
         if (crdr && crdr !== drCrFilter) {
           return false;
@@ -711,7 +715,6 @@ export default function ReportsPage() {
 
     // Apply date sorting
     if (dateSortOrder) {
-      console.log('🔍 Applying date sorting:', { dateSortOrder, filteredCount: filtered.length });
       filtered.sort((a, b) => {
         // Use the same date parsing logic as the formatDate function
         const getDateValue = (dateStr: string | number | undefined): Date => {
@@ -719,8 +722,16 @@ export default function ReportsPage() {
           
           try {
             if (typeof dateStr === 'string') {
-              // If it's already in dd/mm/yy format, convert it properly
-              if (dateStr.match(/^\d{2}\/\d{2}\/\d{2}$/)) {
+              // Normalize IDFC dd-MMM-yyyy (e.g., 28-Feb-2025)
+              if (/^\d{2}-[A-Za-z]{3}-\d{4}$/.test(dateStr)) {
+                const [dd, mon, yyyy] = dateStr.split('-');
+                const months: { [k: string]: number } = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+                const m = months[mon.toLowerCase()];
+                if (m !== undefined) {
+                  return new Date(parseInt(yyyy), m, parseInt(dd));
+                }
+              } else if (dateStr.match(/^\d{2}\/\d{2}\/\d{2}$/)) {
+                // If it's already in dd/mm/yy format, convert it properly
                 const [dd, mm, yy] = dateStr.split('/');
                 const yyyy = parseInt(yy) < 50 ? 2000 + parseInt(yy) : 1900 + parseInt(yy);
                 return new Date(yyyy, parseInt(mm) - 1, parseInt(dd));
@@ -740,15 +751,10 @@ export default function ReportsPage() {
           }
         };
         
-        const dateA = getDateValue(a.Date || a.date);
-        const dateB = getDateValue(b.Date || b.date);
+        const dateA = getDateValue(a.Date || a.date || ((a as Record<string, unknown>)['Transaction Date'] as string | number | undefined) || ((a as Record<string, unknown>)['Value Date'] as string | number | undefined));
+        const dateB = getDateValue(b.Date || b.date || ((b as Record<string, unknown>)['Transaction Date'] as string | number | undefined) || ((b as Record<string, unknown>)['Value Date'] as string | number | undefined));
         
-        console.log('🔍 Comparing dates:', { 
-          a: a.Date || a.date, 
-          b: b.Date || b.date, 
-          dateA: dateA.toISOString(), 
-          dateB: dateB.toISOString() 
-        });
+
         
         if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
           return 0; // Keep original order if dates are invalid
@@ -760,7 +766,6 @@ export default function ReportsPage() {
           return dateA.getTime() - dateB.getTime(); // Oldest first
         }
       });
-      console.log('🔍 Sorting completed');
     }
 
     return filtered;
@@ -1254,38 +1259,19 @@ export default function ReportsPage() {
     setIsEditing(!isEditing);
   };
 
-  // Function to expand all groups
-  const expandAllGroups = () => {
+  // Function to toggle all groups expand/collapse
+  const toggleAllGroups = () => {
+    setAllExpanded(!allExpanded);
     setCashFlowData(prev => {
       const updated = prev.map(section => ({
         ...section,
         groups: section.groups.map(group => ({
           ...group,
-          isExpanded: true,
+          isExpanded: !allExpanded,
           items: group.items.map(item => ({
             ...item,
-            isExpanded: true,
+            isExpanded: !allExpanded,
             // keep existing subItems unchanged
-            subItems: item.subItems?.map(sub => ({ ...sub })) || item.subItems
-          }))
-        }))
-      }));
-      saveCashFlowData(updated);
-      return updated;
-    });
-  };
-
-  // Function to collapse all groups
-  const collapseAllGroups = () => {
-    setCashFlowData(prev => {
-      const updated = prev.map(section => ({
-        ...section,
-        groups: section.groups.map(group => ({
-          ...group,
-          isExpanded: false,
-          items: group.items.map(item => ({
-            ...item,
-            isExpanded: false,
             subItems: item.subItems?.map(sub => ({ ...sub })) || item.subItems
           }))
         }))
@@ -2455,19 +2441,22 @@ export default function ReportsPage() {
                         {group.isExpanded && group.items.map((item) => (
                           <React.Fragment key={item.id}>
                             {/* Main Item */}
-                            <tr className="border-b border-gray-200 hover:bg-gray-50">
+                            <tr className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>
                               <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-2">
                                     {item.subItems && item.subItems.length > 0 && (
                                       <button
-                                        onClick={() => toggleItemExpansion(cashFlowData[0].id, group.id, item.id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleItemExpansion(cashFlowData[0].id, group.id, item.id);
+                                        }}
                                         className="text-gray-500 hover:text-gray-700"
                                       >
                                         {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
                                       </button>
                                     )}
-                                    <span className="cursor-pointer hover:underline" onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>{item.particular}</span>
+                                    <span className={`${item.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{item.particular}</span>
                                   </div>
                                   {item.createdByTag && item.tagData && (
                                     <div className="text-xs text-gray-500 mt-1">
@@ -2522,10 +2511,10 @@ export default function ReportsPage() {
                             
                             {/* Sub-Items */}
                             {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
-                              <tr key={subItem.id} className="border-b border-gray-300 border-dotted hover:bg-gray-50">
+                              <tr key={subItem.id} className={`border-b border-gray-300 border-dotted hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>
                                 <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
                                   <div className="flex flex-col">
-                                    <span className="text-sm cursor-pointer hover:underline" onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>{subItem.particular}</span>
+                                    <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
                                     {subItem.createdByTag && subItem.tagData && (
                                       <div className="text-xs text-gray-500 mt-1">
                                         CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
@@ -2651,19 +2640,22 @@ export default function ReportsPage() {
                          {group.isExpanded && group.items.map((item) => (
                            <React.Fragment key={item.id}>
                              {/* Main Item */}
-                             <tr className="border-b border-gray-200 hover:bg-gray-50">
+                             <tr className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>
                                <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
                                  <div className="flex flex-col">
                                    <div className="flex items-center gap-2">
                                      {item.subItems && item.subItems.length > 0 && (
                                        <button
-                                         onClick={() => toggleItemExpansion(cashFlowData[1].id, group.id, item.id)}
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           toggleItemExpansion(cashFlowData[1].id, group.id, item.id);
+                                         }}
                                          className="text-gray-500 hover:text-gray-700"
                                        >
                                          {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
                                        </button>
                                      )}
-                                     <span className="cursor-pointer hover:underline" onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>{item.particular}</span>
+                                     <span className={`${item.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{item.particular}</span>
                                    </div>
                                    {item.createdByTag && item.tagData && (
                                      <div className="text-xs text-gray-500 mt-1">
@@ -2718,10 +2710,10 @@ export default function ReportsPage() {
                              
                              {/* Sub-Items */}
                              {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
-                               <tr key={subItem.id} className="border-b border-gray-100 hover:bg-gray-50">
+                               <tr key={subItem.id} className={`border-b border-gray-100 hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>
                                  <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
                                    <div className="flex flex-col">
-                                     <span className="text-sm cursor-pointer hover:underline" onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>{subItem.particular}</span>
+                                     <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
                                      {subItem.createdByTag && subItem.tagData && (
                                        <div className="text-xs text-gray-500 mt-1">
                                          CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
@@ -3004,24 +2996,22 @@ export default function ReportsPage() {
               {/* View Controls */}
                 <div className="space-y-2">
                   <button
-                    onClick={expandAllGroups}
-                    className="w-full bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
-                    title="Expand all groups to show all items"
+                    onClick={toggleAllGroups}
+                    className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                      allExpanded 
+                        ? 'bg-gray-600 hover:bg-gray-700 text-white' 
+                        : 'bg-teal-600 hover:bg-teal-700 text-white'
+                    }`}
+                    title={allExpanded ? "Collapse all groups to show only group totals" : "Expand all groups to show all items"}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      {allExpanded ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      )}
                     </svg>
-                    EXPAND ALL
-                  </button>
-                  <button
-                    onClick={collapseAllGroups}
-                    className="w-full bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center gap-2"
-                    title="Collapse all groups to show only group totals"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    COLLAPSE ALL
+                    {allExpanded ? 'COLLAPSE ALL' : 'EXPAND ALL'}
                   </button>
               </div>
 
@@ -4346,7 +4336,6 @@ export default function ReportsPage() {
                                   className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center justify-between"
                                 >
                                   <span className="truncate">{account.accountNumber}</span>
-                                  <span className="text-gray-500 text-xs ml-2">({account.count})</span>
                                   <span className="text-gray-400 text-xs ml-1">- {account.bankName}</span>
                                 </button>
                               ))}
@@ -4385,7 +4374,7 @@ export default function ReportsPage() {
                       const bankName = tx.bankName || tx.bankId || 'Unknown Bank';
                       const isCredit = crdr === 'CR';
                       const displayAmount = amountAbs;
-                      const dateStr = formatDate(tx.Date || tx.date);
+                      const dateStr = formatDate(tx.Date || tx.date || ((tx as Record<string, unknown>)['Transaction Date'] as string | number | undefined) || ((tx as Record<string, unknown>)['Value Date'] as string | number | undefined));
                                              // Try multiple possible description fields
                        const desc = String(
                          tx.Description || 

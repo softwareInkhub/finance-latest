@@ -1596,6 +1596,7 @@ export default function SuperBankPage() {
   // Additional filter states
   const [bankFilter, setBankFilter] = useState<string>('');
   const [drCrFilter, setDrCrFilter] = useState<'DR' | 'CR' | ''>('');
+  const [accountFilter, setAccountFilter] = useState<string>('');
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -2133,6 +2134,12 @@ export default function SuperBankPage() {
     mappedRow.statementId = tx.statementId;
           mappedRow.bankId = tx.bankId;
       mappedRow.accountId = tx.accountId;
+      // Ensure account number is present for filtering; fall back to common fields
+      mappedRow.accountNumber = (tx as Record<string, unknown>).accountNumber as string
+        || (tx as Record<string, unknown>).accountNo as string
+        || (tx as Record<string, unknown>).account as string
+        || (tx as Record<string, unknown>).userAccountNumber as string
+        || (tx.accountId ? String(tx.accountId) : '');
       // Add bank name for searching
       mappedRow.bankName = bankIdNameMap[tx.bankId] || tx.bankId;
       // Apply conditions for Dr./Cr.
@@ -2140,22 +2147,8 @@ export default function SuperBankPage() {
       return mappedRow as Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string; bankName?: string };
   });
 
-  // Tag filter logic: filter mappedRowsWithConditions by selected tags first
-  const tagFilteredRows = tagFilters.length > 0
-    ? mappedRowsWithConditions.filter(row => {
-        const tags = row.tags;
-        if (!Array.isArray(tags)) return false;
-        // Use AND logic: transaction must have ALL selected tags
-        return tagFilters.every(selectedTag => 
-          tags.some(t => t.name === selectedTag)
-        );
-      })
-    : mappedRowsWithConditions;
-
-
-
-  // Then apply search, date, and tag/untagged filters to tagFilteredRows
-  const filteredRows = tagFilteredRows.filter((row) => {
+  // First apply search, date, bank, Dr/Cr, account, and tagged/untagged filters (but not tagFilters yet)
+  const baseFilteredRows = mappedRowsWithConditions.filter((row) => {
     // Search
     const searchMatch =
       !search ||
@@ -2243,8 +2236,47 @@ export default function SuperBankPage() {
       drCrMatch = drCrValue === drCrFilter;
     }
 
-    return searchMatch && dateMatch && bankMatch && drCrMatch;
+    // Account filter (by account number if available from enriched data or raw column)
+    let accountMatch = true;
+    if (accountFilter) {
+      // Try enriched field first, fallback to any header including 'account'
+      const enriched = (row as Record<string, unknown>).accountNumber || (row as Record<string, unknown>).AccountNumber;
+      let val: string | undefined = typeof enriched === 'string' ? enriched : undefined;
+      
+      if (!val) {
+        const accountHeader = superHeader.find(h => h.toLowerCase().includes('account'));
+        if (accountHeader) {
+          const rv = row[accountHeader];
+          if (typeof rv === 'string' || typeof rv === 'number') {
+            val = String(rv);
+            // If the value contains " - " (like "hvhvhvjhjdcx - HDFC"), extract just the account number part
+            if (val.includes(' - ')) {
+              val = val.split(' - ')[0];
+            }
+          }
+        }
+      }
+      
+      // Also try to get account number from the enriched data
+      if (!val && row.accountId) {
+        val = String(row.accountId);
+      }
+      
+      // Match the account number (accountFilter contains just the account number, not the full "account - bank" string)
+      accountMatch = val ? String(val) === accountFilter : false;
+    }
+
+    return searchMatch && dateMatch && bankMatch && drCrMatch && accountMatch;
   });
+
+  // Now apply tag filters (OR logic) on top of baseFilteredRows
+  const filteredRows = tagFilters.length > 0
+    ? baseFilteredRows.filter(row => {
+        const tags = row.tags;
+        if (!Array.isArray(tags)) return false;
+        return tags.some(t => t && t.name && tagFilters.includes(t.name));
+      })
+    : baseFilteredRows;
 
 
 
@@ -2534,13 +2566,55 @@ export default function SuperBankPage() {
     }
   };
 
+  // Account filtering function
+  const handleAccountFilter = (accountNumber: string | 'clear') => {
+    if (accountNumber === 'clear') {
+      setAccountFilter('');
+    } else {
+      setAccountFilter(accountNumber);
+    }
+  };
+
   // Get available banks for dropdown
   const availableBanks = Array.from(new Set(transactions.map(tx => bankIdNameMap[tx.bankId]).filter(Boolean)));
+
+  // Get available accounts for dropdown (respect current non-tag filters, including bank)
+  const availableAccounts = React.useMemo(() => {
+    const list: Array<{ bankName: string; accountNumber: string; count: number }> = [];
+    const counter: { [key: string]: { bankName: string; accountNumber: string; count: number } } = {};
+
+    // Prefer baseFilteredRows (already filtered by bank/search/date/drcr/account etc. except tag OR),
+    // fallback to all mapped rows if empty
+    const rows = (typeof baseFilteredRows !== 'undefined' && baseFilteredRows.length > 0)
+      ? baseFilteredRows
+      : mappedRowsWithConditions;
+
+    rows.forEach(row => {
+      const bankName = (row as Record<string, unknown>).bankName as string || (bankIdNameMap[(row as Record<string, unknown>).bankId as string] || (row as Record<string, unknown>).bankId as string);
+      let accountNumber = (row as Record<string, unknown>).accountNumber as string;
+      if (!accountNumber) {
+        const accountHeader = superHeader.find(h => h.toLowerCase().includes('account'));
+        if (accountHeader) {
+          const v = (row as Record<string, unknown>)[accountHeader];
+          if (typeof v === 'string' || typeof v === 'number') accountNumber = String(v).split(' - ')[0];
+        }
+      }
+      if (!accountNumber) return;
+      const key = bankName + '|' + accountNumber;
+      if (!counter[key]) counter[key] = { bankName, accountNumber, count: 0 };
+      counter[key].count += 1;
+    });
+
+    Object.values(counter).forEach(v => list.push(v));
+    list.sort((a, b) => a.bankName.localeCompare(b.bankName) || a.accountNumber.localeCompare(b.accountNumber));
+    return list;
+  }, [baseFilteredRows, mappedRowsWithConditions, superHeader, bankIdNameMap]);
 
   // Clear all filters function
   const clearAllFilters = () => {
     setBankFilter('');
     setDrCrFilter('');
+    setAccountFilter('');
     setSearch('');
     setDateRange({ from: '', to: '' });
     setTagFilters([]);
@@ -2554,9 +2628,9 @@ export default function SuperBankPage() {
     setTimeout(() => handleApplyTagToAll(), 0); // ensure pendingTag is set before running
   };
 
-  // Compute tag statistics for filteredRows (for pills and summary)
+  // Compute tag statistics for tag pills based on baseFilteredRows (ignore current tag filters)
   const filteredTagStats: Record<string, number> = {};
-  filteredRows.forEach(row => {
+  baseFilteredRows.forEach(row => {
     if (Array.isArray(row.tags)) {
       row.tags.forEach(tag => {
         if (tag && tag.name) {
@@ -3058,8 +3132,8 @@ export default function SuperBankPage() {
             onToggleTag={tagName => setTagFilters(filters => filters.includes(tagName) ? filters.filter(t => t !== tagName) : [...filters, tagName])}
             onClear={() => setTagFilters([])}
             onTagDeleted={() => handleTagDeleted()}
-            onApplyTagToAll={handleApplyTagToAllFromMenu}
             tagStats={filteredTagStats}
+            onApplyTagToAll={handleApplyTagToAllFromMenu}
             tagged={tagged}
             untagged={untagged}
             totalTags={allTags.length}
@@ -3297,7 +3371,9 @@ export default function SuperBankPage() {
             onDateFilter={handleDateFilter}
             onBankFilter={handleBankFilter}
             onDrCrFilter={handleDrCrFilter}
+            onAccountFilter={handleAccountFilter}
             availableBanks={availableBanks}
+            availableAccounts={availableAccounts}
           />
           </div>
         </div>

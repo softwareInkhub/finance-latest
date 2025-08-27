@@ -769,6 +769,87 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
   const allPagesRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Tag Summary UI state: search and sort (keep hooks near top to satisfy rules-of-hooks)
+  const [tagSummarySearch, setTagSummarySearch] = useState('');
+  const [tagSummarySort, setTagSummarySort] = useState<'az' | 'za' | ''>('');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+
+  // Compute per-tag stats (moved up to be available for useMemo)
+  type Stat = {
+    label: string;
+    totalTransactions: number;
+    totalAmount: number;
+    totalCredit: number;
+    totalDebit: number;
+    tagged: number;
+    untagged: number;
+  };
+  
+  // Get all unique tags from transactions
+  const allTags = new Set<string>();
+  transactions.forEach(tx => {
+    if (Array.isArray(tx.tags)) {
+      tx.tags.forEach(tag => allTags.add(tag.name));
+    }
+  });
+  
+  // Group by tag
+  const statsArr: Stat[] = Array.from(allTags).map(tagName => {
+    const txs = transactions.filter(tx => Array.isArray(tx.tags) && tx.tags.some(t => t.name === tagName));
+    let totalAmount = 0, totalCredit = 0, totalDebit = 0, tagged = 0, untagged = 0;
+    txs.forEach(tx => {
+      // Get amount from AmountRaw or parse from Amount field
+      let amount = 0;
+      if (typeof (tx as Transaction & { AmountRaw?: number }).AmountRaw === 'number') {
+        amount = (tx as Transaction & { AmountRaw?: number }).AmountRaw || 0;
+      } else {
+        // Fallback to parsing Amount field
+        const amountField = (tx as Transaction & { Amount?: string; amount?: string }).Amount || (tx as Transaction & { Amount?: string; amount?: string }).amount || 0;
+        // Simple parsing without parseIndianAmount
+        if (typeof amountField === 'number') {
+          amount = amountField;
+        } else if (typeof amountField === 'string') {
+          const cleaned = amountField.replace(/,/g, '').trim();
+          const num = parseFloat(cleaned);
+          amount = isNaN(num) ? 0 : num;
+        } else {
+          amount = 0;
+        }
+      }
+      
+      // Use Math.round to avoid floating point precision issues
+      amount = Math.round(amount * 100) / 100;
+      totalAmount = Math.round((totalAmount + amount) * 100) / 100;
+      
+      const crdr = ((tx as Transaction & { 'Dr./Cr.'?: string })['Dr./Cr.'] || '').toString().trim().toUpperCase();
+      if (crdr === 'CR') {
+        totalCredit = Math.round((totalCredit + Math.abs(amount)) * 100) / 100;
+      } else if (crdr === 'DR') {
+        totalDebit = Math.round((totalDebit + Math.abs(amount)) * 100) / 100;
+      }
+      
+      const tags = (tx as Transaction).tags;
+      if (Array.isArray(tags) && tags.length > 0) tagged++;
+      else untagged++;
+    });
+    return {
+      label: tagName,
+      totalTransactions: txs.length,
+      totalAmount,
+      totalCredit,
+      totalDebit,
+      tagged,
+      untagged,
+    };
+  });
+
+  const filteredAndSortedStats = useMemo(() => {
+    let arr = statsArr.filter(s => !tagSummarySearch || s.label.toLowerCase().includes(tagSummarySearch.toLowerCase()));
+    if (tagSummarySort === 'az') arr = arr.slice().sort((a, b) => a.label.localeCompare(b.label));
+    if (tagSummarySort === 'za') arr = arr.slice().sort((a, b) => b.label.localeCompare(a.label));
+    return arr;
+  }, [statsArr, tagSummarySearch, tagSummarySort]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -785,6 +866,24 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showDownloadDropdown]);
+
+  // Close sort dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.sort-dropdown-container')) {
+        setShowSortDropdown(false);
+      }
+    };
+
+    if (showSortDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSortDropdown]);
 
 
 
@@ -1058,74 +1157,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
       </Modal>
     );
   }
-  // Compute per-tag stats
-  type Stat = {
-    label: string;
-    totalTransactions: number;
-    totalAmount: number;
-    totalCredit: number;
-    totalDebit: number;
-    tagged: number;
-    untagged: number;
-  };
-  
-  // Get all unique tags from transactions
-  const allTags = new Set<string>();
-  transactions.forEach(tx => {
-    if (Array.isArray(tx.tags)) {
-      tx.tags.forEach(tag => allTags.add(tag.name));
-    }
-  });
-  
-  // Group by tag
-  const statsArr: Stat[] = Array.from(allTags).map(tagName => {
-    const txs = transactions.filter(tx => Array.isArray(tx.tags) && tx.tags.some(t => t.name === tagName));
-    let totalAmount = 0, totalCredit = 0, totalDebit = 0, tagged = 0, untagged = 0;
-    txs.forEach(tx => {
-      // Get amount from AmountRaw or parse from Amount field
-      let amount = 0;
-      if (typeof (tx as Transaction & { AmountRaw?: number }).AmountRaw === 'number') {
-        amount = (tx as Transaction & { AmountRaw?: number }).AmountRaw || 0;
-      } else {
-        // Fallback to parsing Amount field
-        const amountField = (tx as Transaction & { Amount?: string; amount?: string }).Amount || (tx as Transaction & { Amount?: string; amount?: string }).amount || 0;
-        // Simple parsing without parseIndianAmount
-        if (typeof amountField === 'number') {
-          amount = amountField;
-        } else if (typeof amountField === 'string') {
-          const cleaned = amountField.replace(/,/g, '').trim();
-          const num = parseFloat(cleaned);
-          amount = isNaN(num) ? 0 : num;
-        } else {
-          amount = 0;
-        }
-      }
-      
-      // Use Math.round to avoid floating point precision issues
-      amount = Math.round(amount * 100) / 100;
-      totalAmount = Math.round((totalAmount + amount) * 100) / 100;
-      
-      const crdr = ((tx as Transaction & { 'Dr./Cr.'?: string })['Dr./Cr.'] || '').toString().trim().toUpperCase();
-      if (crdr === 'CR') {
-        totalCredit = Math.round((totalCredit + Math.abs(amount)) * 100) / 100;
-      } else if (crdr === 'DR') {
-        totalDebit = Math.round((totalDebit + Math.abs(amount)) * 100) / 100;
-      }
-      
-      const tags = (tx as Transaction).tags;
-      if (Array.isArray(tags) && tags.length > 0) tagged++;
-      else untagged++;
-    });
-    return {
-      label: tagName,
-      totalTransactions: txs.length,
-      totalAmount,
-      totalCredit,
-      totalDebit,
-      tagged,
-      untagged,
-    };
-  });
+  // moved tag summary search/sort hooks to the top of SuperBankReportModal
 
 
   // Console logging for individual tags Credit, Debit, and Balance
@@ -1181,8 +1213,65 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
       <div>
         <h3 className="text-xl font-bold mb-4 text-blue-700 tracking-tight">Tag Summary</h3>
         <div className="flex justify-between items-center mb-2">
-          <div className="text-xs text-gray-500">
-            Showing all tags with their total credits, debits, and balance
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-gray-500">
+              Showing all tags with their total credits, debits, and balance
+            </div>
+            {/* Search */}
+            <input
+              type="text"
+              value={tagSummarySearch}
+              onChange={e => setTagSummarySearch(e.target.value)}
+              placeholder="Search tags..."
+              className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+            />
+            {/* Sort dropdown */}
+            <div className="relative sort-dropdown-container">
+              <button
+                type="button"
+                onClick={() => setShowSortDropdown(!showSortDropdown)}
+                className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 flex items-center gap-1"
+                title="Sort tags"
+              >
+                <span>{tagSummarySort === 'az' ? 'A→Z' : tagSummarySort === 'za' ? 'Z→A' : 'Sort'}</span>
+                <svg className={`w-3 h-3 transition-transform ${showSortDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showSortDropdown && (
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded shadow-lg z-10 min-w-[120px]">
+                  <div className="py-1">
+                    <button
+                      onClick={() => {
+                        setTagSummarySort('az');
+                        setShowSortDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-1 text-xs hover:bg-gray-100 ${tagSummarySort === 'az' ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                    >
+                      A → Z (Ascending)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTagSummarySort('za');
+                        setShowSortDropdown(false);
+                      }}
+                      className={`w-full text-left px-3 py-1 text-xs hover:bg-gray-100 ${tagSummarySort === 'za' ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                    >
+                      Z → A (Descending)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTagSummarySort('');
+                        setShowSortDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-1 text-xs hover:bg-gray-100 text-gray-700"
+                    >
+                      Clear Sort
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex gap-2 text-xs">
             <button
@@ -1226,7 +1315,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
               </tr>
             </thead>
                           <tbody>
-                {statsArr.map((s, i) => (
+                {filteredAndSortedStats.map((s, i) => (
                   <tr 
                     key={s.label + i} 
                     className="hover:bg-blue-50 transition cursor-pointer group"
@@ -1979,6 +2068,7 @@ export default function SuperBankPage() {
   // Additional filter states
   const [bankFilter, setBankFilter] = useState<string>('');
   const [drCrFilter, setDrCrFilter] = useState<'DR' | 'CR' | ''>('');
+  const [accountFilter, setAccountFilter] = useState<string>('');
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -2540,6 +2630,12 @@ export default function SuperBankPage() {
     mappedRow.statementId = tx.statementId;
           mappedRow.bankId = tx.bankId;
       mappedRow.accountId = tx.accountId;
+      // Ensure account number is present for filtering; fall back to common fields
+      mappedRow.accountNumber = (tx as Record<string, unknown>).accountNumber as string
+        || (tx as Record<string, unknown>).accountNo as string
+        || (tx as Record<string, unknown>).account as string
+        || (tx as Record<string, unknown>).userAccountNumber as string
+        || (tx.accountId ? String(tx.accountId) : '');
       // Add bank name for searching
       mappedRow.bankName = bankIdNameMap[tx.bankId] || tx.bankId;
       // Apply conditions for Dr./Cr.
@@ -2547,22 +2643,8 @@ export default function SuperBankPage() {
       return mappedRow as Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string; bankName?: string };
   }), [transactions, bankMappings, superHeader, bankIdNameMap, formatIndianAmount, getValueForColumn, parseIndianAmount]);
 
-  // Tag filter logic: filter mappedRowsWithConditions by selected tags first
-  const tagFilteredRows = tagFilters.length > 0
-    ? mappedRowsWithConditions.filter(row => {
-        const tags = row.tags;
-        if (!Array.isArray(tags)) return false;
-        // Use AND logic: transaction must have ALL selected tags
-        return tagFilters.every(selectedTag => 
-          tags.some(t => t.name === selectedTag)
-        );
-      })
-    : mappedRowsWithConditions;
-
-
-
-  // Then apply search, date, and tag/untagged filters to tagFilteredRows
-  const filteredRows = tagFilteredRows.filter((row) => {
+  // First apply search, date, bank, Dr/Cr, account, and tagged/untagged filters (but not tagFilters yet)
+  const baseFilteredRows = mappedRowsWithConditions.filter((row) => {
     // Search
     const searchMatch =
       !search ||
@@ -2643,8 +2725,48 @@ export default function SuperBankPage() {
       drCrMatch = drCrValue === drCrFilter;
     }
 
-    return searchMatch && dateMatch && bankMatch && drCrMatch;
+    // Account filter (match by account number if present)
+    let accountMatch = true;
+    if (accountFilter) {
+      // Try multiple possible account number fields
+      const enriched = (row as Record<string, unknown>).accountNumber || (row as Record<string, unknown>).AccountNumber;
+      let val: string | undefined = typeof enriched === 'string' ? enriched : undefined;
+      
+      if (!val) {
+        // Try to find account number from any header containing 'account'
+        const accountHeader = superHeader.find(h => h.toLowerCase().includes('account'));
+        if (accountHeader) {
+          const rv = row[accountHeader];
+          if (typeof rv === 'string' || typeof rv === 'number') {
+            val = String(rv);
+            // If the value contains " - " (like "hvhvhvjhjdcx - HDFC"), extract just the account number part
+            if (val.includes(' - ')) {
+              val = val.split(' - ')[0];
+            }
+          }
+        }
+      }
+      
+      // Also try to get account number from the enriched data
+      if (!val && row.accountId) {
+        val = String(row.accountId);
+      }
+      
+      // Match the account number (accountFilter contains just the account number, not the full "account - bank" string)
+      accountMatch = val ? String(val) === accountFilter : false;
+    }
+
+    return searchMatch && dateMatch && bankMatch && drCrMatch && accountMatch;
   });
+
+  // Now apply tag filters (OR logic) on top of baseFilteredRows
+  const filteredRows = tagFilters.length > 0
+    ? baseFilteredRows.filter(row => {
+        const tags = row.tags;
+        if (!Array.isArray(tags)) return false;
+        return tags.some(t => t && t.name && tagFilters.includes(t.name));
+      })
+    : baseFilteredRows;
 
 
 
@@ -2957,15 +3079,52 @@ export default function SuperBankPage() {
   // Get available banks for dropdown
   const availableBanks = Array.from(new Set(transactions.map(tx => bankIdNameMap[tx.bankId]).filter(Boolean)));
 
+  // Get available accounts for dropdown (respect current non-tag filters, including bank)
+  const availableAccounts = useMemo(() => {
+    const list: Array<{ bankName: string; accountNumber: string; count: number }> = [];
+    const counter: { [key: string]: { bankName: string; accountNumber: string; count: number } } = {};
+
+    // Respect current filters for bank/search/date/drcr etc. Use baseFilteredRows so Account No. list matches the visible bank
+    const rows = baseFilteredRows && baseFilteredRows.length > 0 ? baseFilteredRows : mappedRowsWithConditions;
+
+    rows.forEach(row => {
+      const bankName = (row as Record<string, unknown>).bankName as string || (bankIdNameMap[(row as Record<string, unknown>).bankId as string] || (row as Record<string, unknown>).bankId as string);
+      let accountNumber = (row as Record<string, unknown>).accountNumber as string;
+      if (!accountNumber) {
+        // try any header that includes 'account'
+        const accountHeader = superHeader.find(h => h.toLowerCase().includes('account'));
+        if (accountHeader) {
+          const v = (row as Record<string, unknown>)[accountHeader];
+          if (typeof v === 'string' || typeof v === 'number') accountNumber = String(v).split(' - ')[0];
+        }
+      }
+      if (!accountNumber) return;
+      const key = bankName + '|' + accountNumber;
+      if (!counter[key]) counter[key] = { bankName, accountNumber, count: 0 };
+      counter[key].count += 1;
+    });
+
+    Object.values(counter).forEach(v => list.push(v));
+    list.sort((a, b) => a.bankName.localeCompare(b.bankName) || a.accountNumber.localeCompare(b.accountNumber));
+    return list;
+  }, [baseFilteredRows, mappedRowsWithConditions, superHeader, bankIdNameMap]);
+
   // Clear all filters function
   const clearAllFilters = () => {
     setBankFilter('');
     setDrCrFilter('');
+    setAccountFilter('');
     setSearch('');
     setDateRange({ from: '', to: '' });
     setTagFilters([]);
     setTableSortColumn('');
     setTableSortDirection('asc');
+  };
+
+  // Account filter handler
+  const handleAccountFilter = (accountNumber: string | 'clear') => {
+    if (accountNumber === 'clear') setAccountFilter('');
+    else setAccountFilter(accountNumber);
   };
 
   // Handler to apply tag to all matching transactions from context menu
@@ -2974,12 +3133,12 @@ export default function SuperBankPage() {
     setTimeout(() => handleApplyTagToAll(), 0); // ensure pendingTag is set before running
   };
 
-  // Compute tag statistics for filteredRows (for pills and summary)
+  // Compute tag statistics for tag pills based on baseFilteredRows (ignore current tag filters)
   const filteredTagStats = useMemo(() => {
     const stats: Record<string, number> = {};
     
     // Count tags in filtered rows
-    filteredRows.forEach(row => {
+    baseFilteredRows.forEach(row => {
       if (Array.isArray(row.tags)) {
         row.tags.forEach(tag => {
           if (tag && tag.name) {
@@ -2996,16 +3155,8 @@ export default function SuperBankPage() {
       }
     });
     
-    // Debug: Log tag counts for troubleshooting
-    console.log('🔍 Tag counts in filteredRows:', stats);
-    console.log('🔍 Total filteredRows:', filteredRows.length);
-    console.log('🔍 Sample row tags:', filteredRows.slice(0, 3).map(row => ({
-      id: row.id,
-      tags: row.tags
-    })));
-    
     return stats;
-  }, [filteredRows, allTags]);
+  }, [baseFilteredRows, allTags]);
 
   // Sort allTags by usage count descending (use filteredTagStats for current view)
   const sortedTags = useMemo(() => {
@@ -3415,8 +3566,8 @@ export default function SuperBankPage() {
             onToggleTag={tagName => setTagFilters(filters => filters.includes(tagName) ? filters.filter(t => t !== tagName) : [...filters, tagName])}
             onClear={() => setTagFilters([])}
             onTagDeleted={() => handleTagDeleted()}
-            onApplyTagToAll={handleApplyTagToAllFromMenu}
             tagStats={filteredTagStats}
+            onApplyTagToAll={handleApplyTagToAllFromMenu}
             tagged={tagged}
             untagged={untagged}
             totalTags={allTags.length}
@@ -3449,12 +3600,17 @@ export default function SuperBankPage() {
          />
 
         {/* Active filters indicator */}
-        {(bankFilter || drCrFilter || search || dateRange.from || dateRange.to || tagFilters.length > 0) && (
+        {(bankFilter || accountFilter || drCrFilter || search || dateRange.from || dateRange.to || tagFilters.length > 0) && (
           <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
             <span>Active filters:</span>
             {bankFilter && (
               <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
                 Bank: {bankFilter}
+              </span>
+            )}
+            {accountFilter && (
+              <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs">
+                Account: {accountFilter}
               </span>
             )}
             {drCrFilter && (
@@ -3646,7 +3802,9 @@ export default function SuperBankPage() {
             onDateFilter={handleDateFilter}
             onBankFilter={handleBankFilter}
             onDrCrFilter={handleDrCrFilter}
+            onAccountFilter={handleAccountFilter}
             availableBanks={availableBanks}
+            availableAccounts={availableAccounts}
           />
           </div>
         </div>
