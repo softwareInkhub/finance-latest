@@ -2044,6 +2044,7 @@ export default function SuperBankPage() {
   const [applyingTagToAll, setApplyingTagToAll] = useState(false);
   const [removingTag, setRemovingTag] = useState<string | boolean>(false);
   const [creatingTag, setCreatingTag] = useState(false);
+  const [removingTagsFromSelected, setRemovingTagsFromSelected] = useState(false);
 
   const [totalBanks, setTotalBanks] = useState<number>(0);
   const [totalAccounts, setTotalAccounts] = useState<number>(0);
@@ -2085,6 +2086,10 @@ export default function SuperBankPage() {
   const [matchingTransactions, setMatchingTransactions] = useState<Transaction[]>([]);
   const [failedTransactions, setFailedTransactions] = useState<{ id: string; error: string; description?: string }[]>([]);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  
+  // Custom confirmation modal state
+  const [showRemoveTagsConfirm, setShowRemoveTagsConfirm] = useState(false);
+  const [selectedTagsToRemove, setSelectedTagsToRemove] = useState<Set<string>>(new Set());
   
   // Force refresh state for tag count updates (unused - kept for potential future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2900,21 +2905,20 @@ export default function SuperBankPage() {
       setSelectedRows(new Set());
       setTimeout(() => setTagSuccess(null), 1500);
       
-      // Force refresh transactions to update tag counts immediately
-      console.log('🔄 Refreshing transactions after tag application...');
-      setLoading(true);
-      const userId = localStorage.getItem("userId") || "";
-      const refreshResponse = await fetch("/api/transactions/all?userId=" + userId);
-      const refreshData = await refreshResponse.json();
-      
-      if (Array.isArray(refreshData)) {
-        setTransactions(refreshData);
-        console.log('✅ Transactions refreshed, new count:', refreshData.length);
-        // Force a re-render by updating a state that triggers filteredRows recalculation
-        setForceRefresh(prev => prev + 1);
-      } else {
-        setError(refreshData.error || "Failed to fetch transactions");
-      }
+      // Update local transactions state instead of refetching
+      setTransactions(prevTransactions => 
+        prevTransactions.map(tx => {
+          if (selectedRows.has(tx.id)) {
+            // Add the new tag to this transaction if it doesn't already have it
+            const existingTags = Array.isArray(tx.tags) ? tx.tags : [];
+            const tagObj = allTags.find(t => t.id === selectedTagId);
+            if (tagObj && !existingTags.some(t => t.id === tagObj.id)) {
+              return { ...tx, tags: [...existingTags, tagObj] };
+            }
+          }
+          return tx;
+        })
+      );
     } catch (e) {
       setTagError(e instanceof Error ? e.message : 'Failed to add tag');
     } finally {
@@ -2950,19 +2954,22 @@ export default function SuperBankPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactionId: tx.id, tags: extractTagIds(tags), bankName: tx.bankName })
       });
+      // Update local transactions state instead of refetching
+      setTransactions(prevTransactions => 
+        prevTransactions.map(tx => {
+          if (tx.id === row.id) {
+            // Remove the specific tag from this transaction
+            const updatedTags = Array.isArray(tx.tags) 
+              ? tx.tags.filter(t => t.id !== tagId)
+              : [];
+            return { ...tx, tags: updatedTags };
+          }
+          return tx;
+        })
+      );
+      
       setTagCreateMsg('Tag removed!');
       setTimeout(() => setTagCreateMsg(null), 1500);
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
-        })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => {
-          setLoading(false);
-        });
     } catch (error) {
       setTagError(error as string || 'Failed to remove tag');
     } finally {
@@ -3077,7 +3084,16 @@ export default function SuperBankPage() {
   };
 
   // Get available banks for dropdown
-  const availableBanks = Array.from(new Set(transactions.map(tx => bankIdNameMap[tx.bankId]).filter(Boolean)));
+  const availableBanks = useMemo(() => {
+    // Prefer rows already filtered by non-tag filters (includes Account filter)
+    const rows = baseFilteredRows && baseFilteredRows.length > 0 ? baseFilteredRows : mappedRowsWithConditions;
+    const names = new Set<string>();
+    rows.forEach(row => {
+      const bankName = (row as Record<string, unknown>).bankName as string || bankIdNameMap[(row as Record<string, unknown>).bankId as string] || ((row as Record<string, unknown>).bankId as string);
+      if (bankName) names.add(bankName);
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [baseFilteredRows, mappedRowsWithConditions, bankIdNameMap]);
 
   // Get available accounts for dropdown (respect current non-tag filters, including bank)
   const availableAccounts = useMemo(() => {
@@ -3383,16 +3399,21 @@ export default function SuperBankPage() {
       
       setTimeout(() => setTagCreateMsg(null), 3000);
       
-      // Refresh transactions
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
+      // Update local transactions state instead of refetching
+      setTransactions(prevTransactions => 
+        prevTransactions.map(tx => {
+          const failedTx = failedTransactions.find(f => f.id === tx.id);
+          if (failedTx) {
+            // Add the tag to this transaction if it doesn't already have it
+            const existingTags = Array.isArray(tx.tags) ? tx.tags : [];
+            const tagObj = allTags.find(t => t.name === pendingTag?.tagName);
+            if (tagObj && !existingTags.some(t => t.id === tagObj.id)) {
+              return { ...tx, tags: [...existingTags, tagObj] };
+            }
+          }
+          return tx;
         })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      );
     } catch (error) {
       setTagError('Failed to retry failed transactions');
       console.error('Bulk retry error:', error);
@@ -3405,6 +3426,116 @@ export default function SuperBankPage() {
   const handleClearFailedTransactions = () => {
     setFailedTransactions([]);
     setShowRetryButton(false);
+  };
+
+  // Show remove tags confirmation modal
+  const handleRemoveTagsClick = () => {
+    if (selectedRows.size === 0) return;
+    
+    // Get all unique tags from selected transactions
+    const allTagsInSelection = new Set<string>();
+    Array.from(selectedRows).forEach(id => {
+      const tx = transactions.find(t => t.id === id);
+      if (tx && Array.isArray(tx.tags)) {
+        tx.tags.forEach(tag => {
+          if (tag && tag.name) {
+            allTagsInSelection.add(tag.name);
+          }
+        });
+      }
+    });
+    
+    // If only one tag type across all selected transactions, select it by default
+    if (allTagsInSelection.size === 1) {
+      setSelectedTagsToRemove(allTagsInSelection);
+    } else {
+      setSelectedTagsToRemove(new Set()); // Let user choose
+    }
+    
+    setShowRemoveTagsConfirm(true);
+  };
+
+  // Remove tags from selected transactions
+  const handleRemoveTagsFromSelected = async () => {
+    if (selectedRows.size === 0 || selectedTagsToRemove.size === 0) return;
+    
+    setShowRemoveTagsConfirm(false);
+    setRemovingTagsFromSelected(true);
+    setTagError(null);
+    setTagSuccess(null);
+    
+    try {
+      // Prepare bulk update data - remove selected tags only
+      const bulkUpdates = Array.from(selectedRows).map(id => {
+        const tx = transactions.find(t => t.id === id);
+        if (!tx) return null;
+        
+        // Filter out the tags that user wants to remove
+        const tagsToKeep = Array.isArray(tx.tags) 
+          ? tx.tags.filter(tag => !selectedTagsToRemove.has(tag.name))
+          : [];
+        
+        return {
+          transactionId: tx.id,
+          tags: tagsToKeep.map(tag => tag.id), // Keep only the tags not selected for removal
+          bankName: tx.bankName
+        };
+      }).filter(Boolean);
+      
+      // Use bulk update API
+      const response = await fetch('/api/transaction/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: bulkUpdates })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Bulk update failed');
+      }
+      
+      const result = await response.json();
+      
+      // Handle results
+      const failedTransactions = result.failed || [];
+      const successfulCount = result.successful || 0;
+      
+      if (failedTransactions.length === 0) {
+        const tagNames = Array.from(selectedTagsToRemove).join(', ');
+        setTagSuccess(`✅ Tags "${tagNames}" removed from ${successfulCount} transactions!`);
+      } else {
+        setTagError(`⚠️ Tags removed from ${successfulCount} transactions. ${failedTransactions.length} failed.`);
+      }
+      
+      setTimeout(() => {
+        setTagSuccess(null);
+        setTagError(null);
+      }, 3000);
+      
+      // Update local transactions state instead of refetching
+      setTransactions(prevTransactions => 
+        prevTransactions.map(tx => {
+          if (selectedRows.has(tx.id)) {
+            // Remove the selected tags from this transaction
+            const updatedTags = Array.isArray(tx.tags) 
+              ? tx.tags.filter(tag => !selectedTagsToRemove.has(tag.name))
+              : [];
+            return { ...tx, tags: updatedTags };
+          }
+          return tx;
+        })
+      );
+      
+      // Clear selection and tag selection
+      setSelectedRows(new Set());
+      setSelectAll(false);
+      setSelectedTagsToRemove(new Set());
+    } catch (error) {
+      setTagError('Failed to remove tags from selected transactions');
+      console.error('Bulk remove tags error:', error);
+    } finally {
+      setRemovingTagsFromSelected(false);
+    }
   };
 
   return (
@@ -3582,6 +3713,8 @@ export default function SuperBankPage() {
             onTaggedClick={handleTaggedClick}
             onUntaggedClick={handleUntaggedClick}
             currentSortOrder={sortOrder}
+            onRemoveTags={handleRemoveTagsClick}
+            removeTagsDisabled={tagging}
           />
         </div>
 
@@ -3597,6 +3730,11 @@ export default function SuperBankPage() {
            searchField={searchField}
            onSearchFieldChange={setSearchField}
            searchFieldOptions={['all', ...superHeader.filter(header => !['Bank Name', 'Date', 'Dr./Cr.', 'Amount'].includes(header))]}
+           selectedCount={selectedRows.size}
+           onDeselectAll={() => {
+             setSelectedRows(new Set());
+             setSelectAll(false);
+           }}
          />
 
         {/* Active filters indicator */}
@@ -3645,7 +3783,7 @@ export default function SuperBankPage() {
         {/* Table and selection logic */}
         <div ref={tableRef} className="overflow-x-auto relative h-[80vh]">
           {/* Global loading overlay for tag operations */}
-          {(applyingTagToRow || applyingTagToAll || removingTag || creatingTag || tagging) && (
+          {(applyingTagToRow || applyingTagToAll || removingTag || creatingTag || tagging || removingTagsFromSelected) && (
             <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-50">
               <div className="bg-white rounded-lg shadow-lg px-6 py-4 max-w-md w-full mx-4">
                 <div className="flex items-center gap-3 mb-4">
@@ -3656,7 +3794,8 @@ export default function SuperBankPage() {
                      (removingTag && typeof removingTag === 'string') ? removingTag :
                      removingTag ? 'Removing tag...' :
                      creatingTag ? 'Creating tag...' :
-                     tagging ? 'Adding tag...' : 'Processing...'}
+                     tagging ? 'Adding tag...' :
+                     removingTagsFromSelected ? 'Removing tags...' : 'Processing...'}
                   </span>
                 </div>
                 
@@ -3817,6 +3956,139 @@ export default function SuperBankPage() {
         bankIdNameMap={bankIdNameMap}
         tagFilters={tagFilters}
       />
+
+      {/* Custom Remove Tags Confirmation Modal */}
+      {showRemoveTagsConfirm && (() => {
+        // Get all unique tags from selected transactions
+        const allTagsInSelection = new Set<string>();
+        Array.from(selectedRows).forEach(id => {
+          const tx = transactions.find(t => t.id === id);
+          if (tx && Array.isArray(tx.tags)) {
+            tx.tags.forEach(tag => {
+              if (tag && tag.name) {
+                allTagsInSelection.add(tag.name);
+              }
+            });
+          }
+        });
+        
+        const tagArray = Array.from(allTagsInSelection);
+        
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Remove Tags</h3>
+                  <p className="text-sm text-gray-500">Select which tags to remove</p>
+                </div>
+              </div>
+              
+              <p className="text-gray-700 mb-4">
+                Remove tags from{' '}
+                <span className="font-semibold text-red-600">
+                  {selectedRows.size} selected transaction{selectedRows.size !== 1 ? 's' : ''}
+                </span>:
+              </p>
+              
+              {/* Tag Selection */}
+              <div className="mb-6 space-y-2">
+                {tagArray.map(tagName => {
+                  const tag = allTags.find(t => t.name === tagName);
+                  const isSelected = selectedTagsToRemove.has(tagName);
+                  
+                  return (
+                    <label key={tagName} className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          const newSelected = new Set(selectedTagsToRemove);
+                          if (e.target.checked) {
+                            newSelected.add(tagName);
+                          } else {
+                            newSelected.delete(tagName);
+                          }
+                          setSelectedTagsToRemove(newSelected);
+                        }}
+                        className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500"
+                      />
+                      <div className="flex items-center gap-2">
+                        <span 
+                          className="inline-block px-2 py-1 text-xs rounded-full font-semibold"
+                          style={{
+                            backgroundColor: `${tag?.color || '#6366F1'}30`,
+                            color: '#000000',
+                            border: `2px solid ${tag?.color || '#6366F1'}`,
+                            fontWeight: '500'
+                          }}
+                        >
+                          {tagName}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              
+              {/* Quick Selection Buttons */}
+              {tagArray.length > 1 && (
+                <div className="mb-4 flex gap-2">
+                  <button
+                    onClick={() => setSelectedTagsToRemove(new Set(tagArray))}
+                    className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => setSelectedTagsToRemove(new Set())}
+                    className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              )}
+              
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowRemoveTagsConfirm(false);
+                    setSelectedTagsToRemove(new Set());
+                  }}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
+                  disabled={removingTagsFromSelected}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRemoveTagsFromSelected}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={removingTagsFromSelected || selectedTagsToRemove.size === 0}
+                >
+                  {removingTagsFromSelected ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Removing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Remove Selected Tags ({selectedTagsToRemove.size})
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 } 

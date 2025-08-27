@@ -2576,7 +2576,17 @@ export default function SuperBankPage() {
   };
 
   // Get available banks for dropdown
-  const availableBanks = Array.from(new Set(transactions.map(tx => bankIdNameMap[tx.bankId]).filter(Boolean)));
+  const availableBanks = React.useMemo(() => {
+    const rows = (typeof baseFilteredRows !== 'undefined' && baseFilteredRows.length > 0)
+      ? baseFilteredRows
+      : mappedRowsWithConditions;
+    const names = new Set<string>();
+    rows.forEach(row => {
+      const bankName = (row as Record<string, unknown>).bankName as string || bankIdNameMap[(row as Record<string, unknown>).bankId as string] || ((row as Record<string, unknown>).bankId as string);
+      if (bankName) names.add(bankName);
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [baseFilteredRows, mappedRowsWithConditions, bankIdNameMap]);
 
   // Get available accounts for dropdown (respect current non-tag filters, including bank)
   const availableAccounts = React.useMemo(() => {

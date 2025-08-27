@@ -16,6 +16,8 @@ interface TransactionFilterBarProps {
   sortOrder?: SortOrderType;
   onSortOrderChange?: (order: SortOrderType) => void;
   sortOrderOptions?: { value: SortOrderType; label: string }[];
+  selectedCount?: number;
+  onDeselectAll?: () => void;
 }
 
 const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
@@ -31,6 +33,8 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
   sortOrder = 'desc',
   onSortOrderChange,
   sortOrderOptions,
+  selectedCount = 0,
+  onDeselectAll,
 }) => (
   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1 mb-2 flex items-center justify-between gap-2 w-full">
     {/* Left side - Search and filters */}
@@ -121,8 +125,20 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
       </div>
     </div>
     
-    {/* Right side - Report button */}
-    <div className="flex items-center">
+    {/* Right side - Selection actions and Report button */}
+    <div className="flex items-center gap-2">
+      {/* Deselect All button */}
+      {selectedCount > 0 && onDeselectAll && (
+        <button
+          className="px-2 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition-colors border border-gray-300"
+          onClick={onDeselectAll}
+          title="Deselect all transactions"
+        >
+          Deselect All
+        </button>
+      )}
+      
+
       <button
         className="px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed gap-1"
         onClick={onDownload}

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch } from 'react-icons/fi';
+import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch, FiTag } from 'react-icons/fi';
 
 interface Tag {
   id: string;
@@ -32,6 +32,9 @@ interface TagFilterPillsProps {
   onUntaggedClick?: () => void;
   // New prop to track current sort order for visual feedback
   currentSortOrder?: string;
+  // Props for Remove Tags functionality
+  onRemoveTags?: () => void;
+  removeTagsDisabled?: boolean;
 }
 
 const TagFilterPills: React.FC<TagFilterPillsProps> = ({ 
@@ -55,7 +58,9 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
   onCreateTag,
   onTaggedClick,
   onUntaggedClick,
-  currentSortOrder
+  currentSortOrder,
+  onRemoveTags,
+  removeTagsDisabled = false
 }) => {
   // Filter out tags with undefined or null names to prevent errors
   const validTags = allTags.filter(tag => tag && tag.name && typeof tag.name === 'string');
@@ -242,34 +247,47 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
         {/* Right half - Controls and statistics */}
         <div className="flex items-center gap-2 flex-wrap">
           
-          {/* Tag Statistics */}
-          {typeof tagged !== 'undefined' && typeof untagged !== 'undefined' && typeof totalTags !== 'undefined' && (
-            <div className="flex items-center gap-2 text-xs text-gray-600 flex-shrink-0">
-              <button
-                onClick={onTaggedClick}
-                className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                  currentSortOrder === 'tagged' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                }`}
-                title={currentSortOrder === 'tagged' ? 'Click to show all transactions' : 'Show tagged transactions only'}
-              >
-                Tagged: {tagged}
-              </button>
-              <button
-                onClick={onUntaggedClick}
-                className={`px-2 py-1 rounded transition-colors cursor-pointer ${
-                  currentSortOrder === 'untagged' 
-                    ? 'bg-gray-600 text-white' 
-                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                }`}
-                title={currentSortOrder === 'untagged' ? 'Click to show all transactions' : 'Show untagged transactions only'}
-              >
-                Untagged: {untagged}
-              </button>
-              <span>Total Tags: {totalTags}</span>
-            </div>
-          )}
+                     {/* Tag Statistics */}
+           {typeof tagged !== 'undefined' && typeof untagged !== 'undefined' && typeof totalTags !== 'undefined' && (
+             <div className="flex items-center gap-2 text-xs text-gray-600 flex-shrink-0">
+                {/* Search bar placed to the LEFT of Tagged */}
+                <div className="relative flex-shrink-0">
+                  <FiSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
+                  <input
+                    type="text"
+                    placeholder="Q Search tags..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-32 pl-6 pr-2 py-0.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <button
+                  onClick={onTaggedClick}
+                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                    currentSortOrder === 'tagged' 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                  }`}
+                  title={currentSortOrder === 'tagged' ? 'Click to show all transactions' : 'Show tagged transactions only'}
+                >
+                  Tagged: {tagged}
+                </button>
+                
+                <button
+                  onClick={onUntaggedClick}
+                  className={`px-2 py-1 rounded transition-colors cursor-pointer ${
+                    currentSortOrder === 'untagged' 
+                      ? 'bg-gray-600 text-white' 
+                      : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                  }`}
+                  title={currentSortOrder === 'untagged' ? 'Click to show all transactions' : 'Show untagged transactions only'}
+                >
+                  Untagged: {untagged}
+                </button>
+                <span>Total Tags: {totalTags}</span>
+             </div>
+           )}
 
           {/* Tagging Controls - Only show if props are provided */}
           {selectedCount !== undefined && onTagChange && onAddTag && (
@@ -366,23 +384,27 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
               >
                 Add Tag
               </button>
+              
+              {/* Remove Tags button moved here */}
+              {onRemoveTags && (
+                <button
+                  className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold disabled:opacity-50 transition-colors flex items-center gap-1"
+                  onClick={onRemoveTags}
+                  disabled={removeTagsDisabled || selectedCount === 0}
+                  title={`Remove all tags from ${selectedCount} selected transaction${selectedCount !== 1 ? 's' : ''}`}
+                >
+                  <FiTag size={12} />
+                  Remove Tags ({selectedCount})
+                </button>
+              )}
+              
               <span className="text-xs text-gray-600">{selectedCount} selected</span>
               {tagError && <span className="text-red-600 text-xs">{tagError}</span>}
               {tagSuccess && <span className="text-green-600 text-xs">{tagSuccess}</span>}
             </div>
           )}
 
-          {/* Search bar */}
-          <div className="relative flex-shrink-0">
-            <FiSearch className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={12} />
-            <input
-              type="text"
-              placeholder="Q Search tags..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-32 pl-6 pr-2 py-0.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
+
 
           {/* Controls */}
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -407,7 +429,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
 
               {/* Second row - Additional tags when expanded */}
         {isExpanded && secondRowTags.length > 0 && (
-          <div className="p-1 border-b border-gray-100 max-h-20 overflow-y-auto">
+          <div className="p-1 border-b border-gray-100 max-h-40 overflow-y-auto">
             <div className="flex flex-wrap gap-1.5 items-center">
             {secondRowTags.map(tag => {
               const btnRef = React.createRef<HTMLButtonElement>();
