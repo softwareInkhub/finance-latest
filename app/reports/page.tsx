@@ -213,6 +213,121 @@ export default function ReportsPage() {
   const [editingSubItem, setEditingSubItem] = useState<{sectionId: string, groupId: string, parentItemId: string, subItemId: string, currentName: string} | null>(null);
   const [editSubItemName, setEditSubItemName] = useState('');
 
+  // Drag and drop state for reordering tag-created items within their container
+  type DragContext =
+    | { kind: 'item'; sectionId: string; groupId: string; fromIndex: number }
+    | { kind: 'subItem'; sectionId: string; groupId: string; parentItemId: string; fromIndex: number };
+  const [dragContext, setDragContext] = useState<DragContext | null>(null);
+
+  const handleDragStartItem = (
+    sectionId: string,
+    groupId: string,
+    fromIndex: number
+  ) => {
+    setDragContext({ kind: 'item', sectionId, groupId, fromIndex });
+  };
+
+  const handleDragStartSubItem = (
+    sectionId: string,
+    groupId: string,
+    parentItemId: string,
+    fromIndex: number
+  ) => {
+    setDragContext({ kind: 'subItem', sectionId, groupId, parentItemId, fromIndex });
+  };
+
+  const handleDropItem = (
+    e: React.DragEvent,
+    sectionId: string,
+    groupId: string,
+    toIndex: number
+  ) => {
+    e.preventDefault();
+    if (!dragContext || dragContext.kind !== 'item') return;
+    if (dragContext.sectionId !== sectionId || dragContext.groupId !== groupId) return; // constrain to same group
+
+    const isTagCreated = (obj: { createdByTag?: boolean }): boolean => Boolean(obj && obj.createdByTag);
+
+    setCashFlowData(prev =>
+      prev.map(section => {
+        if (section.id !== sectionId) return section;
+        return {
+          ...section,
+          groups: section.groups.map(group => {
+            if (group.id !== groupId) return group;
+            // Only allow reordering among items created by tag
+            const tagIndices = group.items
+              .map((it, idx) => (isTagCreated(it as unknown as { createdByTag?: boolean }) ? idx : -1))
+              .filter(idx => idx !== -1);
+            const fromRealIndex = tagIndices[dragContext.fromIndex];
+            const toRealIndex = tagIndices[toIndex];
+            if (fromRealIndex === undefined || toRealIndex === undefined) return group;
+            const newItems = group.items.slice();
+            const [moved] = newItems.splice(fromRealIndex, 1);
+            newItems.splice(toRealIndex, 0, moved);
+            return { ...group, items: newItems } as typeof group;
+          })
+        };
+      })
+    );
+    setDragContext(null);
+  };
+
+  const handleDropSubItem = (
+    e: React.DragEvent,
+    sectionId: string,
+    groupId: string,
+    parentItemId: string,
+    toIndex: number
+  ) => {
+    e.preventDefault();
+    if (!dragContext || dragContext.kind !== 'subItem') return;
+    if (
+      dragContext.sectionId !== sectionId ||
+      dragContext.groupId !== groupId ||
+      dragContext.parentItemId !== parentItemId
+    )
+      return; // constrain to same parent
+
+    const isTagCreated = (obj: { createdByTag?: boolean }): boolean => Boolean(obj && obj.createdByTag);
+
+    setCashFlowData(prev =>
+      prev.map(section => {
+        if (section.id !== sectionId) return section;
+        return {
+          ...section,
+          groups: section.groups.map(group => {
+            if (group.id !== groupId) return group;
+            const items = group.items.map(item => {
+              if (item.id !== parentItemId) return item;
+              const tagSubIndices = (item.subItems || [])
+                .map((si, idx) => (isTagCreated(si as unknown as { createdByTag?: boolean }) ? idx : -1))
+                .filter(idx => idx !== -1);
+              const fromRealIndex = tagSubIndices[dragContext.fromIndex];
+              const toRealIndex = tagSubIndices[toIndex];
+              if (
+                fromRealIndex === undefined ||
+                toRealIndex === undefined ||
+                !item.subItems
+              )
+                return item;
+              const newSub = item.subItems.slice();
+              const [moved] = newSub.splice(fromRealIndex, 1);
+              newSub.splice(toRealIndex, 0, moved);
+              return { ...item, subItems: newSub } as typeof item;
+            });
+            return { ...group, items } as typeof group;
+          })
+        };
+      })
+    );
+    setDragContext(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
   // Edit group and main item state variables
   const [showEditGroupModal, setShowEditGroupModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState<{sectionId: string, groupId: string, currentName: string} | null>(null);
@@ -2438,10 +2553,17 @@ export default function ReportsPage() {
                         </tr>
                         
                         {/* Group Items */}
-                        {group.isExpanded && group.items.map((item) => (
+                        {group.isExpanded && group.items.map((item, itemIndex) => (
                           <React.Fragment key={item.id}>
                             {/* Main Item */}
-                            <tr className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>
+                            <tr
+                              className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`}
+                              onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}
+                              draggable={Boolean((item as unknown as { createdByTag?: boolean }).createdByTag)}
+                              onDragStart={() => handleDragStartItem(cashFlowData[0].id, group.id, itemIndex)}
+                              onDragOver={handleDragOver}
+                              onDrop={(e) => handleDropItem(e, cashFlowData[0].id, group.id, itemIndex)}
+                            >
                               <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-2">
@@ -2466,99 +2588,107 @@ export default function ReportsPage() {
                                     </div>
                                   )}
                                 </div>
-                                                                 {isEditing && (
-                                   <div className="flex items-center gap-1">
-                                     {/* Only show edit button for main items that were created by name (not by tags) */}
-                                     {!item.createdByTag && (
-                                       <button
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           openEditMainItemModal(cashFlowData[0].id, group.id, item.id, item.particular);
-                                         }}
-                                         className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                         title="Edit item"
-                                       >
-                                         <RiEdit2Line size={14} />
-                                       </button>
-                                     )}
-                                     {!item.createdByTag && (
-                                       <button
-                                         onClick={(e) => {
-                                           e.stopPropagation();
-                                           openSubItemAddModal(cashFlowData[0].id, group.id, item.id);
-                                         }}
-                                         className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                                         title="Add sub-item"
-                                       >
-                                         <RiAddLine size={14} />
-                                       </button>
-                                     )}
-                                     <button
-                                       onClick={(e) => {
-                                         e.stopPropagation();
-                                         openDeleteModal(cashFlowData[0].id, group.id, item.id);
-                                       }}
-                                       className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                       title="Delete item"
-                                     >
-                                       <RiDeleteBin6Line size={14} />
-                                     </button>
-                                   </div>
-                                 )}
-                              </td>
-                              <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                            </tr>
-                            
-                            {/* Sub-Items */}
-                            {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
-                              <tr key={subItem.id} className={`border-b border-gray-300 border-dotted hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>
-                                <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
-                                  <div className="flex flex-col">
-                                    <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
-                                    {subItem.createdByTag && subItem.tagData && (
-                                      <div className="text-xs text-gray-500 mt-1">
-                                        CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
-                                        DR: ₹{(subItem.tagData.debit || 0).toLocaleString('en-IN')} | 
-                                        Bal: ₹{(subItem.tagData.balance || 0).toLocaleString('en-IN')}
-                                      </div>
-                                    )}
-                                  </div>
-                                                                    {isEditing && (
+                                 {isEditing && (
                                     <div className="flex items-center gap-1">
-                                      {/* Only show add button for sub-items that were created by name (not by tags) */}
-                                      {!subItem.createdByTag && (
-                                        <></>
-                                      )}
-                                      {/* Only show edit button for sub-items that were created by name (not by tags) */}
-                                      {!subItem.createdByTag && (
+                                      {/* Only show edit button for main items that were created by name (not by tags) */}
+                                      {!item.createdByTag && (
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            openEditSubItemModal(cashFlowData[0].id, group.id, item.id, subItem.id, subItem.particular);
+                                            openEditMainItemModal(cashFlowData[0].id, group.id, item.id, item.particular);
                                           }}
                                           className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                          title="Edit sub-item"
+                                          title="Edit item"
                                         >
                                           <RiEdit2Line size={14} />
+                                        </button>
+                                      )}
+                                      {!item.createdByTag && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openSubItemAddModal(cashFlowData[0].id, group.id, item.id);
+                                          }}
+                                          className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                          title="Add sub-item"
+                                        >
+                                          <RiAddLine size={14} />
                                         </button>
                                       )}
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          openDeleteModal(cashFlowData[0].id, group.id, item.id, subItem.id);
+                                          openDeleteModal(cashFlowData[0].id, group.id, item.id);
                                         }}
                                         className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                        title="Delete sub-item"
+                                        title="Delete item"
                                       >
                                         <RiDeleteBin6Line size={14} />
                                       </button>
                                     </div>
                                   )}
-                                </td>
-                                <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                              </tr>
-                            ))}
-                          </React.Fragment>
+                             </td>
+                             <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                           </tr>
+                           
+                           {/* Sub-Items */}
+                           {item.isExpanded && item.subItems && item.subItems.map((subItem, subIndex) => (
+                             <tr
+                               key={subItem.id}
+                               className={`border-b border-gray-300 border-dotted hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
+                               onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}
+                               draggable={Boolean((subItem as unknown as { createdByTag?: boolean }).createdByTag)}
+                               onDragStart={() => handleDragStartSubItem(cashFlowData[0].id, group.id, item.id, subIndex)}
+                               onDragOver={handleDragOver}
+                               onDrop={(e) => handleDropSubItem(e, cashFlowData[0].id, group.id, item.id, subIndex)}
+                             >
+                               <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
+                                 <div className="flex flex-col">
+                                   <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
+                                   {subItem.createdByTag && subItem.tagData && (
+                                     <div className="text-xs text-gray-500 mt-1">
+                                       CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
+                                       DR: ₹{(subItem.tagData.debit || 0).toLocaleString('en-IN')} | 
+                                       Bal: ₹{(subItem.tagData.balance || 0).toLocaleString('en-IN')}
+                                     </div>
+                                   )}
+                                 </div>
+                                  {isEditing && (
+                                     <div className="flex items-center gap-1">
+                                       {/* Only show add button for sub-items that were created by name (not by tags) */}
+                                       {!subItem.createdByTag && (
+                                         <></>
+                                       )}
+                                       {/* Only show edit button for sub-items that were created by name (not by tags) */}
+                                       {!subItem.createdByTag && (
+                                         <button
+                                           onClick={(e) => {
+                                             e.stopPropagation();
+                                             openEditSubItemModal(cashFlowData[0].id, group.id, item.id, subItem.id, subItem.particular);
+                                           }}
+                                           className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                           title="Edit sub-item"
+                                         >
+                                           <RiEdit2Line size={14} />
+                                         </button>
+                                       )}
+                                       <button
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           openDeleteModal(cashFlowData[0].id, group.id, item.id, subItem.id);
+                                         }}
+                                         className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                         title="Delete sub-item"
+                                       >
+                                         <RiDeleteBin6Line size={14} />
+                                       </button>
+                                     </div>
+                                   )}
+                               </td>
+                               <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                             </tr>
+                           ))}
+                         </React.Fragment>
                         ))}
                       </React.Fragment>
                     );
@@ -2637,10 +2767,17 @@ export default function ReportsPage() {
                          </tr>
                          
                          {/* Group Items */}
-                         {group.isExpanded && group.items.map((item) => (
+                         {group.isExpanded && group.items.map((item, itemIndex) => (
                            <React.Fragment key={item.id}>
                              {/* Main Item */}
-                             <tr className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}>
+                             <tr
+                               className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`}
+                               onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}
+                               draggable={Boolean((item as unknown as { createdByTag?: boolean }).createdByTag)}
+                               onDragStart={() => handleDragStartItem(cashFlowData[1].id, group.id, itemIndex)}
+                               onDragOver={handleDragOver}
+                               onDrop={(e) => handleDropItem(e, cashFlowData[1].id, group.id, itemIndex)}
+                             >
                                <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
                                  <div className="flex flex-col">
                                    <div className="flex items-center gap-2">
@@ -2709,8 +2846,16 @@ export default function ReportsPage() {
                              </tr>
                              
                              {/* Sub-Items */}
-                             {item.isExpanded && item.subItems && item.subItems.map((subItem) => (
-                               <tr key={subItem.id} className={`border-b border-gray-100 hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`} onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}>
+                             {item.isExpanded && item.subItems && item.subItems.map((subItem, subIndex) => (
+                               <tr
+                                 key={subItem.id}
+                                 className={`border-b border-gray-100 hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
+                                 onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}
+                                 draggable={Boolean((subItem as unknown as { createdByTag?: boolean }).createdByTag)}
+                                 onDragStart={() => handleDragStartSubItem(cashFlowData[1].id, group.id, item.id, subIndex)}
+                                 onDragOver={handleDragOver}
+                                 onDrop={(e) => handleDropSubItem(e, cashFlowData[1].id, group.id, item.id, subIndex)}
+                               >
                                  <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
                                    <div className="flex flex-col">
                                      <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
