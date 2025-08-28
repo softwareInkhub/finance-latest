@@ -18,6 +18,8 @@ interface TransactionFilterBarProps {
   sortOrderOptions?: { value: SortOrderType; label: string }[];
   selectedCount?: number;
   onDeselectAll?: () => void;
+  /** Optional: show available data date span like "01/01/2023 – 31/12/2023" */
+  availableDateSpanText?: string;
 }
 
 const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
@@ -35,6 +37,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
   sortOrderOptions,
   selectedCount = 0,
   onDeselectAll,
+  availableDateSpanText,
 }) => {
   const [showDatePicker, setShowDatePicker] = React.useState(false);
   const [tempFrom, setTempFrom] = React.useState<string>(dateRange.from || '');
@@ -211,7 +214,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
       )}
       
         {/* Date Range Button + Popover */}
-        <div className="relative">
+        <div className="relative flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowDatePicker(v => !v)}
@@ -220,15 +223,32 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
           >
             <FiCalendar size={14} />
             <span>Select Date Range</span>
-            {(dateRange.from || dateRange.to) && (
-              <span className="ml-2 text-xs text-gray-600">
-                {formatYmdToDdMmYyyy(dateRange.from) || '…'} to {formatYmdToDdMmYyyy(dateRange.to) || '…'}
-              </span>
+            {availableDateSpanText ? (
+                <span className="ml-2 text-xs text-gray-800 font-semibold">{availableDateSpanText}</span>
+            ) : (
+              (dateRange.from || dateRange.to) && (
+                <span className="ml-2 text-xs text-gray-800 font-semibold">
+                  {formatYmdToDdMmYyyy(dateRange.from) || '…'} to {formatYmdToDdMmYyyy(dateRange.to) || '…'}
+                </span>
+              )
             )}
           </button>
 
+          {(dateRange.from || dateRange.to) && (
+            <button
+              type="button"
+              onClick={() => onDateRangeChange({ from: '', to: '' })}
+              className="text-xs text-gray-500 hover:text-red-600 underline"
+              title="Clear selected date range"
+            >
+              Clear
+            </button>
+          )}
+
+          {/* Available date span now sits inside the button */}
+
           {showDatePicker && (
-            <div ref={datePopoverRef} className="absolute z-50 mt-1 bg-white border border-gray-200 rounded shadow-lg p-2 w-[590px]">
+            <div ref={datePopoverRef} className="absolute top-full right-0 z-50 mt-3 bg-white border border-gray-200 rounded shadow-lg p-2 w-[590px] max-h-[70vh] overflow-auto">
               <div className="flex">
                 {/* Months list */}
                 <div className="w-40 border-r pr-2 mr-2">

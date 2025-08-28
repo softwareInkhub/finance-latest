@@ -3758,10 +3758,25 @@ export default function SuperBankPage() {
              setSelectedRows(new Set());
              setSelectAll(false);
            }}
+           availableDateSpanText={(() => {
+             if (!filteredRows.length) return '';
+             const dates: number[] = [];
+             for (const row of filteredRows) {
+               const r = row as Record<string, unknown>;
+               const dRaw = (r['Date'] as string) || (r['date'] as string) || (r['createdAt'] as string) || '';
+               const d = new Date(String(dRaw));
+               if (!isNaN(d.getTime())) dates.push(d.getTime());
+             }
+             if (!dates.length) return '';
+             const min = new Date(Math.min(...dates));
+             const max = new Date(Math.max(...dates));
+             const fmt = (dt: Date) => dt.toLocaleDateString('en-GB');
+             return `${fmt(min)} – ${fmt(max)}`;
+           })()}
          />
 
         {/* Active filters indicator */}
-        {(bankFilter || accountFilter || drCrFilter || search || dateRange.from || dateRange.to || tagFilters.length > 0) && (
+        {(bankFilter || accountFilter || drCrFilter || search || tagFilters.length > 0) && (
           <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
             <span>Active filters:</span>
             {bankFilter && (
@@ -3784,22 +3799,20 @@ export default function SuperBankPage() {
                 Search: &quot;{search}&quot;
               </span>
             )}
-            {(dateRange.from || dateRange.to) && (
-              <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs">
-                Date: {dateRange.from || '...'} to {dateRange.to || '...'}
-              </span>
-            )}
+            {/* Date range chip removed; a Clear button is shown near the picker */}
             {tagFilters.length > 0 && (
               <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs">
                 Tags: {tagFilters.length}
               </span>
             )}
-            <button
-              onClick={clearAllFilters}
-              className="text-red-600 hover:text-red-800 text-xs underline"
-            >
-              Clear all
-            </button>
+            {(bankFilter || accountFilter || drCrFilter || search || tagFilters.length > 0) && (
+              <button
+                onClick={clearAllFilters}
+                className="text-red-600 hover:text-red-800 text-xs underline"
+              >
+                Clear all
+              </button>
+            )}
           </div>
         )}
 
