@@ -3684,6 +3684,7 @@ export default function SuperBankPage() {
             totalBanks={totalBanks}
             totalAccounts={totalAccounts}
             showBalance={true}
+            transactions={sortedAndFilteredRows}
           />
         )}
 

@@ -9,6 +9,7 @@ interface AnalyticsSummaryProps {
   totalAccounts: number;
   showBalance?: boolean;
   tagsSummary?: Record<string, unknown>; // Add tagsSummary prop
+  transactions?: Array<Record<string, unknown>>; // Use provided rows for breakdowns when available
 }
 
 interface ModalProps {
@@ -50,6 +51,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   totalAccounts = 0,
   showBalance = false,
   tagsSummary,
+  transactions,
 }) => {
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -66,7 +68,9 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   const [accountInfoMap, setAccountInfoMap] = useState<{ [accountId: string]: { accountName: string; accountNumber: string; bankName?: string } }>({});
   const [bankInfoMap, setBankInfoMap] = useState<{ [bankId: string]: string }>({});
 
-  // Fetch tags summary, all transactions, and account information
+  // Fetch tags summary, and bank/account information.
+  // For breakdowns, prefer provided `transactions` (already filtered on page),
+  // otherwise fetch all transactions for the user.
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -82,12 +86,17 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           }
         }
         
-        // Fetch all transactions for accurate counting
-        const txRes = await fetch(`/api/transactions/all?userId=${encodeURIComponent(userId)}`);
-        if (txRes.ok) {
-          const transactions = await txRes.json();
-          console.log('All transactions sample:', transactions.slice(0, 3));
-          setAllTransactions(transactions);
+        // Use provided transactions if available; otherwise fetch all
+        let workingTransactions: Array<Record<string, unknown>> = Array.isArray(transactions) ? transactions : [];
+        if (!workingTransactions.length) {
+          const txRes = await fetch(`/api/transactions/all?userId=${encodeURIComponent(userId)}`);
+          if (txRes.ok) {
+            workingTransactions = await txRes.json();
+          }
+        }
+        if (workingTransactions.length) {
+          console.log('Transactions for breakdown sample:', workingTransactions.slice(0, 3));
+          setAllTransactions(workingTransactions);
           
           // Fetch bank information first
           const bankRes = await fetch('/api/bank');
@@ -105,7 +114,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           setBankInfoMap(bankMap);
           
           // Fetch account information for all unique accounts
-          const uniqueAccountIds = [...new Set(transactions.map((tx: Record<string, unknown>) => tx.accountId as string).filter(Boolean))];
+          const uniqueAccountIds = [...new Set(workingTransactions.map((tx: Record<string, unknown>) => tx.accountId as string).filter(Boolean))];
           const accountMap: { [accountId: string]: { accountName: string; accountNumber: string; bankName?: string } } = {};
           
           for (const accountId of uniqueAccountIds) {
@@ -139,7 +148,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     };
 
     fetchData();
-  }, [tagsSummary]);
+  }, [tagsSummary, transactions]);
 
   // Ensure all values are numbers and handle undefined/null values
   const safeTotalAmount = typeof totalAmount === 'number' && !isNaN(totalAmount) ? totalAmount : 0;
@@ -157,6 +166,31 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       title,
       content,
     });
+  };
+
+  // Robust extractor for Dr/Cr when multiple columns exist
+  const extractCrDr = (tx: Record<string, unknown>, rawAmount: number): 'CR' | 'DR' | '' => {
+    const candidates = [
+      tx['Dr./Cr.'], tx['Dr/Cr'], tx['DR/CR'], tx['dr/cr'],
+      tx['Type'], tx['type'], tx['Dr / Cr'], tx['Dr / Cr_1'],
+      tx['DR / CR'], tx['DR / CR_1']
+    ]
+      .map(v => (v ?? '').toString().trim().toUpperCase())
+      .filter(v => v.length > 0);
+
+    if (candidates.length === 0) return '';
+
+    // If there is a conflict, prefer the value that matches the numeric sign
+    const first = candidates[0];
+    if (candidates.some(v => v !== first)) {
+      const signMatchesCR = rawAmount > 0 && candidates.includes('CR');
+      const signMatchesDR = rawAmount < 0 && candidates.includes('DR');
+      if (signMatchesCR && !signMatchesDR) return 'CR';
+      if (signMatchesDR && !signMatchesCR) return 'DR';
+      // fallback to last non-empty when still ambiguous
+      return candidates[candidates.length - 1] as 'CR' | 'DR';
+    }
+    return first as 'CR' | 'DR';
   };
 
   const closeModal = () => {
@@ -677,170 +711,69 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
 
   // Function to get balance breakdown by bank
   const getBalanceBreakdownByBank = () => {
-    const bankBalances = new Map<string, { 
-      credit: number; 
-      debit: number; 
-      balance: number; 
-      accounts: Map<string, { credit: number; debit: number; balance: number }> 
-    }>();
+    const bankBalances = new Map<string, { balance: number; accounts: Map<string, number> }>();
     
-    console.log('getBalanceBreakdownByBank - allTransactions length:', allTransactions.length);
-    console.log('getBalanceBreakdownByBank - accountInfoMap keys:', Object.keys(accountInfoMap));
-    
-    // Count from actual transaction data for accurate totals
     allTransactions.forEach((tx: Record<string, unknown>) => {
       const accountId = (tx.accountId as string) || '';
       let bankName = (tx.bankName as string) || (accountId && accountInfoMap[accountId]?.bankName) || 'Unknown Bank';
       
-      // Enhanced bank identification logic
-      if (bankName === 'Unknown Bank') {
-        // Try to extract from tags first
-        if (tx.tags && Array.isArray(tx.tags)) {
-          const tagNames = (tx.tags as Array<Record<string, unknown>>).map((tag: Record<string, unknown>) => {
-            if (typeof tag === 'string') return tag;
-            return (tag.name as string) || '';
-          }).join(' ').toLowerCase();
-          
-          if (tagNames.includes('hdfc')) {
-            bankName = 'HDFC';
-          } else if (tagNames.includes('kotak')) {
-            bankName = 'Kotak';
-          } else if (tagNames.includes('icici')) {
-            bankName = 'ICICI';
-          } else if (tagNames.includes('idfc')) {
-            bankName = 'IDFC';
-          } else if (tagNames.includes('yesb')) {
-            bankName = 'YESB';
-          }
-        }
-        
-        // If still unknown, try to extract from description or other fields
-        if (bankName === 'Unknown Bank') {
-          const description = ((tx.Description as string) || (tx.description as string) || '').toLowerCase();
-          const narration = ((tx.Narration as string) || (tx.narration as string) || '').toLowerCase();
-          const combinedText = `${description} ${narration}`;
-          
-          if (combinedText.includes('hdfc') || combinedText.includes('hdfc bank')) {
-            bankName = 'HDFC';
-          } else if (combinedText.includes('kotak') || combinedText.includes('kotak mahindra')) {
-            bankName = 'Kotak';
-          } else if (combinedText.includes('icici') || combinedText.includes('icici bank')) {
-            bankName = 'ICICI';
-          } else if (combinedText.includes('idfc') || combinedText.includes('idfc bank')) {
-            bankName = 'IDFC';
-          } else if (combinedText.includes('yesb') || combinedText.includes('yes bank')) {
-            bankName = 'YESB';
-          }
-        }
-        
-        // If still unknown, try to extract from account number patterns
-        if (bankName === 'Unknown Bank' && accountId) {
-          const accountStr = accountId.toString().toLowerCase();
-          if (accountStr.includes('hdfc') || accountStr.includes('hvhhvhjdcx')) {
-            bankName = 'HDFC';
-          } else if (accountStr.includes('kotak') || accountStr.includes('857648485') || accountStr.includes('662394696498')) {
-            bankName = 'Kotak';
-          } else if (accountStr.includes('icici') || accountStr.includes('121564')) {
-            bankName = 'ICICI';
-          } else if (accountStr.includes('idfc') || accountStr.includes('1234567890')) {
-            bankName = 'IDFC';
-          }
+      // If bank name is still unknown, try to extract from tags
+      if (bankName === 'Unknown Bank' && tx.tags && Array.isArray(tx.tags)) {
+        const tagNames = (tx.tags as Array<Record<string, unknown>>).map((tag: Record<string, unknown>) => {
+          if (typeof tag === 'string') return tag;
+          return (tag.name as string) || '';
+        }).join(' ').toLowerCase();
+        if (tagNames.includes('hdfc')) {
+          bankName = 'HDFC';
+        } else if (tagNames.includes('kotak')) {
+          bankName = 'Kotak';
+        } else if (tagNames.includes('yesb')) {
+          bankName = 'YESB';
         }
       }
-      
-      // Determine if it's credit or debit based on Dr./Cr. field or amount sign
-      const drCr = (tx['Dr./Cr.'] as string) || (tx['Dr/Cr'] as string) || (tx['Dr./Cr'] as string) || '';
-      const amount = Math.abs(parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0')) || 0;
-      
-      let isCredit = false;
-      if (drCr.toLowerCase() === 'cr' || drCr.toLowerCase() === 'credit') {
-        isCredit = true;
-      } else if (drCr.toLowerCase() === 'dr' || drCr.toLowerCase() === 'debit') {
-        isCredit = false;
-      } else {
-        // Fallback: check if amount is positive (credit) or negative (debit)
-        const rawAmount = parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0');
-        isCredit = rawAmount > 0;
+      // Determine signed amount using Dr/Cr where available
+      const rawAmount = parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0') || 0;
+      const crdrField = extractCrDr(tx, rawAmount);
+      let amount = rawAmount;
+      if (crdrField === 'CR') {
+        amount = Math.abs(rawAmount);
+      } else if (crdrField === 'DR') {
+        amount = -Math.abs(rawAmount);
       }
-      
-      console.log('Processing transaction:', {
-        accountId,
-        bankName,
-        amount,
-        isCredit,
-        drCr,
-        description: tx.Description || tx.description,
-        accountInfo: accountInfoMap[accountId]
-      });
       
       if (!bankBalances.has(bankName)) {
-        bankBalances.set(bankName, { 
-          credit: 0, 
-          debit: 0, 
-          balance: 0, 
-          accounts: new Map<string, { credit: number; debit: number; balance: number }>() 
-        });
+        bankBalances.set(bankName, { balance: 0, accounts: new Map<string, number>() });
       }
       
       const bankBalance = bankBalances.get(bankName)!;
-      
-      if (isCredit) {
-        bankBalance.credit += amount;
-        bankBalance.balance += amount;
-      } else {
-        bankBalance.debit += amount;
-        bankBalance.balance -= amount;
-      }
+      bankBalance.balance += amount; // signed value
       
       if (accountId) {
-        if (!bankBalance.accounts.has(accountId)) {
-          bankBalance.accounts.set(accountId, { credit: 0, debit: 0, balance: 0 });
-        }
-        
-        const accountBalance = bankBalance.accounts.get(accountId)!;
-        if (isCredit) {
-          accountBalance.credit += amount;
-          accountBalance.balance += amount;
-        } else {
-          accountBalance.debit += amount;
-          accountBalance.balance -= amount;
-        }
+        const currentAccountBalance = bankBalance.accounts.get(accountId) || 0;
+        bankBalance.accounts.set(accountId, currentAccountBalance + amount);
       }
     });
     
-    // Convert to the format we need for display with actual account numbers
-    const result: Array<{ 
-      name: string; 
-      credit: number; 
-      debit: number; 
-      balance: number; 
-      accounts: Array<{ account: string; credit: number; debit: number; balance: number }> 
-    }> = [];
+    const result: Array<{ name: string; balance: number; accounts: Array<{ account: string; balance: number }> }> = [];
     
     bankBalances.forEach((data, bankName) => {
-      const accountDetails = Array.from(data.accounts.entries()).map(([accountId, balanceData]) => {
-        // Get actual account number from accountInfoMap
+      const accountDetails = Array.from(data.accounts.entries()).map(([accountId, balance]) => {
         const accountInfo = accountInfoMap[accountId];
         const displayAccount = accountInfo?.accountNumber || accountId;
         
         return {
           account: displayAccount,
-          credit: balanceData.credit,
-          debit: balanceData.debit,
-          balance: balanceData.balance
+          balance
         };
       });
       
       result.push({
         name: bankName,
-        credit: data.credit,
-        debit: data.debit,
         balance: data.balance,
         accounts: accountDetails
       });
     });
     
-    console.log('getBalanceBreakdownByBank - Final result:', result);
     return result.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
   };
 
@@ -1071,38 +1004,26 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                   Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </button>
                 {/* Balance Breakdown by Bank Tooltip */}
-                <div className="absolute top-full left-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
+                <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
                   <div className="text-sm font-semibold text-gray-800 mb-3">Balance Breakdown by Bank</div>
                   {getBalanceBreakdownByBank().length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {getBalanceBreakdownByBank().map((bank, index) => (
-                        <div key={index} className="text-sm">
-                          <div className="flex justify-between items-center mb-1">
+                        <div key={index} className="text-sm mb-2">
+                          <div className="flex justify-between items-center">
                             <span className="text-gray-700 font-medium">{bank.name}</span>
                             <span className={`font-bold ${bank.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                               ₹{bank.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-500 mb-1">
-                            <span className="text-blue-600">Cr: ₹{bank.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                            <span className="mx-2">|</span>
-                            <span className="text-red-600">Dr: ₹{bank.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
                           {bank.accounts && bank.accounts.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-2 ml-2 space-y-2 border-l-2 border-gray-200 pl-2">
+                            <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
                               {bank.accounts.map((acc, accIndex) => (
-                                <div key={accIndex}>
-                                  <div className="flex justify-between items-center">
-                                    <span className="font-medium">{acc.account}:</span>
-                                    <span className={`font-bold ${acc.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-gray-400 mt-0.5">
-                                    <span className="text-blue-500">Cr: ₹{acc.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    <span className="mx-1">|</span>
-                                    <span className="text-red-500">Dr: ₹{acc.debit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                  </div>
+                                <div key={accIndex} className="flex justify-between">
+                                  <span>{acc.account}:</span>
+                                  <span className={`font-medium ${acc.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
                                 </div>
                               ))}
                             </div>
