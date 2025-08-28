@@ -718,33 +718,86 @@ function StatementsContent() {
             )}
 
             {/* Analytics Summary */}
-            {(
-              (() => {
-                // Compute summary stats for AnalyticsSummary
-                const amountKey = sortedAndFilteredTransactions.length > 0 ? Object.keys(sortedAndFilteredTransactions[0]).find(k => k.toLowerCase().includes('amount')) : undefined;
-                const totalAmount = amountKey ? sortedAndFilteredTransactions.reduce((sum, tx) => {
-                  const val = tx[amountKey];
-                  let num = 0;
-                  if (typeof val === 'string') num = parseFloat(val.replace(/,/g, '')) || 0;
-                  else if (typeof val === 'number') num = val;
-                  return sum + num;
-                }, 0) : 0;
-                const allBankIds = new Set(sortedAndFilteredTransactions.map(tx => tx.bankId));
-                const allAccountIds = new Set(sortedAndFilteredTransactions.map(tx => tx.accountId));
-                // Note: tagged, untagged, and totalTags were calculated but not used in the component
-                return (
-                  <AnalyticsSummary
-                    totalTransactions={sortedAndFilteredTransactions.length}
-                    totalAmount={totalAmount}
-                    totalCredit={totalAmount * 0.6} // Estimate credit as 60% of total
-                    totalDebit={totalAmount * 0.4} // Estimate debit as 40% of total
-                    totalBanks={allBankIds.size}
-                    totalAccounts={allAccountIds.size}
-                    showBalance={true}
-                  />
-                );
-              })()
-            )}
+            {(() => {
+              // Compute robust totals from the visible transactions
+              let totalAmount = 0;
+              let totalCredit = 0;
+              let totalDebit = 0;
+              const normalizeAmount = (val: unknown): number => {
+                if (typeof val === 'number') return val;
+                if (typeof val === 'string') return parseFloat(val.replace(/,/g, '')) || 0;
+                return 0;
+              };
+              const extractCrDr = (tx: Record<string, unknown>): 'CR' | 'DR' | '' => {
+                // Prioritize primary Dr/Cr column over secondary ones
+                const primary = (tx['Dr./Cr.'] ?? tx['Dr/Cr'] ?? tx['DR/CR'] ?? tx['dr/cr'] ?? tx['Dr / Cr'] ?? '').toString().trim().toUpperCase();
+                const secondary = (tx['Dr / Cr_1'] ?? tx['DR / CR_1'] ?? '').toString().trim().toUpperCase();
+                const reversed = (tx['Cr./Dr.'] ?? tx['Cr/Dr'] ?? tx['CR/DR'] ?? tx['cr/dr'] ?? tx['Cr / Dr'] ?? tx['CR / DR'] ?? '').toString().trim().toUpperCase();
+                const generic = (tx['Type'] ?? tx['type'] ?? '').toString().trim().toUpperCase();
+                if (primary) return primary as 'CR' | 'DR';
+                if (reversed) return reversed as 'CR' | 'DR';
+                if (secondary) return secondary as 'CR' | 'DR';
+                if (generic) return generic as 'CR' | 'DR';
+                return '';
+              };
+              for (const tx of sortedAndFilteredTransactions as unknown as Array<Record<string, unknown>>) {
+                // Try unified amount
+                const amountField = Object.keys(tx).find(k => k.toLowerCase().includes('amount')) as string | undefined;
+                const rawCandidate = normalizeAmount(amountField ? (tx as Record<string, unknown>)[amountField as keyof typeof tx] as unknown : 0);
+                const raw = typeof rawCandidate === 'number' ? rawCandidate : 0;
+                
+                // For HDFC and similar banks that use separate Deposit/Withdrawal columns
+                if (!raw) {
+                  const depositAmt = normalizeAmount(tx['Deposit Amt.'] ?? tx['Deposit Amt'] ?? tx['Deposit Amount']);
+                  const withdrawalAmt = normalizeAmount(tx['Withdrawal Amt.'] ?? tx['Withdrawal Amt'] ?? tx['Withdrawal Amount']);
+                  
+                  if (depositAmt > 0 || withdrawalAmt > 0) {
+                    // HDFC-style separate columns
+                    totalCredit += Math.abs(depositAmt as number);
+                    totalDebit += Math.abs(withdrawalAmt as number);
+                    totalAmount += Math.abs(depositAmt as number) + Math.abs(withdrawalAmt as number);
+                    continue;
+                  }
+                  
+                  // Try other credit/debit columns
+                  const creditCol = normalizeAmount(tx['Credit'] ?? tx['credit'] ?? tx['Cr'] ?? tx['CR'] ?? tx['Cr Amount'] ?? tx['Credit Amount']);
+                  const debitCol = normalizeAmount(tx['Debit'] ?? tx['debit'] ?? tx['Dr'] ?? tx['DR'] ?? tx['Dr Amount'] ?? tx['Debit Amount']);
+                  
+                  if (creditCol > 0 || debitCol > 0) {
+                    // Signed from columns; totalAmount should reflect magnitude of movement
+                    const signedFromCols = Math.abs(creditCol as number) - Math.abs(debitCol as number);
+                    totalCredit += Math.max(0, signedFromCols);
+                    totalDebit += Math.max(0, -signedFromCols);
+                    totalAmount += Math.abs(creditCol as number) + Math.abs(debitCol as number);
+                    continue;
+                  }
+                }
+                
+                // If we have raw amount, apply Dr/Cr sign
+                const crdr = extractCrDr(tx as Record<string, unknown>);
+                let signed = raw;
+                if (crdr === 'CR') signed = Math.abs(raw);
+                else if (crdr === 'DR') signed = -Math.abs(raw);
+                // Accumulate
+                totalCredit += signed > 0 ? signed : 0;
+                totalDebit += signed < 0 ? -signed : 0;
+                totalAmount += Math.abs(signed);
+              }
+              const allBankIds = new Set(sortedAndFilteredTransactions.map(tx => tx.bankId));
+              const allAccountIds = new Set(sortedAndFilteredTransactions.map(tx => tx.accountId));
+              return (
+                <AnalyticsSummary
+                  totalTransactions={sortedAndFilteredTransactions.length}
+                  totalAmount={totalAmount}
+                  totalCredit={totalCredit}
+                  totalDebit={totalDebit}
+                  totalBanks={allBankIds.size}
+                  totalAccounts={allAccountIds.size}
+                  showBalance={true}
+                  transactions={sortedAndFilteredTransactions as unknown as Array<Record<string, unknown>>}
+                />
+              );
+            })()}
 
             {/* Transaction Table with Advanced Tag Creation Features - ADDED */}
             {(

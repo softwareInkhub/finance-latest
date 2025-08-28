@@ -86,14 +86,15 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           }
         }
         
-        // Use provided transactions if available; otherwise fetch all
-        let workingTransactions: Array<Record<string, unknown>> = Array.isArray(transactions) ? transactions : [];
-        if (!workingTransactions.length) {
-          const txRes = await fetch(`/api/transactions/all?userId=${encodeURIComponent(userId)}`);
-          if (txRes.ok) {
-            workingTransactions = await txRes.json();
-          }
-        }
+                 // Use provided transactions if available; otherwise fetch all
+         let workingTransactions: Array<Record<string, unknown>> = Array.isArray(transactions) ? transactions : [];
+         // Only fetch all transactions if no transactions are provided AND we're on a page that needs all data
+         if (!workingTransactions.length && !transactions) {
+           const txRes = await fetch(`/api/transactions/all?userId=${encodeURIComponent(userId)}`);
+           if (txRes.ok) {
+             workingTransactions = await txRes.json();
+           }
+         }
         if (workingTransactions.length) {
           console.log('Transactions for breakdown sample:', workingTransactions.slice(0, 3));
           setAllTransactions(workingTransactions);
@@ -531,13 +532,21 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       }
       const amount = Math.abs(parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0')) || 0;
       
+      // For HDFC and similar banks that use separate Deposit/Withdrawal columns
+      let finalAmount = amount;
+      if (amount === 0) {
+        const depositAmt = parseFloat((tx['Deposit Amt.'] as string) || (tx['Deposit Amt'] as string) || (tx['Deposit Amount'] as string) || '0') || 0;
+        const withdrawalAmt = parseFloat((tx['Withdrawal Amt.'] as string) || (tx['Withdrawal Amt'] as string) || (tx['Withdrawal Amount'] as string) || '0') || 0;
+        finalAmount = Math.abs(depositAmt) + Math.abs(withdrawalAmt);
+      }
+      
       console.log('Processing transaction:', { 
         accountId, 
         txBankName: tx.bankName, 
         txBankId: tx.bankId,
         accountBankName: accountId && accountInfoMap[accountId]?.bankName,
         finalBankName: bankName,
-        amount,
+        amount: finalAmount,
         fullTransaction: tx
       });
       
@@ -546,11 +555,11 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       }
       
       const bankAmount = bankAmounts.get(bankName)!;
-      bankAmount.amount += amount;
+      bankAmount.amount += finalAmount;
       
       if (accountId) {
         const currentAccountAmount = bankAmount.accounts.get(accountId) || 0;
-        bankAmount.accounts.set(accountId, currentAccountAmount + amount);
+        bankAmount.accounts.set(accountId, currentAccountAmount + finalAmount);
       }
     });
     
@@ -605,17 +614,28 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       const crdrField = (tx['Dr./Cr.'] || tx['Dr/Cr'] || tx['DR/CR'] || tx['dr/cr'] || tx['Type'] || tx['type'] || tx['Dr / Cr'] || tx['Dr / Cr_1'] || tx['DR / CR'] || tx['DR / CR_1'] || '').toString().trim().toUpperCase();
       const isCredit = crdrField === 'CR' || (amount > 0 && crdrField !== 'DR');
       
-      if (isCredit) {
+      // For HDFC and similar banks, check Deposit Amt. column
+      let finalAmount = amount;
+      let isCreditFinal = isCredit;
+      if (amount === 0) {
+        const depositAmt = parseFloat((tx['Deposit Amt.'] as string) || (tx['Deposit Amt'] as string) || (tx['Deposit Amount'] as string) || '0') || 0;
+        if (depositAmt > 0) {
+          finalAmount = depositAmt;
+          isCreditFinal = true;
+        }
+      }
+      
+      if (isCreditFinal) {
         if (!bankCredits.has(bankName)) {
           bankCredits.set(bankName, { credit: 0, accounts: new Map<string, number>() });
         }
         
         const bankCredit = bankCredits.get(bankName)!;
-        bankCredit.credit += Math.abs(amount);
+        bankCredit.credit += Math.abs(finalAmount);
         
         if (accountId) {
           const currentAccountCredit = bankCredit.accounts.get(accountId) || 0;
-          bankCredit.accounts.set(accountId, currentAccountCredit + Math.abs(amount));
+          bankCredit.accounts.set(accountId, currentAccountCredit + Math.abs(finalAmount));
         }
       }
     });
@@ -671,17 +691,28 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       const crdrField = (tx['Dr./Cr.'] || tx['Dr/Cr'] || tx['DR/CR'] || tx['dr/cr'] || tx['Type'] || tx['type'] || tx['Dr / Cr'] || tx['Dr / Cr_1'] || tx['DR / CR'] || tx['DR / CR_1'] || '').toString().trim().toUpperCase();
       const isDebit = crdrField === 'DR' || (amount < 0 && crdrField !== 'CR');
       
-      if (isDebit) {
+      // For HDFC and similar banks, check Withdrawal Amt. column
+      let finalAmount = amount;
+      let isDebitFinal = isDebit;
+      if (amount === 0) {
+        const withdrawalAmt = parseFloat((tx['Withdrawal Amt.'] as string) || (tx['Withdrawal Amt'] as string) || (tx['Withdrawal Amount'] as string) || '0') || 0;
+        if (withdrawalAmt > 0) {
+          finalAmount = withdrawalAmt;
+          isDebitFinal = true;
+        }
+      }
+      
+      if (isDebitFinal) {
         if (!bankDebits.has(bankName)) {
           bankDebits.set(bankName, { debit: 0, accounts: new Map<string, number>() });
         }
         
         const bankDebit = bankDebits.get(bankName)!;
-        bankDebit.debit += Math.abs(amount);
+        bankDebit.debit += Math.abs(finalAmount);
         
         if (accountId) {
           const currentAccountDebit = bankDebit.accounts.get(accountId) || 0;
-          bankDebit.accounts.set(accountId, currentAccountDebit + Math.abs(amount));
+          bankDebit.accounts.set(accountId, currentAccountDebit + Math.abs(finalAmount));
         }
       }
     });
@@ -731,15 +762,28 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           bankName = 'YESB';
         }
       }
-      // Determine signed amount using Dr/Cr where available
-      const rawAmount = parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0') || 0;
-      const crdrField = extractCrDr(tx, rawAmount);
-      let amount = rawAmount;
-      if (crdrField === 'CR') {
-        amount = Math.abs(rawAmount);
-      } else if (crdrField === 'DR') {
-        amount = -Math.abs(rawAmount);
-      }
+             // Determine signed amount using Dr/Cr where available
+       const rawAmount = parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0') || 0;
+       let amount = rawAmount;
+       
+       // For HDFC and similar banks that use separate Deposit/Withdrawal columns
+       if (rawAmount === 0) {
+         const depositAmt = parseFloat((tx['Deposit Amt.'] as string) || (tx['Deposit Amt'] as string) || (tx['Deposit Amount'] as string) || '0') || 0;
+         const withdrawalAmt = parseFloat((tx['Withdrawal Amt.'] as string) || (tx['Withdrawal Amt'] as string) || (tx['Withdrawal Amount'] as string) || '0') || 0;
+         if (depositAmt > 0) {
+           amount = depositAmt; // Positive for credits
+         } else if (withdrawalAmt > 0) {
+           amount = -withdrawalAmt; // Negative for debits
+         }
+       } else {
+         // Use Dr/Cr field for traditional amount fields
+         const crdrField = extractCrDr(tx, rawAmount);
+         if (crdrField === 'CR') {
+           amount = Math.abs(rawAmount);
+         } else if (crdrField === 'DR') {
+           amount = -Math.abs(rawAmount);
+         }
+       }
       
       if (!bankBalances.has(bankName)) {
         bankBalances.set(bankName, { balance: 0, accounts: new Map<string, number>() });
@@ -1037,8 +1081,8 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                   <div className="mt-3 pt-2 border-t border-gray-200">
                     <div className="flex justify-between items-center text-sm font-semibold">
                       <span className="text-gray-800">Total</span>
-                      <span className={`${balance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                        ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <span className={`${getBalanceBreakdownByBank().reduce((sum, bank) => sum + bank.balance, 0) >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                        ₹{getBalanceBreakdownByBank().reduce((sum, bank) => sum + bank.balance, 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>

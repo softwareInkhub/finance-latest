@@ -2980,23 +2980,45 @@ export default function SuperBankPage() {
   // Analytics calculations using mappedRowsWithConditions (filteredRows already contains the filtered version)
   const totalAmount = filteredRows.reduce((sum, row) => {
     const amountRaw = typeof row.AmountRaw === 'number' ? row.AmountRaw : 0;
-    return sum + amountRaw;
+    
+    // For HDFC and similar banks that use separate Deposit/Withdrawal columns
+    if (amountRaw === 0) {
+      const depositAmt = parseFloat((row['Deposit Amt.'] as string) || (row['Deposit Amt'] as string) || (row['Deposit Amount'] as string) || '0') || 0;
+      const withdrawalAmt = parseFloat((row['Withdrawal Amt.'] as string) || (row['Withdrawal Amt'] as string) || (row['Withdrawal Amount'] as string) || '0') || 0;
+      return sum + Math.abs(depositAmt) + Math.abs(withdrawalAmt);
+    }
+    
+    return sum + Math.abs(amountRaw);
   }, 0);
 
-  // Calculate DR/CR totals for filteredRows
+  // Calculate DR/CR totals for filteredRows with HDFC support
   let totalCredit = 0, totalDebit = 0;
   filteredRows.forEach(row => {
     const amount = typeof row.AmountRaw === 'number' && isFinite(row.AmountRaw) ? row.AmountRaw : 0;
     let crdr = row['Dr./Cr.'];
     if (typeof crdr === 'string') {
       crdr = crdr.trim().toUpperCase();
-        } else {
+    } else {
       crdr = '';
+    }
+    
+    // For HDFC and similar banks that use separate Deposit/Withdrawal columns
+    if (amount === 0) {
+      const depositAmt = parseFloat((row['Deposit Amt.'] as string) || (row['Deposit Amt'] as string) || (row['Deposit Amount'] as string) || '0') || 0;
+      const withdrawalAmt = parseFloat((row['Withdrawal Amt.'] as string) || (row['Withdrawal Amt'] as string) || (row['Withdrawal Amount'] as string) || '0') || 0;
+      if (depositAmt > 0) {
+        totalCredit += Math.abs(depositAmt);
       }
-    if (crdr === 'CR') {
-      totalCredit += Math.abs(amount);
-    } else if (crdr === 'DR') {
-      totalDebit += Math.abs(amount);
+      if (withdrawalAmt > 0) {
+        totalDebit += Math.abs(withdrawalAmt);
+      }
+    } else {
+      // Traditional Dr/Cr logic
+      if (crdr === 'CR') {
+        totalCredit += Math.abs(amount);
+      } else if (crdr === 'DR') {
+        totalDebit += Math.abs(amount);
+      }
     }
   });
   if (!isFinite(totalCredit)) totalCredit = 0;
