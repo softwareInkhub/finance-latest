@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch, FiTag } from 'react-icons/fi';
+import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch } from 'react-icons/fi';
 
 interface Tag {
   id: string;
