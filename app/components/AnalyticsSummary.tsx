@@ -10,6 +10,7 @@ interface AnalyticsSummaryProps {
   showBalance?: boolean;
   tagsSummary?: Record<string, unknown>; // Add tagsSummary prop
   transactions?: Array<Record<string, unknown>>; // Use provided rows for breakdowns when available
+  dateRange?: { from: string; to: string }; // Add dateRange prop for opening balance calculation
 }
 
 interface ModalProps {
@@ -43,7 +44,6 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
 };
 
 const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
-  totalAmount = 0,
   totalCredit = 0,
   totalDebit = 0,
   totalTransactions = 0,
@@ -66,7 +66,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   // Removed unused localTagsSummary state
   const [allTransactions, setAllTransactions] = useState<Record<string, unknown>[]>([]);
   const [accountInfoMap, setAccountInfoMap] = useState<{ [accountId: string]: { accountName: string; accountNumber: string; bankName?: string } }>({});
-  const [bankInfoMap, setBankInfoMap] = useState<{ [bankId: string]: string }>({});
 
   // Fetch tags summary, and bank/account information.
   // For breakdowns, prefer provided `transactions` (already filtered on page),
@@ -111,7 +110,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
             });
             console.log('Bank map:', bankMap);
           }
-          setBankInfoMap(bankMap);
           
           // Fetch account information for all unique accounts
           const uniqueAccountIds = [...new Set(workingTransactions.map((tx: Record<string, unknown>) => tx.accountId as string).filter(Boolean))];
@@ -151,7 +149,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   }, [tagsSummary, transactions]);
 
   // Ensure all values are numbers and handle undefined/null values
-  const safeTotalAmount = typeof totalAmount === 'number' && !isNaN(totalAmount) ? totalAmount : 0;
   const safeTotalCredit = typeof totalCredit === 'number' && !isNaN(totalCredit) ? totalCredit : 0;
   const safeTotalDebit = typeof totalDebit === 'number' && !isNaN(totalDebit) ? totalDebit : 0;
   const safeTotalTransactions = typeof totalTransactions === 'number' && !isNaN(totalTransactions) ? totalTransactions : 0;
@@ -160,13 +157,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   
   const balance = safeTotalCredit - safeTotalDebit;
 
-  const openModal = (title: string, content: React.ReactNode) => {
-    setModalState({
-      isOpen: true,
-      title,
-      content,
-    });
-  };
+
 
   // Robust extractor for Dr/Cr when multiple columns exist
   const extractCrDr = (tx: Record<string, unknown>, rawAmount: number): 'CR' | 'DR' | '' => {
@@ -201,241 +192,17 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     });
   };
 
-  const getTransactionDetails = () => (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Total Transactions</div>
-          <div className="text-2xl font-bold text-blue-600">{safeTotalTransactions}</div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Average per Transaction</div>
-          <div className="text-lg font-semibold text-gray-700">
-            ₹{safeTotalTransactions > 0 ? (safeTotalAmount / safeTotalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Credit Transactions</div>
-          <div className="text-lg font-semibold text-green-600">
-            {Math.round((totalCredit / totalAmount) * totalTransactions)} ({((totalCredit / totalAmount) * 100).toFixed(1)}%)
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Debit Transactions</div>
-          <div className="text-lg font-semibold text-red-600">
-            {Math.round((totalDebit / totalAmount) * totalTransactions)} ({((totalDebit / totalAmount) * 100).toFixed(1)}%)
-          </div>
-        </div>
-      </div>
-      <div className="border-t pt-3">
-        <div className="text-sm text-gray-500 space-y-2">
-          <div>This represents the total number of financial transactions processed across all banks and accounts.</div>
-          <div><strong>Transaction Distribution:</strong> Based on amount distribution, approximately {Math.round((totalCredit / totalAmount) * totalTransactions)} transactions are credits and {Math.round((totalDebit / totalAmount) * totalTransactions)} are debits.</div>
-          <div><strong>Average Transaction Value:</strong> ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} per transaction.</div>
-        </div>
-      </div>
-    </div>
-  );
 
-  const getAmountDetails = () => (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Total Amount</div>
-          <div className="text-2xl font-bold text-green-600">
-            ₹{safeTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Transaction Count</div>
-          <div className="text-lg font-semibold text-gray-700">{safeTotalTransactions}</div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Largest Transaction</div>
-          <div className="text-lg font-semibold text-gray-700">
-            ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Smallest Transaction</div>
-          <div className="text-lg font-semibold text-gray-700">
-            ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-          </div>
-        </div>
-      </div>
-      <div className="border-t pt-3">
-        <div className="text-sm text-gray-500 space-y-2">
-          <div>Total value of all transactions combined, including both credits and debits.</div>
-          <div><strong>Amount Range:</strong> Transactions range from approximately ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 0.1).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} to ₹{typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalTransactions > 0 ? (totalAmount / totalTransactions * 3).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}.</div>
-          <div><strong>Transaction Volume:</strong> High volume of transactions indicates active financial activity across all accounts.</div>
-        </div>
-      </div>
-    </div>
-  );
 
-  const getCreditDetails = () => (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Total Credits</div>
-          <div className="text-2xl font-bold text-blue-600">
-            ₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Percentage of Total</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {safeTotalAmount > 0 ? ((safeTotalCredit / safeTotalAmount) * 100).toFixed(1) : '0.0'}%
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Average Credit</div>
-          <div className="text-lg font-semibold text-gray-700">
-            ₹{typeof totalCredit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Credit Transactions</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {Math.round((totalCredit / totalAmount) * totalTransactions)}
-          </div>
-        </div>
-      </div>
-      <div className="border-t pt-3">
-        <div className="text-sm text-gray-500 space-y-2">
-          <div>Total incoming funds across all accounts. Credits represent money received or deposited.</div>
-          <div><strong>Credit Analysis:</strong> {((totalCredit / totalAmount) * 100).toFixed(1)}% of total transaction value comes from credits.</div>
-          <div><strong>Average Credit Size:</strong> ₹{typeof totalCredit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalCredit / (totalCredit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} per credit transaction.</div>
-          <div><strong>Financial Health:</strong> {totalCredit > totalDebit ? 'Positive cash flow with more incoming than outgoing funds.' : 'Higher outgoing than incoming funds.'}</div>
-        </div>
-      </div>
-    </div>
-  );
 
-  const getDebitDetails = () => (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Total Debits</div>
-          <div className="text-2xl font-bold text-red-600">
-            ₹{safeTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Percentage of Total</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {safeTotalAmount > 0 ? ((safeTotalDebit / safeTotalAmount) * 100).toFixed(1) : '0.0'}%
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Average Debit</div>
-          <div className="text-lg font-semibold text-gray-700">
-            ₹{typeof totalDebit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Debit Transactions</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {Math.round((totalDebit / totalAmount) * totalTransactions)}
-          </div>
-        </div>
-      </div>
-      <div className="border-t pt-3">
-        <div className="text-sm text-gray-500 space-y-2">
-          <div>Total outgoing funds across all accounts. Debits represent money spent or withdrawn.</div>
-          <div><strong>Debit Analysis:</strong> {((totalDebit / totalAmount) * 100).toFixed(1)}% of total transaction value goes to debits.</div>
-          <div><strong>Average Debit Size:</strong> ₹{typeof totalDebit === 'number' && typeof totalAmount === 'number' && typeof totalTransactions === 'number' && totalAmount > 0 ? (totalDebit / (totalDebit / totalAmount * totalTransactions)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} per debit transaction.</div>
-          <div><strong>Spending Pattern:</strong> {totalDebit > totalCredit ? 'Higher spending than income.' : 'Income exceeds spending.'}</div>
-        </div>
-      </div>
-    </div>
-  );
 
-  const getBalanceDetails = () => (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Net Balance</div>
-          <div className={`text-2xl font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Balance Type</div>
-          <div className={`text-lg font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {balance >= 0 ? 'Surplus' : 'Deficit'}
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Balance Ratio</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {((balance / totalAmount) * 100).toFixed(1)}%
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Cash Flow</div>
-          <div className={`text-lg font-semibold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {balance >= 0 ? 'Positive' : 'Negative'}
-          </div>
-        </div>
-      </div>
-      <div className="border-t pt-3">
-        <div className="text-sm text-gray-500 space-y-2">
-          <div>Net financial position (Credits - Debits). Positive values indicate surplus, negative values indicate deficit.</div>
-          <div><strong>Balance Analysis:</strong> {balance >= 0 ? 'You have a surplus of ₹' + (typeof balance === 'number' ? Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00') + ' indicating positive cash flow.' : 'You have a deficit of ₹' + (typeof balance === 'number' ? Math.abs(balance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00') + ' indicating negative cash flow.'}</div>
-          <div><strong>Financial Health:</strong> {balance >= 0 ? 'Strong financial position with more income than expenses.' : 'Consider reviewing spending patterns to improve financial position.'}</div>
-          <div><strong>Balance Ratio:</strong> {((balance / totalAmount) * 100).toFixed(1)}% of total transaction value represents your net position.</div>
-        </div>
-      </div>
-    </div>
-  );
 
-  const getBanksDetails = () => (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Total Banks</div>
-          <div className="text-2xl font-bold text-yellow-600">{safeTotalBanks}</div>
-            </div>
-        <div>
-          <div className="font-semibold text-gray-800">Total Accounts</div>
-          <div className="text-lg font-semibold text-gray-700">{safeTotalAccounts}</div>
-            </div>
-            </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Accounts per Bank</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {safeTotalBanks > 0 ? (safeTotalAccounts / safeTotalBanks).toFixed(1) : '0.0'}
-                  </div>
-              </div>
-        <div>
-          <div className="font-semibold text-gray-800">Banking Diversity</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {safeTotalBanks === 1 ? 'Single Bank' : safeTotalBanks <= 3 ? 'Moderate' : 'High'}
-          </div>
-        </div>
-      </div>
-      <div className="border-t pt-3">
-        <div className="text-sm text-gray-500 space-y-2">
-          <div>Number of different banking institutions connected to your account. Each bank may have multiple accounts.</div>
-          <div><strong>Banking Structure:</strong> You have {totalBanks} bank{totalBanks > 1 ? 's' : ''} with {totalAccounts} total account{totalAccounts > 1 ? 's' : ''}.</div>
-          <div><strong>Account Distribution:</strong> Average of {(totalAccounts / totalBanks).toFixed(1)} accounts per bank.</div>
-          <div><strong>Diversification:</strong> {totalBanks === 1 ? 'Single bank setup - consider diversifying for better risk management.' : totalBanks <= 3 ? 'Moderate banking diversity provides good balance.' : 'High banking diversity offers maximum risk distribution.'}</div>
-        </div>
-      </div>
-    </div>
-  );
+
+
+
+
+
+
 
   // Function to get transaction counts by bank
   const getTransactionCountsByBank = () => {
@@ -499,83 +266,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     return result.sort((a, b) => b.count - a.count);
   };
 
-  // Function to get amount breakdown by bank
-  const getAmountBreakdownByBank = () => {
-    console.log('getAmountBreakdownByBank called with:', { 
-      allTransactionsLength: allTransactions.length, 
-      accountInfoMapKeys: Object.keys(accountInfoMap),
-      bankInfoMapKeys: Object.keys(bankInfoMap)
-    });
-    
-    const bankAmounts = new Map<string, { amount: number; accounts: Map<string, number> }>();
-    
-    allTransactions.forEach((tx: Record<string, unknown>) => {
-      const accountId = (tx.accountId as string) || '';
-      // Use transaction bank name directly, fallback to account info if not available
-      // Also check tags for bank identification
-      let bankName = (tx.bankName as string) || (accountId && accountInfoMap[accountId]?.bankName) || 'Unknown Bank';
-      
-      // If bank name is still unknown, try to extract from tags
-      if (bankName === 'Unknown Bank' && tx.tags && Array.isArray(tx.tags)) {
-        const tagNames = (tx.tags as Array<Record<string, unknown>>).map((tag: Record<string, unknown>) => {
-          if (typeof tag === 'string') return tag;
-          return (tag.name as string) || '';
-        }).join(' ').toLowerCase();
-        if (tagNames.includes('hdfc')) {
-          bankName = 'HDFC';
-        } else if (tagNames.includes('kotak')) {
-          bankName = 'Kotak';
-        } else if (tagNames.includes('yesb')) {
-          bankName = 'YESB';
-        }
-      }
-      const amount = Math.abs(parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0')) || 0;
-      
-      console.log('Processing transaction:', { 
-        accountId, 
-        txBankName: tx.bankName, 
-        txBankId: tx.bankId,
-        accountBankName: accountId && accountInfoMap[accountId]?.bankName,
-        finalBankName: bankName,
-        amount,
-        fullTransaction: tx
-      });
-      
-      if (!bankAmounts.has(bankName)) {
-        bankAmounts.set(bankName, { amount: 0, accounts: new Map<string, number>() });
-      }
-      
-      const bankAmount = bankAmounts.get(bankName)!;
-      bankAmount.amount += amount;
-      
-      if (accountId) {
-        const currentAccountAmount = bankAmount.accounts.get(accountId) || 0;
-        bankAmount.accounts.set(accountId, currentAccountAmount + amount);
-      }
-    });
-    
-    const result: Array<{ name: string; amount: number; accounts: Array<{ account: string; amount: number }> }> = [];
-    
-    bankAmounts.forEach((data, bankName) => {
-      const accountDetails = Array.from(data.accounts.entries()).map(([accountId, amount]) => {
-        const accountInfo = accountInfoMap[accountId];
-        const displayAccount = accountInfo?.accountNumber || accountId;
-        
-        return {
-          account: displayAccount,
-          amount
-        };
-      });
-      
-      result.push({
-        name: bankName,
-        amount: data.amount,
-        accounts: accountDetails
-      });
-    });
-    
-    return result.sort((a, b) => b.amount - a.amount);
-  };
+
 
   // Function to get credit breakdown by bank
   const getCreditBreakdownByBank = () => {
@@ -777,44 +468,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     return result.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
   };
 
-  const getAccountsDetails = () => (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Total Accounts</div>
-          <div className="text-2xl font-bold text-purple-600">{safeTotalAccounts}</div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Average per Bank</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {safeTotalBanks > 0 ? (safeTotalAccounts / safeTotalBanks).toFixed(1) : '0.0'}
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <div className="font-semibold text-gray-800">Account Complexity</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {totalAccounts <= 2 ? 'Simple' : totalAccounts <= 5 ? 'Moderate' : 'Complex'}
-          </div>
-        </div>
-        <div>
-          <div className="font-semibold text-gray-800">Account Management</div>
-          <div className="text-lg font-semibold text-gray-700">
-            {totalAccounts <= 2 ? 'Easy' : totalAccounts <= 5 ? 'Manageable' : 'Requires Attention'}
-          </div>
-        </div>
-      </div>
-      <div className="border-t pt-3">
-        <div className="text-sm text-gray-500 space-y-2">
-          <div>Total number of bank accounts across all connected banking institutions.</div>
-          <div><strong>Account Structure:</strong> You manage {totalAccounts} account{totalAccounts > 1 ? 's' : ''} across {totalBanks} bank{totalBanks > 1 ? 's' : ''}.</div>
-          <div><strong>Account Distribution:</strong> Average of {(totalAccounts / totalBanks).toFixed(1)} accounts per banking institution.</div>
-          <div><strong>Management Level:</strong> {totalAccounts <= 2 ? 'Simple account structure with minimal management overhead.' : totalAccounts <= 5 ? 'Moderate account complexity requiring regular monitoring.' : 'Complex account structure requiring dedicated management attention.'}</div>
-        </div>
-      </div>
-    </div>
-  );
+
 
   return (
     <>
@@ -824,7 +478,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           <div className="flex-1 flex items-center gap-1.5">
             <div className="relative group">
               <button
-                onClick={() => openModal('Transaction Details', getTransactionDetails())}
                 className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
                 title="Click to view detailed transaction statistics and analysis"
               >
@@ -865,52 +518,9 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                 </div>
               </div>
             </div>
+            
             <div className="relative group">
               <button
-                onClick={() => openModal('Amount Details', getAmountDetails())}
-                className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-semibold hover:bg-green-200 transition-colors cursor-pointer"
-                title="Click to view detailed amount analysis and breakdown"
-              >
-                Total Amt.: ₹{safeTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </button>
-              {/* Amount Breakdown by Bank Tooltip */}
-              <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
-                <div className="text-sm font-semibold text-gray-800 mb-3">Amount Breakdown by Bank</div>
-                {getAmountBreakdownByBank().length > 0 ? (
-                  <div className="space-y-2">
-                    {getAmountBreakdownByBank().map((bank, index) => (
-                      <div key={index} className="text-sm mb-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-700 font-medium">{bank.name}</span>
-                          <span className="text-green-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                        </div>
-                        {bank.accounts && bank.accounts.length > 0 && (
-                          <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
-                            {bank.accounts.map((acc, accIndex) => (
-                              <div key={accIndex} className="flex justify-between">
-                                <span>{acc.account}:</span>
-                                <span className="font-medium">₹{acc.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-gray-500">No bank data available</div>
-                )}
-                <div className="mt-3 pt-2 border-t border-gray-200">
-                  <div className="flex justify-between items-center text-sm font-semibold">
-                    <span className="text-gray-800">Total</span>
-                    <span className="text-green-800">₹{safeTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="relative group">
-              <button
-                onClick={() => openModal('Credit Details', getCreditDetails())}
                 className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
                 title="Click to view detailed credit transaction analysis"
               >
@@ -953,7 +563,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
             </div>
             <div className="relative group">
               <button
-                onClick={() => openModal('Debit Details', getDebitDetails())}
                 className="px-2 py-1 bg-red-100 text-red-800 rounded text-sm font-semibold hover:bg-red-200 transition-colors cursor-pointer"
                 title="Click to view detailed debit transaction analysis"
               >
@@ -997,11 +606,10 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
             {showBalance && (
               <div className="relative group">
                 <button
-                  onClick={() => openModal('Balance Details', getBalanceDetails())}
                   className={`px-2 py-1 rounded text-sm font-semibold hover:transition-colors cursor-pointer ${balance >= 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}
                   title="Click to view detailed balance analysis and financial health"
                 >
-                  Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Closing Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </button>
                 {/* Balance Breakdown by Bank Tooltip */}
                 <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
@@ -1047,7 +655,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
             )}
             <div className="relative group">
               <button
-                onClick={() => openModal('Bank Details', getBanksDetails())}
                 className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm font-semibold hover:bg-yellow-200 transition-colors cursor-pointer"
                 title="Click to view detailed bank information and distribution"
               >
@@ -1090,7 +697,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
             </div>
             <div className="relative group">
               <button
-                onClick={() => openModal('Account Details', getAccountsDetails())}
                 className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-semibold hover:bg-purple-200 transition-colors cursor-pointer"
                 title="Click to view detailed account information and management insights"
               >

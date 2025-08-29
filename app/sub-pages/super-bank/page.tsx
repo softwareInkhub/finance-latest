@@ -1587,7 +1587,7 @@ export default function SuperBankPage() {
 
   // Add state
   const [searchField, setSearchField] = useState('all');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('desc');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('asc');
   
   // Table sorting state
   const [tableSortColumn, setTableSortColumn] = useState<string>('');

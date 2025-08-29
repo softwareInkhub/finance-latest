@@ -393,8 +393,8 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   disabled={removeTagsDisabled || selectedCount === 0}
                   title={`Remove all tags from ${selectedCount} selected transaction${selectedCount !== 1 ? 's' : ''}`}
                 >
-                  <FiTag size={12} />
-                  Remove Tags ({selectedCount})
+                  {/* <FiTag size={12} /> */}
+                  Remove Tags 
                 </button>
               )}
               
