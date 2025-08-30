@@ -372,65 +372,92 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
   }
 
   return (
-    <div className="min-h-screen py-6 sm:py-10 px-3 sm:px-4 space-y-6 sm:space-y-8">
-      <div className="mb-6 p-4 bg-blue-50 rounded-lg shadow relative">
-        <h2 className="font-bold text-blue-700 mb-2">Bank Statement Header</h2>
-        <div className="absolute top-4 right-4 flex gap-2">
-          {!headerEditing && (
-            <button
-              type="button"
-              className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all"
-              onClick={() => setHeaderEditing(true)}
-              aria-label="Edit Header"
-            >
-              <RiEdit2Line size={20} />
-            </button>
-          )}
-          <button
-            type="button"
-            className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-full shadow focus:outline-none focus:ring-2 focus:ring-green-400 transition-all"
-            onClick={() => setShowMapping(true)}
-            aria-label="Map Header"
-          >
-            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 9l5-5 5 5M12 4v12" /></svg>
-          </button>
-        </div>
-        {headerLoading ? (
-          <div className="text-gray-500">Loading header...</div>
-        ) : (
-          <>
-            <div className="mb-2 text-sm text-gray-700">
-              <span className="font-semibold">Current Header:</span>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {bankHeader.length > 0 ? (
-                  bankHeader.map((col, idx) => (
-                    <span
-                      key={idx}
-                      className="px-3 py-1 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 rounded-full border border-blue-200 shadow text-xs font-medium"
-                    >
-                      {col}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-gray-400">No header set</span>
-                )}
+    <div className="min-h-screen py-4 px-4 space-y-4 bg-gradient-to-br from-gray-50 to-blue-50">
+      {/* Compact Bank Statement Header Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-100 to-transparent rounded-full opacity-30 transform translate-x-12 -translate-y-12"></div>
+        
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4a2 2 0 00-2-2H6z" clipRule="evenodd" />
+                </svg>
               </div>
+              Bank Statement Header
+            </h2>
+            <div className="flex gap-2">
+              {!headerEditing && (
+                <button
+                  type="button"
+                  className="p-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200 hover:scale-105"
+                  onClick={() => setHeaderEditing(true)}
+                  aria-label="Edit Header"
+                >
+                  <RiEdit2Line size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="p-2 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-green-400 transition-all duration-200 hover:scale-105"
+                onClick={() => setShowMapping(true)}
+                aria-label="Map Header"
+              >
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 9l5-5 5 5M12 4v12" />
+                </svg>
+              </button>
             </div>
-            {headerEditing && (
-              <HeaderEditor
-                headerInputs={headerInputs}
-                onHeaderInputChange={handleHeaderInputChange}
-                onAddHeaderInput={handleAddHeaderInput}
-                onRemoveHeaderInput={handleRemoveHeaderInput}
-                onSave={handleHeaderSave}
-                onCancel={() => setHeaderEditing(false)}
-                loading={headerLoading}
-                error={headerError}
-                success={headerSuccess}
-              />
-            )}
-          </>
-        )}
+          </div>
+          
+          {headerLoading ? (
+            <div className="flex items-center gap-2 text-gray-600">
+              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              Loading header...
+            </div>
+          ) : (
+            <>
+              <div className="mb-3">
+                <span className="text-sm font-semibold text-gray-700 mb-2 block">Current Header:</span>
+                <div className="flex flex-wrap gap-1">
+                  {bankHeader.length > 0 ? (
+                    bankHeader.map((col, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-1 bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 rounded-lg border border-blue-200 shadow-sm text-xs font-medium hover:shadow-md transition-shadow duration-200"
+                      >
+                        {col}
+                      </span>
+                    ))
+                  ) : (
+                    <div className="flex items-center gap-1 text-gray-400 bg-gray-50 rounded-lg px-2 py-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      <span className="text-xs">No header set</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {headerEditing && (
+                <HeaderEditor
+                  headerInputs={headerInputs}
+                  onHeaderInputChange={handleHeaderInputChange}
+                  onAddHeaderInput={handleAddHeaderInput}
+                  onRemoveHeaderInput={handleRemoveHeaderInput}
+                  onSave={handleHeaderSave}
+                  onCancel={() => setHeaderEditing(false)}
+                  loading={headerLoading}
+                  error={headerError}
+                  success={headerSuccess}
+                />
+              )}
+            </>
+          )}
+        </div>
+        
         {showMapping && (
           <Modal isOpen={showMapping} onClose={() => setShowMapping(false)} title={`Map to Super Bank Header`}>
             <form onSubmit={handleSaveMapping} className="space-y-4">
@@ -637,22 +664,43 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           </Modal>
         )}
       </div>
-      <div className="space-y-6 px-4">
+      
+      {/* Compact Accounts Section */}
+      <div className="space-y-4">
         <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-gray-800">Accounts</h2>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <RiAccountPinCircleLine className="text-white" size={18} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Accounts</h2>
+              <p className="text-sm text-gray-600">Manage your bank accounts and holders</p>
+            </div>
+          </div>
           <button
             onClick={handleAddAccount}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg hover:scale-105 transition-all duration-200 font-semibold text-sm"
           >
-            <RiAddLine className="text-lg" />
+            <RiAddLine className="text-base" />
             Add Account
           </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {accounts.length === 0 ? (
-            <div className="col-span-full text-center py-8 sm:py-12 text-gray-500">
-              No accounts added yet. Click &quot;Add Account&quot; to get started.
+            <div className="col-span-full text-center py-12">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <RiAccountPinCircleLine className="text-blue-600" size={32} />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">No accounts added yet</h3>
+              <p className="text-gray-600 mb-4 max-w-md mx-auto text-sm">Get started by adding your first account to begin managing your financial data.</p>
+              <button
+                onClick={handleAddAccount}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200 text-sm"
+              >
+                <RiAddLine size={16} />
+                Add Your First Account
+              </button>
             </div>
           ) : (
             accounts.map((account) => (
@@ -667,148 +715,165 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                     );
                   }
                 }}
-                className="cursor-pointer relative bg-white/70 backdrop-blur-lg p-3 sm:p-4 rounded-lg shadow border border-blue-100 transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl group overflow-hidden min-w-[220px] max-w-xs"
+                className="group cursor-pointer relative bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-blue-50 rounded-lg">
-                      <RiAccountPinCircleLine className="text-blue-500 text-lg" />
+                {/* Background Pattern */}
+                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-100 via-purple-100 to-transparent rounded-full opacity-20 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-300"></div>
+                
+                <div className="relative z-10">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow">
+                        <RiAccountPinCircleLine className="text-white text-sm" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 text-sm leading-tight truncate">{account.accountHolderName}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">Account: {account.accountNumber}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900 text-base leading-tight">{account.accountHolderName}</h3>
-                      <p className="text-xs text-gray-500">Account Number: {account.accountNumber}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-1 absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditAccount(account);
-                      }}
-                      className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Edit Account"
-                    >
-                      <RiEdit2Line className="text-gray-400 hover:text-gray-600 text-base" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteAccount(account.id);
-                      }}
-                      className="p-1 hover:bg-red-100 rounded-lg transition-colors"
-                      title="Delete Account"
-                    >
-                      <RiDeleteBin6Line className="text-red-400 hover:text-red-600 text-base" />
-                    </button>
-                  </div>
-                </div>
-                {account.tags && account.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {account.tags.map((tagName, index) => {
-                      const tagObj = allTags.find(t => t.name === tagName);
-                      return (
-                      <span
-                        key={index}
-                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border"
-                          style={{
-                            backgroundColor: tagObj?.color || '#3B82F6',
-                            color: '#ffffff',
-                            borderColor: tagObj?.color || '#3B82F6'
-                          }}
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditAccount(account);
+                        }}
+                        className="p-1.5 bg-white/90 backdrop-blur-sm hover:bg-blue-50 rounded-lg shadow border border-gray-200 hover:scale-110 transition-all duration-200"
+                        title="Edit Account"
                       >
-                          {tagName}
-                      </span>
-                      );
-                    })}
+                        <RiEdit2Line className="text-blue-600 text-xs" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAccount(account.id);
+                        }}
+                        className="p-1.5 bg-white/90 backdrop-blur-sm hover:bg-red-50 rounded-lg shadow border border-gray-200 hover:scale-110 transition-all duration-200"
+                        title="Delete Account"
+                      >
+                        <RiDeleteBin6Line className="text-red-600 text-xs" />
+                      </button>
+                    </div>
                   </div>
-                )}
-                <div className="mt-2 border-t border-gray-100 pt-2">
-                  <p className="text-xs text-gray-500">IFSC: {account.ifscCode}</p>
+                  
+                  {account.tags && account.tags.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-1">
+                      {account.tags.map((tagName, index) => {
+                        const tagObj = allTags.find(t => t.name === tagName);
+                        return (
+                          <span
+                            key={index}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border shadow-sm"
+                            style={{
+                              backgroundColor: tagObj?.color || '#3B82F6',
+                              color: '#ffffff',
+                              borderColor: tagObj?.color || '#3B82F6'
+                            }}
+                          >
+                            {tagName}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-3 border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">IFSC Code</p>
+                        <p className="text-xs font-medium text-gray-900">{account.ifscCode}</p>
+                      </div>
+                      <div className="w-6 h-6 bg-blue-200 rounded-lg flex items-center justify-center">
+                        <svg className="w-3 h-3 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm0 2h12v8H4V6z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))
           )}
         </div>
-
-        <Modal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          title={isEditing ? 'Edit Account' : 'Add New Account'}
-        >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="accountHolderName" className="block text-sm font-medium text-gray-700">
-                Account Holder Name
-              </label>
-              <input
-                type="text"
-                id="accountHolderName"
-                value={formData.accountHolderName}
-                onChange={(e) => setFormData({ ...formData, accountHolderName: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700">
-                Account Number
-              </label>
-              <input
-                type="text"
-                id="accountNumber"
-                value={formData.accountNumber}
-                onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="ifscCode" className="block text-sm font-medium text-gray-700">
-                IFSC Code
-              </label>
-              <input
-                type="text"
-                id="ifscCode"
-                value={formData.ifscCode}
-                onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
-                Tags (comma-separated)
-              </label>
-              <input
-                type="text"
-                id="tags"
-                value={formData.tags.join(', ')}
-                onChange={(e) => setFormData({ ...formData, tags: e.target.value.split(',').map(tag => tag.trim()) })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600"
-              >
-                {isEditing ? 'Update' : 'Add'} Account
-              </button>
-            </div>
-          </form>
-        </Modal>
       </div>
+
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={isEditing ? 'Edit Account' : 'Add New Account'}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="accountHolderName" className="block text-sm font-medium text-gray-700">
+              Account Holder Name
+            </label>
+            <input
+              type="text"
+              id="accountHolderName"
+              value={formData.accountHolderName}
+              onChange={(e) => setFormData({ ...formData, accountHolderName: e.target.value })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700">
+              Account Number
+            </label>
+            <input
+              type="text"
+              id="accountNumber"
+              value={formData.accountNumber}
+              onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="ifscCode" className="block text-sm font-medium text-gray-700">
+              IFSC Code
+            </label>
+            <input
+              type="text"
+              id="ifscCode"
+              value={formData.ifscCode}
+              onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
+              Tags (comma-separated)
+            </label>
+            <input
+              type="text"
+              id="tags"
+              value={formData.tags.join(', ')}
+              onChange={(e) => setFormData({ ...formData, tags: e.target.value.split(',').map(tag => tag.trim()) })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600"
+            >
+              {isEditing ? 'Update' : 'Add'} Account
+            </button>
+          </div>
+        </form>
+      </Modal>
       <ConfirmDeleteModal
         isOpen={deleteModal.open}
         onClose={() => setDeleteModal({ open: false, account: null, loading: false })}

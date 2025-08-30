@@ -4,7 +4,7 @@ import AccountsClient from '../sub-pages/accounts/AccountsClient';
 import StatementsPage from '../sub-pages/statements/page';
 import SuperBankPage from '../super-bank/page';
 import CreateBankModal from '../components/Modals/CreateBankModal';
-import { RiBankLine, RiCloseLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
+import { RiBankLine, RiCloseLine, RiEdit2Line, RiDeleteBin6Line, RiAddLine, RiAccountPinCircleLine } from 'react-icons/ri';
 import { Bank } from '../types/aws';
 import { useRouter, usePathname } from 'next/navigation';
 import BanksSidebar from '../components/BanksSidebar';
@@ -356,19 +356,28 @@ export default function BanksTabsClient() {
         </div>
         </div>
 
-        {/* Main Content */}
+        {/* Enhanced Main Content */}
         <div className="flex-1 overflow-hidden">
           {activeTab === 'overview' && (
-            <div className="p-6">
+            <div className="p-4 space-y-4">
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-                  <p className="font-medium">Error</p>
-                  <p className="text-sm">{error}</p>
-                  {error.includes('AWS configuration') && (
-                    <p className="text-sm mt-2">
-                      Please check your .env.local file and ensure AWS credentials are properly configured.
-                    </p>
-                  )}
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 bg-red-100 rounded-full flex items-center justify-center">
+                      <svg className="w-3 h-3 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">Error</p>
+                      <p className="text-xs">{error}</p>
+                      {error.includes('AWS configuration') && (
+                        <p className="text-xs mt-1">
+                          Please check your .env.local file and ensure AWS credentials are properly configured.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -380,103 +389,139 @@ export default function BanksTabsClient() {
                 onUpdate={handleUpdateBank}
               />
 
-
+              {/* Compact Header Section */}
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold mb-1">Bank Management</h1>
+                    <p className="text-blue-100 text-sm">Manage your financial institutions and accounts</p>
+                  </div>
+                  <div className="hidden md:block">
+                    <div className="text-right">
+                      <div className="text-xl font-bold">{banks.length}</div>
+                      <div className="text-blue-100 text-sm">Total Banks</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Compact Bank Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {isFetching ? (
-                  <div className="col-span-full text-center py-12 text-gray-500">
-                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    Loading banks...
+                  <div className="col-span-full text-center py-12">
+                    <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-base font-medium text-gray-700 mb-1">Loading banks...</p>
+                    <p className="text-sm text-gray-500">Please wait while we fetch your financial data</p>
                   </div>
                 ) : banks.length === 0 ? (
-                  <div className="col-span-full text-center py-12 text-gray-500">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <RiBankLine className="text-gray-400" size={32} />
+                  <div className="col-span-full text-center py-12">
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <RiBankLine className="text-blue-600" size={40} />
                     </div>
-                    <p className="text-lg font-medium text-gray-900 mb-2">No banks added yet</p>
-                    <p className="text-sm text-gray-500">Click &quot;Add Bank&quot; to get started</p>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">No banks added yet</h3>
+                    <p className="text-gray-600 mb-4 max-w-md mx-auto text-sm">Get started by adding your first bank to begin managing your financial accounts and transactions.</p>
+                    <button
+                      onClick={() => setIsModalOpen(true)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200 text-sm"
+                    >
+                      <RiAddLine size={18} />
+                      Add Your First Bank
+                    </button>
                   </div>
                 ) : isLoadingStats ? (
-                  <div className="col-span-full text-center py-12 text-gray-500">
-                    <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    Loading bank statistics...
+                  <div className="col-span-full text-center py-12">
+                    <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-base font-medium text-gray-700 mb-1">Loading bank statistics...</p>
+                    <p className="text-sm text-gray-500">Analyzing your financial data</p>
                   </div>
                 ) : (
                   banks.map((bank) => (
                     <div
                       key={bank.id}
                       onClick={() => handleBankCardClick(bank)}
-                      className="cursor-pointer bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg hover:scale-105 transition-all duration-300 group relative overflow-hidden"
+                      className="group cursor-pointer bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-lg hover:scale-105 transition-all duration-300 relative overflow-hidden"
                     >
-                      {/* Background Pattern */}
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-100 to-transparent rounded-full opacity-20 transform translate-x-16 -translate-y-16"></div>
+                      {/* Compact Background Pattern */}
+                      <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-blue-100 via-purple-100 to-transparent rounded-full opacity-30 transform translate-x-14 -translate-y-14 group-hover:scale-110 transition-transform duration-300"></div>
                       
-                      {/* Edit/Delete Buttons */}
+                      {/* Compact Edit/Delete Buttons */}
                       {user?.email === adminEmail && (
-                        <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10">
                           <button
-                            className="p-2 bg-white hover:bg-blue-50 rounded-full shadow-sm border border-gray-200"
+                            className="p-1.5 bg-white/90 backdrop-blur-sm hover:bg-blue-50 rounded-lg shadow border border-gray-200 hover:scale-110 transition-all duration-200"
                             onClick={e => { e.stopPropagation(); handleEditBank(bank); }}
                             title="Edit Bank"
                           >
-                            <RiEdit2Line className="text-blue-600" size={16} />
+                            <RiEdit2Line className="text-blue-600" size={14} />
                           </button>
                           <button
-                            className="p-2 bg-white hover:bg-red-50 rounded-full shadow-sm border border-gray-200"
+                            className="p-1.5 bg-white/90 backdrop-blur-sm hover:bg-red-50 rounded-lg shadow border border-gray-200 hover:scale-110 transition-all duration-200"
                             onClick={e => { e.stopPropagation(); handleDeleteBank(bank.id); }}
                             title="Delete Bank"
                           >
-                            <RiDeleteBin6Line className="text-red-600" size={16} />
+                            <RiDeleteBin6Line className="text-red-600" size={14} />
                           </button>
                         </div>
                       )}
                       
-                      {/* Bank Header */}
-                      <div className="flex items-center space-x-4 mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-sm">
-                          <RiBankLine className="text-white" size={24} />
+                      {/* Compact Bank Header */}
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow">
+                          <RiBankLine className="text-white" size={20} />
                         </div>
-                        <div>
-                          <h3 className="text-xl font-bold text-gray-900">{bank.bankName}</h3>
-                          <p className="text-sm text-gray-500">Financial Institution</p>
-                        </div>
-                      </div>
-                      
-                      {/* Bank Stats */}
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="bg-white rounded-lg p-3 border border-gray-100">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500 uppercase tracking-wide">Accounts</span>
-                            <span className="text-lg font-bold text-blue-600">
-                              {typeof bankStats[bank.id]?.accounts === 'number' ? bankStats[bank.id].accounts : 0}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="bg-white rounded-lg p-3 border border-gray-100">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500 uppercase tracking-wide">Transactions</span>
-                            <span className="text-lg font-bold text-green-600">
-                              {typeof bankStats[bank.id]?.transactions === 'number' ? bankStats[bank.id].transactions.toLocaleString() : '0'}
-                            </span>
-                          </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-bold text-gray-900 truncate">{bank.bankName}</h3>
+                          <p className="text-xs text-gray-500">Financial Institution</p>
                         </div>
                       </div>
                       
-                      {/* Quick Actions */}
+                      {/* Compact Bank Stats */}
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Accounts</span>
+                              <div className="text-lg font-bold text-blue-700">
+                                {typeof bankStats[bank.id]?.accounts === 'number' ? bankStats[bank.id].accounts : 0}
+                              </div>
+                            </div>
+                            <div className="w-6 h-6 bg-blue-200 rounded-lg flex items-center justify-center">
+                              <RiAccountPinCircleLine className="text-blue-600" size={12} />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs text-green-600 uppercase tracking-wide font-semibold">Transactions</span>
+                              <div className="text-lg font-bold text-green-700">
+                                {typeof bankStats[bank.id]?.transactions === 'number' ? bankStats[bank.id].transactions.toLocaleString() : '0'}
+                              </div>
+                            </div>
+                            <div className="w-6 h-6 bg-green-200 rounded-lg flex items-center justify-center">
+                              <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zm2 6a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4a2 2 0 00-2-2H6z" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Compact Quick Actions */}
                       <div className="flex space-x-2">
-                        <div className="flex-1 bg-blue-100 hover:bg-blue-200 rounded-lg p-2 text-center transition-colors">
-                          <span className="text-xs font-medium text-blue-700">View Accounts</span>
+                        <div className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 rounded-lg p-2 text-center transition-all duration-200 group-hover:shadow-lg">
+                          <span className="text-xs font-semibold text-white">View Accounts</span>
                         </div>
-                        <div className="flex-1 bg-green-100 hover:bg-green-200 rounded-lg p-2 text-center transition-colors">
-                          <span className="text-xs font-medium text-green-700">View Reports</span>
+                        <div className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 rounded-lg p-2 text-center transition-all duration-200 group-hover:shadow-lg">
+                          <span className="text-xs font-semibold text-white">View Reports</span>
                         </div>
                       </div>
                       
-                      {/* Status Indicator */}
+                      {/* Compact Status Indicator */}
                       <div className="absolute bottom-3 left-3">
-                        <div className="flex items-center space-x-1">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-xs text-gray-500">Active</span>
+                        <div className="flex items-center space-x-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm">
+                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                          <span className="text-xs font-medium text-gray-700">Active</span>
                         </div>
                       </div>
                     </div>
@@ -498,9 +543,11 @@ export default function BanksTabsClient() {
             }
             if (tab?.type === 'transactions' && tab.bankId) {
               return (
-                <div className="p-6">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Transactions for {banks.find(b => b.id === tab.bankId)?.bankName}</h2>
-                  <p className="text-gray-600">Transactions management interface will be implemented here.</p>
+                <div className="p-4">
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-xl font-bold text-gray-900 mb-3">Transactions for {banks.find(b => b.id === tab.bankId)?.bankName}</h2>
+                    <p className="text-gray-600 text-sm">Transactions management interface will be implemented here.</p>
+                  </div>
                 </div>
               );
             }

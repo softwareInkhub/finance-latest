@@ -472,13 +472,13 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-2">
-        <div className="flex items-center p-1 border-b border-gray-100">
-          {/* Summary Statistics Row */}
-          <div className="flex-1 flex items-center gap-1.5">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-4">
+        <div className="flex items-center p-2 border-b border-gray-100">
+          {/* Compact Summary Statistics Row */}
+          <div className="flex-1 flex items-center gap-2">
             <div className="relative group">
               <button
-                className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
                 title="Click to view detailed transaction statistics and analysis"
               >
                 Total Tranx: {safeTotalTransactions}
@@ -516,12 +516,12 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                     <span className="text-blue-800">{safeTotalTransactions} transactions</span>
                   </div>
                 </div>
-              </div>
-            </div>
-            
+          </div>
+        </div>
+
             <div className="relative group">
               <button
-                className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-semibold hover:bg-blue-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
                 title="Click to view detailed credit transaction analysis"
               >
                 Cr.: ₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -559,11 +559,11 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                     <span className="text-blue-800">₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
-              </div>
-            </div>
+          </div>
+        </div>
             <div className="relative group">
               <button
-                className="px-2 py-1 bg-red-100 text-red-800 rounded text-sm font-semibold hover:bg-red-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg text-sm font-semibold hover:from-red-600 hover:to-red-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
                 title="Click to view detailed debit transaction analysis"
               >
                 Dr.: ₹{safeTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -599,17 +599,21 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                   <div className="flex justify-between items-center text-sm font-semibold">
                     <span className="text-gray-800">Total</span>
                     <span className="text-red-800">₹{safeTotalDebit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {showBalance && (
+          </div>
+        </div>
+          </div>
+        </div>
+        {showBalance && (
               <div className="relative group">
                 <button
-                  className={`px-2 py-1 rounded text-sm font-semibold hover:transition-colors cursor-pointer ${balance >= 0 ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg ${
+                    balance >= 0 
+                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700' 
+                      : 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white hover:from-yellow-600 hover:to-yellow-700'
+                  }`}
                   title="Click to view detailed balance analysis and financial health"
                 >
-                  Closing Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </button>
                 {/* Balance Breakdown by Bank Tooltip */}
                 <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
@@ -655,7 +659,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
             )}
             <div className="relative group">
               <button
-                className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm font-semibold hover:bg-yellow-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg text-sm font-semibold hover:from-yellow-600 hover:to-yellow-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
                 title="Click to view detailed bank information and distribution"
               >
                 Total Banks: {safeTotalBanks}
@@ -697,7 +701,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
             </div>
             <div className="relative group">
               <button
-                className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-sm font-semibold hover:bg-purple-200 transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg text-sm font-semibold hover:from-purple-600 hover:to-purple-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
                 title="Click to view detailed account information and management insights"
               >
                 Total Acc.: {safeTotalAccounts}
@@ -718,8 +722,8 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                                 <span className="font-medium">{acc.count} transactions</span>
                               </div>
                             ))}
-                          </div>
-                        )}
+          </div>
+        )}
                       </div>
                     ))}
                   </div>
@@ -732,8 +736,8 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                     <span className="text-purple-800">{safeTotalAccounts} accounts</span>
                   </div>
                 </div>
-              </div>
-            </div>
+          </div>
+        </div>
           </div>
         </div>
       </div>

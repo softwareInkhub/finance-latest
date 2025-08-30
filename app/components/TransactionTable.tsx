@@ -164,7 +164,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
       ) : rows.length === 0 ? (
         <div className="text-gray-500 text-sm">No mapped transactions found.</div>
       ) : (
-        <table className="w-full border text-xs sm:text-sm bg-white/80 rounded-xl shadow" style={{ height: 'fit-content' }}>
+        <table className="w-full text-sm bg-white border border-gray-200" style={{ height: 'fit-content' }}>
           <colgroup>
             <col style={{ width: 40 }} />
             <col style={{ width: 40 }} />
@@ -172,16 +172,21 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               <col key={h} style={{ width: columnWidths[h] || DEFAULT_WIDTH }} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-20 bg-white shadow">
+          <thead className="sticky top-0 z-20 bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="border px-2 py-1 bg-gray-100" style={{ width: 40 }} title="Select all transactions">
-                <input type="checkbox" checked={selectAll} onChange={onSelectAll} />
+              <th className="px-3 py-3 text-left border-r border-gray-200" style={{ width: 40 }} title="Select all transactions">
+                <input 
+                  type="checkbox" 
+                  checked={selectAll} 
+                  onChange={onSelectAll}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                />
               </th>
-              <th className="border px-2 py-1 font-bold bg-gray-100" style={{ width: 40 }} title="Row number">#</th>
-              {headers.map((sh) => (
+              <th className="px-3 py-3 text-left font-medium text-gray-700 border-r border-gray-200" style={{ width: 40 }} title="Row number">#</th>
+              {headers.map((sh, index) => (
                 <th
                   key={sh}
-                  className="border px-2 py-1 font-bold bg-gray-100 group relative select-none whitespace-nowrap text-ellipsis"
+                  className={`px-3 py-3 text-left font-medium text-gray-700 group relative select-none whitespace-nowrap text-ellipsis ${index === headers.length - 1 ? '' : 'border-r border-gray-200'}`}
                   style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}
                   draggable
                   onDragStart={() => handleDragStart(sh)}
@@ -497,16 +502,16 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               const tx = transactions?.find(t => t.id === row.id);
               return (
                 <tr key={idx} data-row-idx={idx} data-transaction-id={row.id} className="hover:bg-blue-50 transition-colors duration-150">
-                  <td className="border px-2 py-1 text-center" style={{ width: 40 }}>
+                  <td className="border px-2 py-1 text-center border-r border-gray-200" style={{ width: 40 }}>
                     <input
                       type="checkbox"
                       checked={selectedRows.has(idx)}
                       onChange={() => onRowSelect(idx)}
                     />
                   </td>
-                  <td className="border px-2 py-1 text-center" style={{ width: 40 }}>{idx + 1}</td>
-                  {headers.map((sh) => (
-                    <td key={sh} className="border px-2 py-1 whitespace-nowrap overflow-hidden text-ellipsis" style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}>
+                  <td className="border px-2 py-1 text-center border-r border-gray-200" style={{ width: 40 }}>{idx + 1}</td>
+                  {headers.map((sh, index) => (
+                    <td key={sh} className={`border px-2 py-1 whitespace-nowrap overflow-hidden text-ellipsis ${index === headers.length - 1 ? '' : 'border-r border-gray-200'}`} style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}>
                       {(sh.toLowerCase() === 'tags' || sh === 'Tags') && Array.isArray(row[sh]) ? (
                         <div className="flex gap-1">
                           {(row[sh] as Tag[]).map((tag, tagIdx: number) => (

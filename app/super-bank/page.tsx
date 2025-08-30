@@ -3564,10 +3564,21 @@ export default function SuperBankPage() {
     <div className="h-screen overflow-y-auto">
       <div className="py-4 sm:py-6 px-2 sm:px-4">
         <div className="max-w-full mx-auto flex flex-col">
+        {/* New Super Bank Header with Logo */}
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
-          <h3 className="font-bold text-blue-700 truncate" title="View and manage all your financial transactions across multiple banks">Super Bank: All Transactions</h3> 
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center shadow">
+              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Super Bank</h1>
+              <p className="text-sm text-gray-600">All Transactions Dashboard</p>
+            </div>
+          </div>
           <button
-            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded shadow font-semibold text-xs whitespace-nowrap"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow font-semibold text-sm whitespace-nowrap"
             onClick={() => setShowHeaderSection(true)}
             title="Configure custom column headers for the transaction table"
           >
