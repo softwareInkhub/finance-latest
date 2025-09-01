@@ -87,12 +87,15 @@ export async function POST(request: Request) {
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
 
-    // Attempt to recompute tag summary if a single userId is provided in any update.transactionData
+    // Attempt to recompute tag summary asynchronously if a single userId is provided in any update.transactionData
     try {
       const anyWithUserId = (updates || []).find(u => u.transactionData && typeof (u.transactionData as Record<string, unknown>).userId === 'string');
       const userId = anyWithUserId ? (anyWithUserId.transactionData as Record<string, unknown>).userId as string : undefined;
       if (userId) {
-        await recomputeAndSaveTagsSummary(userId);
+        // Fire and forget - don't await this to avoid blocking the response
+        recomputeAndSaveTagsSummary(userId).catch(e => {
+          console.warn('Tags summary recompute after bulk update failed (non-blocking):', e);
+        });
       }
     } catch (e) {
       console.warn('Tags summary recompute after bulk update failed (non-blocking):', e);

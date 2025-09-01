@@ -3,12 +3,15 @@ import { PutCommand, ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb
 import { docClient, TABLES } from '../aws-client';
 import { v4 as uuidv4 } from 'uuid';
 
+
+
 // GET /api/account?bankId=xxx&userId=yyy
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const accountId = searchParams.get('accountId');
   const bankId = searchParams.get('bankId');
   const userId = searchParams.get('userId');
+  
   if (accountId) {
     // Fetch a single account by id
     try {
@@ -25,9 +28,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch account' }, { status: 500 });
     }
   }
+  
   if (!bankId && bankId !== 'all') {
     return NextResponse.json({ error: 'bankId is required' }, { status: 400 });
   }
+  
   try {
     let filterExpression = '';
     const expressionAttributeValues: Record<string, string | number> = {};

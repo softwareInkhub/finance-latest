@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES } from '../aws-client';
 
+
+
 // GET /api/statements?accountId=xxx&userId=yyy&bankId=zzz
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

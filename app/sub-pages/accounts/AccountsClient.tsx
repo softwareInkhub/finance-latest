@@ -65,78 +65,297 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
       setIsLoading(false);
       return;
     }
+
+    const controller = new AbortController();
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isMounted = true;
+
     const fetchAccounts = async () => {
       try {
+        console.log('Fetching accounts for bankId:', bankId);
         const userId = localStorage.getItem('userId');
         if (!userId) {
-          setError('User ID not found');
-          setIsLoading(false);
+          if (isMounted) {
+            setError('User ID not found');
+            setIsLoading(false);
+          }
           return;
         }
-        const response = await fetch(`/api/account?bankId=${bankId}&userId=${userId}`);
+        
+        // Set timeout for the request
+        timeoutId = setTimeout(() => {
+          if (!controller.signal.aborted) {
+            controller.abort();
+          }
+        }, 30000); // 30 second timeout
+        
+        const response = await fetch(`/api/account?bankId=${bankId}&userId=${userId}`, {
+          signal: controller.signal
+        });
+        
         if (!response.ok) {
-          throw new Error('Failed to fetch accounts');
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        setAccounts(data);
+        
+        // Only update state if component is still mounted
+        if (isMounted) {
+          console.log('Accounts fetched successfully:', data);
+          setAccounts(data);
+          setError(null);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        console.error('Error fetching accounts:', err);
+        if (isMounted) {
+          if (err instanceof Error) {
+            if (err.name === 'AbortError') {
+              // Don't set error for abort - it's expected when component unmounts
+              console.log('Request was aborted (likely due to component unmount)');
+              return; // Exit early for AbortError
+            } else if (err.message.includes('Failed to fetch')) {
+              setError('Network error. Please check your connection and try again.');
+            } else {
+              setError(err.message);
+            }
+          } else {
+            setError('An error occurred while fetching accounts');
+          }
+        }
       } finally {
-        setIsLoading(false);
+        // Always clear the timeout to prevent memory leaks
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
+
     fetchAccounts();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      // Only abort if not already aborted to prevent unnecessary abort calls
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    };
   }, [bankId]);
 
   useEffect(() => {
     if (!bankId) return;
-    fetch(`/api/bank`)
-      .then(res => res.json())
-      .then((banks: { id: string; bankName: string }[]) => {
-        const bank = Array.isArray(banks) ? banks.find((b) => b.id === bankId) : null;
-        setBankName(bank?.bankName || "");
-      });
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const fetchBankData = async () => {
+      try {
+        console.log('Fetching bank data for bankId:', bankId);
+        const response = await fetch(`/api/bank`, {
+          signal: controller.signal
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const banks: { id: string; bankName: string }[] = await response.json();
+        
+        if (isMounted) {
+          console.log('Bank data fetched successfully:', banks);
+          const bank = Array.isArray(banks) ? banks.find((b) => b.id === bankId) : null;
+          setBankName(bank?.bankName || "");
+        }
+      } catch (err) {
+        console.error('Error fetching bank data:', err);
+        if (isMounted && err instanceof Error) {
+          if (err.name === 'AbortError') {
+            console.log('Bank data request was aborted (likely due to component unmount)');
+            return; // Exit early for AbortError
+          } else {
+            setBankName("");
+          }
+        }
+      }
+    };
+
+    fetchBankData();
+
+    return () => {
+      isMounted = false;
+      // Only abort if not already aborted to prevent unnecessary abort calls
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    };
   }, [bankId]);
 
   useEffect(() => {
     if (!bankId || !bankName) return;
-    setHeaderLoading(true);
-    setHeaderError(null);
-    setHeaderSuccess(null);
-    fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && Array.isArray(data.header)) {
-          setBankHeader(data.header);
-          setHeaderInputs(data.header);
-        } else {
-          setBankHeader([]);
-          setHeaderInputs([]);
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const fetchBankHeader = async () => {
+      if (isMounted) {
+        setHeaderLoading(true);
+        setHeaderError(null);
+        setHeaderSuccess(null);
+      }
+
+      try {
+        const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`, {
+          signal: controller.signal
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-      })
-      .catch(() => setHeaderError("Failed to fetch bank header"))
-      .finally(() => setHeaderLoading(false));
+        
+        const data = await response.json();
+        
+        if (isMounted) {
+          if (data && Array.isArray(data.header)) {
+            setBankHeader(data.header);
+            setHeaderInputs(data.header);
+          } else {
+            setBankHeader([]);
+            setHeaderInputs([]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching bank header:', err);
+        if (isMounted && err instanceof Error) {
+          if (err.name === 'AbortError') {
+            console.log('Bank header request was aborted (likely due to component unmount)');
+            return; // Exit early for AbortError
+          } else {
+            setHeaderError("Failed to fetch bank header");
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setHeaderLoading(false);
+        }
+      }
+    };
+
+    fetchBankHeader();
+
+    return () => {
+      isMounted = false;
+      // Only abort if not already aborted to prevent unnecessary abort calls
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    };
   }, [bankId, bankName]);
 
   useEffect(() => {
-    fetch(`/api/bank-header?bankName=SUPER%20BANK`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && Array.isArray(data.header)) setSuperHeaders(data.header);
-        else setSuperHeaders([]);
-      });
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const fetchSuperBankHeader = async () => {
+      try {
+        const response = await fetch(`/api/bank-header?bankName=SUPER%20BANK`, {
+          signal: controller.signal
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (isMounted) {
+          if (data && Array.isArray(data.header)) {
+            setSuperHeaders(data.header);
+          } else {
+            setSuperHeaders([]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching super bank header:', err);
+        if (isMounted && err instanceof Error) {
+          if (err.name === 'AbortError') {
+            console.log('Super bank header request was aborted (likely due to component unmount)');
+            return; // Exit early for AbortError
+          } else {
+            setSuperHeaders([]);
+          }
+        }
+      }
+    };
+
+    fetchSuperBankHeader();
+
+    return () => {
+      isMounted = false;
+      // Only abort if not already aborted to prevent unnecessary abort calls
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    };
   }, []);
 
   useEffect(() => {
     if (!bankId || !bankName) return;
-    fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.mapping) setMapping(data.mapping);
-        else setMapping({});
-        if (data && data.conditions && Array.isArray(data.conditions)) setConditions(data.conditions);
-        else setConditions([]);
-      });
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    const fetchBankMapping = async () => {
+      try {
+        const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`, {
+          signal: controller.signal
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (isMounted) {
+          if (data && data.mapping) {
+            setMapping(data.mapping);
+          } else {
+            setMapping({});
+          }
+          if (data && data.conditions && Array.isArray(data.conditions)) {
+            setConditions(data.conditions);
+          } else {
+            setConditions([]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching bank mapping:', err);
+        if (isMounted && err instanceof Error) {
+          if (err.name === 'AbortError') {
+            console.log('Bank mapping request was aborted (likely due to component unmount)');
+            return; // Exit early for AbortError
+          } else {
+            setMapping({});
+            setConditions([]);
+          }
+        }
+      }
+    };
+
+    fetchBankMapping();
+
+    return () => {
+      isMounted = false;
+      // Only abort if not already aborted to prevent unnecessary abort calls
+      if (!controller.signal.aborted) {
+        controller.abort();
+      }
+    };
   }, [bankId, bankName]);
 
   const handleAddAccount = () => {

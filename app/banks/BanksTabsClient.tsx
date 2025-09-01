@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import AccountsClient from '../sub-pages/accounts/AccountsClient';
 import StatementsPage from '../sub-pages/statements/page';
 import SuperBankPage from '../super-bank/page';
+import ErrorBoundary from '../components/ErrorBoundary';
 import CreateBankModal from '../components/Modals/CreateBankModal';
 import { RiBankLine, RiCloseLine, RiEdit2Line, RiDeleteBin6Line, RiAddLine, RiAccountPinCircleLine } from 'react-icons/ri';
 import { Bank } from '../types/aws';
@@ -10,6 +11,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import BanksSidebar from '../components/BanksSidebar';
 import { useAuth } from '../hooks/useAuth';
 import BankFilesComponent from '../components/BankFilesComponent';
+import BankTransactionsPage from '../components/BankTransactionsPage';
 
 // Define a type for tabs
 interface Tab {
@@ -136,8 +138,6 @@ export default function BanksTabsClient() {
     }
   }, [banks]);
 
-
-
   const handleCreateBank = async (bankName: string, tags: string[]) => {
     const exists = banks.some(
       b => b.bankName.trim().toLowerCase() === bankName.trim().toLowerCase()
@@ -253,7 +253,7 @@ export default function BanksTabsClient() {
 
   // Render tab bar and content
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       <BanksSidebar 
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => {
@@ -332,15 +332,15 @@ export default function BanksTabsClient() {
        
 
         {/* Tab Navigation */}
-        <div className="bg-white border-b border-gray-200 px-6">
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6">
           <div className="flex items-center space-x-1">
           {tabs.map(tab => (
             <button
               key={tab.key}
                 className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 flex items-center space-x-2 ${
                 activeTab === tab.key
-                    ? 'border-blue-600 text-blue-700 bg-white'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-blue-600 text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
               onClick={() => setActiveTab(tab.key)}
             >
@@ -410,16 +410,16 @@ export default function BanksTabsClient() {
                 {isFetching ? (
                   <div className="col-span-full text-center py-12">
                     <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-base font-medium text-gray-700 mb-1">Loading banks...</p>
-                    <p className="text-sm text-gray-500">Please wait while we fetch your financial data</p>
+                    <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Loading banks...</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Please wait while we fetch your financial data</p>
                   </div>
                 ) : banks.length === 0 ? (
                   <div className="col-span-full text-center py-12">
-                    <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <RiBankLine className="text-blue-600" size={40} />
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <RiBankLine className="text-blue-600 dark:text-blue-400" size={40} />
                     </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">No banks added yet</h3>
-                    <p className="text-gray-600 mb-4 max-w-md mx-auto text-sm">Get started by adding your first bank to begin managing your financial accounts and transactions.</p>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">No banks added yet</h3>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4 max-w-md mx-auto text-sm">Get started by adding your first bank to begin managing your financial accounts and transactions.</p>
                     <button
                       onClick={() => setIsModalOpen(true)}
                       className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200 text-sm"
@@ -431,15 +431,15 @@ export default function BanksTabsClient() {
                 ) : isLoadingStats ? (
                   <div className="col-span-full text-center py-12">
                     <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-base font-medium text-gray-700 mb-1">Loading bank statistics...</p>
-                    <p className="text-sm text-gray-500">Analyzing your financial data</p>
+                    <p className="text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Loading bank statistics...</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Analyzing your financial data</p>
                   </div>
                 ) : (
                   banks.map((bank) => (
                     <div
                       key={bank.id}
                       onClick={() => handleBankCardClick(bank)}
-                      className="group cursor-pointer bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-lg hover:scale-105 transition-all duration-300 relative overflow-hidden"
+                      className="group cursor-pointer bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg hover:scale-105 transition-all duration-300 relative overflow-hidden"
                     >
                       {/* Compact Background Pattern */}
                       <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-blue-100 via-purple-100 to-transparent rounded-full opacity-30 transform translate-x-14 -translate-y-14 group-hover:scale-110 transition-transform duration-300"></div>
@@ -470,36 +470,36 @@ export default function BanksTabsClient() {
                           <RiBankLine className="text-white" size={20} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-lg font-bold text-gray-900 truncate">{bank.bankName}</h3>
-                          <p className="text-xs text-gray-500">Financial Institution</p>
+                          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">{bank.bankName}</h3>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Financial Institution</p>
                         </div>
                       </div>
                       
                       {/* Compact Bank Stats */}
                       <div className="grid grid-cols-2 gap-3 mb-4">
-                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200">
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-900/50 rounded-lg p-3 border border-blue-200 dark:border-blue-700">
                           <div className="flex items-center justify-between">
                             <div>
-                              <span className="text-xs text-blue-600 uppercase tracking-wide font-semibold">Accounts</span>
-                              <div className="text-lg font-bold text-blue-700">
+                              <span className="text-xs text-blue-600 dark:text-blue-400 uppercase tracking-wide font-semibold">Accounts</span>
+                              <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
                                 {typeof bankStats[bank.id]?.accounts === 'number' ? bankStats[bank.id].accounts : 0}
                               </div>
                             </div>
-                            <div className="w-6 h-6 bg-blue-200 rounded-lg flex items-center justify-center">
-                              <RiAccountPinCircleLine className="text-blue-600" size={12} />
+                            <div className="w-6 h-6 bg-blue-200 dark:bg-blue-800 rounded-lg flex items-center justify-center">
+                              <RiAccountPinCircleLine className="text-blue-600 dark:text-blue-400" size={12} />
                             </div>
                           </div>
                         </div>
-                        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200">
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-900/50 rounded-lg p-3 border border-green-200 dark:border-green-700">
                           <div className="flex items-center justify-between">
                             <div>
-                              <span className="text-xs text-green-600 uppercase tracking-wide font-semibold">Transactions</span>
-                              <div className="text-lg font-bold text-green-700">
+                              <span className="text-xs text-green-600 dark:text-green-400 uppercase tracking-wide font-semibold">Transactions</span>
+                              <div className="text-lg font-bold text-green-700 dark:text-green-300">
                                 {typeof bankStats[bank.id]?.transactions === 'number' ? bankStats[bank.id].transactions.toLocaleString() : '0'}
                               </div>
                             </div>
-                            <div className="w-6 h-6 bg-green-200 rounded-lg flex items-center justify-center">
-                              <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                            <div className="w-6 h-6 bg-green-200 dark:bg-green-800 rounded-lg flex items-center justify-center">
+                              <svg className="w-3 h-3 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4zm2 6a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4a2 2 0 00-2-2H6z" />
                               </svg>
                             </div>
@@ -519,9 +519,9 @@ export default function BanksTabsClient() {
                       
                       {/* Compact Status Indicator */}
                       <div className="absolute bottom-3 left-3">
-                        <div className="flex items-center space-x-1 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm">
+                        <div className="flex items-center space-x-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-full px-2 py-1 shadow-sm">
                           <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                          <span className="text-xs font-medium text-gray-700">Active</span>
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Active</span>
                         </div>
                       </div>
                     </div>
@@ -533,26 +533,42 @@ export default function BanksTabsClient() {
           {activeTab !== 'overview' && (() => {
             const tab = tabs.find(t => t.key === activeTab);
             if (tab?.type === 'accounts' && tab.bankId) {
-              return <AccountsClient bankId={tab.bankId} onAccountClick={account => handleAccountClick(account, tab.bankId!)} allTags={allTags} />;
+              return (
+                <ErrorBoundary>
+                  <AccountsClient bankId={tab.bankId} onAccountClick={account => handleAccountClick(account, tab.bankId!)} allTags={allTags} />
+                </ErrorBoundary>
+              );
             }
             if (tab?.type === 'statements' && tab.bankId) {
-              return <StatementsPage />;
+              return (
+                <ErrorBoundary>
+                  <StatementsPage />
+                </ErrorBoundary>
+              );
             }
             if (tab?.type === 'files' && tab.bankId) {
               return <BankFilesComponent bankId={tab.bankId} bankName={banks.find(b => b.id === tab.bankId)?.bankName || ''} />;
             }
             if (tab?.type === 'transactions' && tab.bankId) {
+              const bank = banks.find(b => b.id === tab.bankId);
+              if (bank) {
+                return <BankTransactionsPage bankName={bank.bankName} />;
+              }
               return (
                 <div className="p-4">
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h2 className="text-xl font-bold text-gray-900 mb-3">Transactions for {banks.find(b => b.id === tab.bankId)?.bankName}</h2>
-                    <p className="text-gray-600 text-sm">Transactions management interface will be implemented here.</p>
+                  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3">Transactions</h2>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">Bank not found.</p>
                   </div>
                 </div>
               );
             }
             if (tab?.type === 'super-bank') {
-              return <SuperBankPage />;
+              return (
+                <ErrorBoundary>
+                  <SuperBankPage />
+                </ErrorBoundary>
+              );
             }
             return <div>Custom Tab Content</div>;
           })()}

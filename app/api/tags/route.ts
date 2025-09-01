@@ -7,6 +7,8 @@ import { getUniqueColor, getExistingColors } from '../../utils/colorUtils';
 
 export const runtime = 'nodejs';
 
+
+
 // Type definitions for cashflow data structures
 interface CashFlowItem {
   id: string;

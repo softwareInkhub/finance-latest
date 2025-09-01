@@ -2016,8 +2016,15 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
 export default function SuperBankPage() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingProgress, setLoadingProgress] = useState<string>("Loading transactions...");
+  const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger
+  
+  // Add debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('SuperBankPage rendered - loading:', loading, 'error:', error, 'transactions count:', transactions.length);
+  }
 
   // Super Bank header state
   const [superHeader, setSuperHeader] = useState<string[]>([]);
@@ -2120,14 +2127,35 @@ export default function SuperBankPage() {
       
       for (const accountId of uniqueAccountIds) {
         try {
-          const response = await fetch(`/api/account?accountId=${accountId}`);
-          if (response.ok) {
-            const account = await response.json();
-            if (account) {
-              accountInfoMap[accountId] = {
-                accountName: account.accountHolderName || 'N/A',
-                accountNumber: account.accountNumber || 'N/A'
-              };
+          let timeoutId: NodeJS.Timeout | null = null;
+          let controller: AbortController | null = null;
+          
+          try {
+            controller = new AbortController();
+            timeoutId = setTimeout(() => {
+              if (controller) {
+                controller.abort();
+              }
+            }, 10000); // 10 second timeout for individual account requests
+            
+            const response = await fetch(`/api/account?accountId=${accountId}`, {
+              signal: controller.signal
+            });
+            
+            if (response.ok) {
+              const account = await response.json();
+              if (account) {
+                accountInfoMap[accountId] = {
+                  accountName: account.accountHolderName || 'N/A',
+                  accountNumber: account.accountNumber || 'N/A'
+                };
+              }
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch account info for ${accountId}:`, error);
+          } finally {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
             }
           }
         } catch (error) {
@@ -2152,25 +2180,252 @@ export default function SuperBankPage() {
     }
   };
 
-  // Fetch all transactions
+  // Fetch all transactions with streaming
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const userId = localStorage.getItem("userId") || "";
-    fetch(`/api/transactions/all?userId=${userId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setTransactions(data);
-        else setError(data.error || "Failed to fetch transactions");
-      })
-      .catch(() => setError("Failed to fetch transactions"))
-      .finally(() => setLoading(false));
+    try {
+      setLoading(true);
+      setError(null);
+      setTransactions([]); // Clear existing transactions
+      const userId = localStorage.getItem("userId") || "";
+    
+    if (!userId) {
+      setError("User ID not found. Please log in again.");
+      setLoading(false);
+      return;
+    }
+    
+    let timeoutId: NodeJS.Timeout | null = null;
+    let controller: AbortController | null = null;
+    const maxRetries = 3;
+    let isComponentMounted = true; // Track if component is still mounted
+    let retryCount = 0; // Move retryCount inside the scope
+    let isStreamingCompleted = false; // Track if streaming has completed
+    
+    const streamTransactions = () => {
+      // Don't start new fetch if component is unmounted or streaming is already completed
+      if (!isComponentMounted || isStreamingCompleted) {
+        console.log('Streaming skipped: component unmounted or already completed');
+        return;
+      }
+      
+      try {
+        controller = new AbortController();
+        timeoutId = setTimeout(() => {
+          if (controller && isComponentMounted) {
+            controller.abort();
+          }
+        }, 120000); // Reduced to 2 minutes timeout for streaming
+        
+        console.log('Starting streaming transactions for userId:', userId);
+        
+        if (isComponentMounted) {
+          setLoadingProgress("Connecting to database...");
+        }
+        
+        // Use the new streaming API
+        fetch(`/api/transactions/stream?userId=${userId}&limit=10000`, {
+          signal: controller.signal,
+        })
+          .then((res) => {
+            if (!isComponentMounted) return; // Don't process if unmounted
+            if (!res.ok) {
+              throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            
+            const reader = res.body?.getReader();
+            const decoder = new TextDecoder();
+            
+            if (!reader) {
+              throw new Error('No response body');
+            }
+            
+            let buffer = '';
+            
+            const processStream = async () => {
+              try {
+                let streamingCompleted = false;
+                while (true && !streamingCompleted) {
+                  const { done, value } = await reader.read();
+                  
+                  if (done) break;
+                  
+                  buffer += decoder.decode(value, { stream: true });
+                  const lines = buffer.split('\n');
+                  buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                  
+                  for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                      try {
+                        const data = JSON.parse(line.slice(6));
+                        
+                        switch (data.type) {
+                          case 'status':
+                            if (isComponentMounted) {
+                              setLoadingProgress(data.message);
+                            }
+                            break;
+                            
+                          case 'progress':
+                            if (isComponentMounted) {
+                              setLoadingProgress(`Fetched ${data.totalCount} transactions from ${data.bankName}...`);
+                            }
+                            break;
+                            
+                          case 'transaction':
+                            if (isComponentMounted) {
+                              setTransactions(prev => [...prev, data.data]);
+                            }
+                            break;
+                            
+                          case 'complete':
+                            if (isComponentMounted) {
+                              console.log(`Streaming completed: ${data.totalTransactions} transactions`);
+                              setLoadingProgress(`Completed! Loaded ${data.totalTransactions} transactions`);
+                              setError(null);
+                              setLoading(false); // Stop loading when complete
+                              streamingCompleted = true; // Mark streaming as completed
+                              isStreamingCompleted = true; // Mark global streaming as completed
+                            }
+                            break;
+                            
+                          case 'error':
+                            if (isComponentMounted) {
+                              console.warn('Streaming error:', data.message);
+                            }
+                            break;
+                        }
+                      } catch (parseError) {
+                        console.warn('Failed to parse streaming data:', parseError);
+                      }
+                    }
+                  }
+                }
+              } catch (streamError) {
+                if (isComponentMounted) {
+                  console.error('Streaming error:', streamError);
+                  setError(`Streaming error: ${streamError instanceof Error ? streamError.message : 'Unknown error'}`);
+                }
+              } finally {
+                if (isComponentMounted) {
+                  setLoading(false);
+                }
+                // Clear any pending timeouts
+                if (timeoutId) {
+                  clearTimeout(timeoutId);
+                }
+              }
+            };
+            
+            processStream();
+          })
+          .catch((error) => {
+            if (!isComponentMounted) return; // Don't process if unmounted
+            
+            // Handle AbortError gracefully
+            if (error.name === 'AbortError') {
+              if (!isComponentMounted) {
+                console.log('Stream aborted due to component unmount - this is normal behavior');
+                return;
+              }
+              // Only retry if it's not a cleanup abort and we haven't exceeded max retries
+              if (retryCount < maxRetries && isComponentMounted) {
+                retryCount++;
+                console.log(`Retrying stream (attempt ${retryCount}/${maxRetries})...`);
+                setLoadingProgress(`Retrying... (${retryCount}/${maxRetries})`);
+                setTimeout(() => {
+                  if (isComponentMounted) {
+                    streamTransactions();
+                  }
+                }, 1000); // Reduced wait time to 1 second before retry
+              } else {
+                console.log('Max retries reached or component unmounted, stopping retries');
+                setError('Database connection timeout. Please check your internet connection and try again.');
+                setLoading(false);
+              }
+              return;
+            }
+            
+            // Handle other errors
+            console.error('Error streaming transactions:', error);
+            setError(`Failed to stream transactions: ${error.message}`);
+            setLoading(false);
+          });
+      } catch (error) {
+        if (!isComponentMounted) return; // Don't process if unmounted
+        console.error('Error setting up stream request:', error);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        setError(`Failed to setup stream request: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setLoading(false);
+      }
+    };
+    
+    // Reset completion flag when refresh trigger changes (new files uploaded)
+    isStreamingCompleted = false;
+    
+    streamTransactions();
+    
+    // Cleanup function
+    return () => {
+      isComponentMounted = false; // Mark component as unmounted
+      isStreamingCompleted = false; // Reset completion flag
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (controller) {
+        // Only abort if it's not already aborted
+        try {
+          controller.abort();
+        } catch {
+          // Ignore abort errors during cleanup
+          console.log('Cleanup abort completed');
+        }
+      }
+    };
+    } catch (error) {
+      console.error('Error in useEffect setup:', error);
+      setError(`Failed to initialize data fetching: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setLoading(false);
+    }
+  }, [refreshTrigger]); // Add refreshTrigger as dependency
+
+  // Listen for file upload events and refresh data
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      // Check if a file was uploaded (this is a simple trigger mechanism)
+      if (e.key === 'lastFileUpload' && e.newValue) {
+        console.log('File upload detected, refreshing Super Bank data...');
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    // Listen for storage events (when localStorage changes in other tabs/windows)
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also check for a custom event that can be triggered from file upload
+    const handleFileUpload = () => {
+      console.log('File upload event received, refreshing Super Bank data...');
+      setRefreshTrigger(prev => prev + 1);
+    };
+
+    window.addEventListener('fileUploaded', handleFileUpload);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('fileUploaded', handleFileUpload);
+    };
   }, []);
 
   // Fetch Super Bank header
   useEffect(() => {
     fetch(`/api/bank-header?bankName=SUPER%20BANK`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
       .then(data => {
         if (data && Array.isArray(data.header)) {
           // Ensure 'Tags' is included in the header
@@ -2181,13 +2436,24 @@ export default function SuperBankPage() {
           setSuperHeader(['Tags']);
           setHeaderInputs(['Tags']);
         }
+      })
+      .catch(error => {
+        console.error('Error fetching bank header:', error);
+        // Set default header if fetch fails
+        setSuperHeader(['Tags']);
+        setHeaderInputs(['Tags']);
       });
   }, []);
 
   // Fetch all bank header mappings
   useEffect(() => {
     fetch(`/api/bank`)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
       .then(async (banks: { id: string; bankName: string }[]) => {
 
         if (!Array.isArray(banks)) return;
@@ -2352,7 +2618,7 @@ export default function SuperBankPage() {
       setTagCreateMsg("Tag applied to transaction!");
       setTimeout(() => setTagCreateMsg(null), 1500);
       setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
+      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || "") + "&fetchAll=true")
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data)) setTransactions(data);
@@ -2427,15 +2693,15 @@ export default function SuperBankPage() {
       
       // Show detailed results
       if (failedTransactions.length === 0) {
-        setTagCreateMsg(`✅ Tag applied to all ${matching.length} matching transactions!`);
+        setTagCreateMsg(`✅ Tag applied to all ${matching.length} matching transactions! (Tag summary updating in background...)`);
       } else {
-        setTagCreateMsg(`⚠️ Tag applied to ${successfulCount} transactions. ${failedTransactions.length} failed.`);
+        setTagCreateMsg(`⚠️ Tag applied to ${successfulCount} transactions. ${failedTransactions.length} failed. (Tag summary updating in background...)`);
         console.error('Failed transactions:', failedTransactions);
       }
       
-      setTimeout(() => setTagCreateMsg(null), 3000);
+      setTimeout(() => setTagCreateMsg(null), 5000);
       setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
+      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || "") + "&fetchAll=true")
         .then((res) => res.json())
         .then((data) => {
           if (Array.isArray(data)) setTransactions(data);
@@ -3024,10 +3290,10 @@ export default function SuperBankPage() {
   if (!isFinite(totalCredit)) totalCredit = 0;
   if (!isFinite(totalDebit)) totalDebit = 0;
 
-  // Store analytics data in Redux when calculations are complete
+  // Log analytics data when calculations are complete
   useEffect(() => {
     if (filteredRows.length > 0 && !loading) {
-      console.log('=== STORING ANALYTICS DATA IN REDUX ===');
+      console.log('=== ANALYTICS DATA SUMMARY ===');
       console.log('Total Amount:', totalAmount);
       console.log('Total Credit:', totalCredit);
       console.log('Total Debit:', totalDebit);
@@ -3210,7 +3476,7 @@ export default function SuperBankPage() {
       .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
     // Refetch all transactions
     setLoading(true);
-    fetch("/api/transactions/all?userId=" + (userId || ""))
+    fetch("/api/transactions/all?userId=" + (userId || "") + "&fetchAll=true")
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) setTransactions(data);
@@ -3561,8 +3827,8 @@ export default function SuperBankPage() {
   };
 
   return (
-    <div className="h-screen overflow-y-auto">
-      <div className="py-4 sm:py-6 px-2 sm:px-4">
+    <div className="h-full overflow-hidden">
+      <div className="h-full py-4 sm:py-6 px-2 sm:px-4 overflow-y-auto">
         <div className="max-w-full mx-auto flex flex-col">
         {/* New Super Bank Header with Logo */}
         <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
@@ -3577,14 +3843,92 @@ export default function SuperBankPage() {
               <p className="text-sm text-gray-600">All Transactions Dashboard</p>
             </div>
           </div>
-          <button
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow font-semibold text-sm whitespace-nowrap"
-            onClick={() => setShowHeaderSection(true)}
-            title="Configure custom column headers for the transaction table"
-          >
-            Header
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow font-semibold text-sm whitespace-nowrap flex items-center gap-2"
+              onClick={() => setRefreshTrigger(prev => prev + 1)}
+              title="Refresh transactions data"
+              disabled={loading}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <button
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow font-semibold text-sm whitespace-nowrap"
+              onClick={() => setShowHeaderSection(true)}
+              title="Configure custom column headers for the transaction table"
+            >
+              Header
+            </button>
+          </div>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-red-800">Error Loading Data</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setError(null);
+                  setLoading(true);
+                  // Retry fetching data
+                  const userId = localStorage.getItem("userId") || "";
+                  if (userId) {
+                    fetch(`/api/transactions/all?userId=${userId}&fetchAll=true`)
+                      .then(res => res.json())
+                      .then(data => {
+                        if (Array.isArray(data)) {
+                          setTransactions(data);
+                          setError(null);
+                        } else {
+                          setError(data.error || "Failed to fetch transactions");
+                        }
+                      })
+                      .catch(err => setError(`Failed to fetch transactions: ${err.message}`))
+                      .finally(() => setLoading(false));
+                  }
+                }}
+                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Progressive Loading Display */}
+        {loading && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 bg-blue-500 rounded-full animate-spin">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-blue-800">Loading Transactions</h3>
+                <p className="text-sm text-blue-700 mt-1">{loadingProgress}</p>
+                {transactions.length > 0 && (
+                  <p className="text-xs text-blue-600 mt-1">
+                    Loaded {transactions.length} transactions so far...
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         {/* Super Bank Header Display and Edit - toggled by button */}
         {showHeaderSection && (
           <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-blue-50 rounded-lg shadow relative">
@@ -3720,6 +4064,8 @@ export default function SuperBankPage() {
             transactions={sortedAndFilteredRows}
           />
         )}
+
+
 
 
 
@@ -3962,6 +4308,7 @@ export default function SuperBankPage() {
             </div>
           )}
           <div className="flex-1 min-h-0" style={{ minHeight: '400px', maxHeight: 'calc(100vh - 400px)' }}>
+
           <TransactionTable
             rows={sortedAndFilteredRows}
             headers={superHeader}
@@ -3972,7 +4319,7 @@ export default function SuperBankPage() {
             }}
             onSelectAll={handleSelectAll}
             selectAll={selectAll}
-            loading={loading}
+            loading={false} // Don't show loading spinner in table - show streaming data instead
             error={error}
             onRemoveTag={handleRemoveTag}
             onReorderHeaders={handleReorderHeaders}

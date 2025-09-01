@@ -2014,13 +2014,13 @@ export default function SuperBankPage() {
       
       // Show detailed results
       if (failedTransactions.length === 0) {
-        setTagCreateMsg(`✅ Tag applied to all ${matching.length} matching transactions!`);
+        setTagCreateMsg(`✅ Tag applied to all ${matching.length} matching transactions! (Tag summary updating in background...)`);
       } else {
-        setTagCreateMsg(`⚠️ Tag applied to ${successfulCount} transactions. ${failedTransactions.length} failed.`);
+        setTagCreateMsg(`⚠️ Tag applied to ${successfulCount} transactions. ${failedTransactions.length} failed. (Tag summary updating in background...)`);
         console.error('Failed transactions:', failedTransactions);
       }
       
-      setTimeout(() => setTagCreateMsg(null), 3000);
+      setTimeout(() => setTagCreateMsg(null), 5000);
       setLoading(true);
       fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
         .then((res) => res.json())

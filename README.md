@@ -19,6 +19,7 @@ A comprehensive financial management application with transaction tracking, tagg
 The application now uses a user-specific file storage system where each user gets their own dedicated folder in S3:
 
 - **Old Structure**: `statements/{filename}`
+
 - **New Structure**: `users/{userId}/statements/{filename}`
 
 ### Benefits

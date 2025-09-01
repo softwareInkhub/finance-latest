@@ -290,8 +290,15 @@ export default function TagTransactionsPage() {
                         const accountName = (tx.accountName || tx.accountHolderName || 'N/A') as string;
                         const accountNumber = (tx.accountNumber || 'N/A') as string;
 
+                        // Determine row background color based on Dr./Cr. field
+                        const rowBackgroundClass = crdr === 'CR' 
+                          ? 'bg-green-200 hover:bg-green-300' 
+                          : crdr === 'DR' 
+                          ? 'bg-red-200 hover:bg-red-300' 
+                          : 'hover:bg-gray-50';
+
                         return (
-                          <tr key={idx} className="hover:bg-gray-50">
+                          <tr key={idx} className={`${rowBackgroundClass} transition-colors duration-150`}>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{date}</td>
                             <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">{description}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{reference}</td>

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch } from 'react-icons/fi';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Tag {
   id: string;
@@ -62,6 +63,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
   onRemoveTags,
   removeTagsDisabled = false
 }) => {
+  const { theme } = useTheme();
   // Filter out tags with undefined or null names to prevent errors
   const validTags = allTags.filter(tag => tag && tag.name && typeof tag.name === 'string');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tag: Tag } | null>(null);
@@ -194,7 +196,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                   style={{
                     backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}30`,
-                    color: tagFilters.includes(tag.name) ? '#ffffff' : '#000000',
+                    color: theme === 'dark' ? '#ffffff' : '#000000',
                     borderColor: tag.color || '#6366F1',
                     borderWidth: '2px'
                   }}
@@ -267,7 +269,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   className={`px-2 py-1 rounded transition-colors cursor-pointer ${
                     currentSortOrder === 'tagged' 
                       ? 'bg-blue-600 text-white' 
-                      : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50'
                   }`}
                   title={currentSortOrder === 'tagged' ? 'Click to show all transactions' : 'Show tagged transactions only'}
                 >
@@ -279,7 +281,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   className={`px-2 py-1 rounded transition-colors cursor-pointer ${
                     currentSortOrder === 'untagged' 
                       ? 'bg-gray-600 text-white' 
-                      : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
                   }`}
                   title={currentSortOrder === 'untagged' ? 'Click to show all transactions' : 'Show untagged transactions only'}
                 >
@@ -354,102 +356,90 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                     </div>
                   )}
                 </div>
-                {creating && (
-                  <>
-                    <input
-                      type="text"
-                      className="border px-2 py-1 rounded text-xs"
-                      placeholder="New tag name"
-                      value={newTagName}
-                      onChange={e => setNewTagName(e.target.value)}
-                      disabled={creatingTag}
-                      autoFocus
-                    />
-                    <button
-                      className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-semibold disabled:opacity-50"
-                      onClick={handleCreateTag}
-                      disabled={creatingTag || !newTagName.trim()}
-                      title="Create the new tag with the entered name"
-                    >
-                      {creatingTag ? 'Creating...' : 'Create'}
-                    </button>
-                  </>
-                )}
+                
+                <div className="flex gap-1 items-center w-full sm:w-auto">
+                  {creating && (
+                    <div className="flex flex-col sm:flex-row gap-1 items-start sm:items-center w-full sm:w-auto">
+                      <input
+                        type="text"
+                        className="border px-2 py-1 rounded text-xs w-full sm:w-auto"
+                        placeholder="New tag name"
+                        value={newTagName}
+                        onChange={e => setNewTagName(e.target.value)}
+                        disabled={creatingTag}
+                        autoFocus
+                      />
+                      <button
+                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-semibold disabled:opacity-50 whitespace-nowrap"
+                        onClick={handleCreateTag}
+                        disabled={creatingTag || !newTagName.trim()}
+                        title="Create the new tag with the entered name"
+                      >
+                        {creatingTag ? 'Creating...' : 'Create'}
+                      </button>
+                    </div>
+                  )}
+                  
+                  <button
+                    type="button"
+                    onClick={onAddTag}
+                    disabled={tagging || !selectedTagId}
+                    className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-green-600/50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                    title={selectedTagId ? `Apply tag to ${selectedCount} selected transaction(s)` : 'Select a tag first'}
+                  >
+                    Add Tag
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={onRemoveTags}
+                    disabled={removeTagsDisabled || selectedCount === 0}
+                    className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:bg-red-600/50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                    title={selectedCount > 0 ? `Remove tags from ${selectedCount} selected transaction(s)` : 'No transactions selected'}
+                  >
+                    Remove Tags
+                  </button>
+                </div>
               </div>
-              {createError && <span className="text-red-600 text-xs">{createError}</span>}
-              <button
-                className="px-2 py-0.5 bg-green-600 text-white rounded text-xs font-semibold disabled:opacity-50"
-                onClick={onAddTag}
-                disabled={tagging || !selectedTagId}
-              >
-                Add Tag
-              </button>
               
-              {/* Remove Tags button moved here */}
-              {onRemoveTags && (
-                <button
-                  className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold disabled:opacity-50 transition-colors flex items-center gap-1"
-                  onClick={onRemoveTags}
-                  disabled={removeTagsDisabled || selectedCount === 0}
-                  title={`Remove all tags from ${selectedCount} selected transaction${selectedCount !== 1 ? 's' : ''}`}
-                >
-                  {/* <FiTag size={12} /> */}
-                  Remove Tags 
-                </button>
+              {selectedCount > 0 && (
+                <span className="text-xs text-gray-500 whitespace-nowrap">
+                  {selectedCount} selected
+                </span>
               )}
               
-              <span className="text-xs text-gray-600">{selectedCount} selected</span>
+              {createError && <span className="text-red-600 text-xs">{createError}</span>}
               {tagError && <span className="text-red-600 text-xs">{tagError}</span>}
               {tagSuccess && <span className="text-green-600 text-xs">{tagSuccess}</span>}
             </div>
           )}
-
-
-
-          {/* Controls */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {tagFilters.length > 0 && onClear && (
-              <button
-                className="px-1.5 py-0.5 text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md"
-                onClick={onClear}
-              >
-                Clear
-              </button>
-            )}
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="p-0.5 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
-              title={isExpanded ? "Show less" : "Show more"}
-            >
-              {isExpanded ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
-            </button>
-          </div>
         </div>
       </div>
 
-              {/* Second row - Additional tags when expanded */}
-        {isExpanded && secondRowTags.length > 0 && (
-          <div className="p-1 border-b border-gray-100 max-h-40 overflow-y-auto">
-            <div className="flex flex-wrap gap-1.5 items-center">
+      {/* Second row - Additional tags when expanded */}
+      {isExpanded && secondRowTags.length > 0 && (
+        <div className="p-3 border-b border-gray-100">
+          <div className="flex flex-wrap gap-2 items-center">
             {secondRowTags.map(tag => {
               const btnRef = React.createRef<HTMLButtonElement>();
               const count = tagStats ? tagStats[tag.name] : undefined;
               return (
-                <span key={tag.id} className="relative inline-flex items-center group">
+                <span key={tag.id} className="relative inline-flex items-center group flex-shrink-0">
                   <button
-                    className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
+                    className={`px-2 py-1 rounded text-xs font-medium border transition-all duration-150 whitespace-nowrap ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                     style={{
                       backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}30`,
-                      color: tagFilters.includes(tag.name) ? '#ffffff' : '#000000',
+                      color: theme === 'dark' ? '#ffffff' : '#000000',
                       borderColor: tag.color || '#6366F1',
                       borderWidth: '2px'
                     }}
                     onClick={() => onToggleTag(tag.name)}
+                    title={`${tagFilters.includes(tag.name) ? 'Remove' : 'Add'} filter for ${tag.name} (${count || 0} transactions)`}
                   >
                     {tag.name}
                     {typeof count === 'number' && (
                       <span 
-                        className="ml-1 bg-white/90 border rounded-full px-0.5 text-[9px] font-bold align-middle inline-block min-w-[12px] text-center text-black"
+                        className="ml-1 bg-white/90 border rounded-full px-1 text-[9px] font-bold align-middle inline-block min-w-[14px] text-center text-black"
                         style={{
                           borderColor: tag.color || '#6366F1',
                           color: 'black'
@@ -461,7 +451,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   </button>
                   <button
                     ref={btnRef}
-                    className="ml-0.5 p-0.5 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="ml-1 p-0.5 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ lineHeight: 0 }}
                     onClick={e => {
                       e.stopPropagation();
@@ -479,6 +469,30 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
           </div>
         </div>
       )}
+
+      {/* Controls row */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {tagFilters.length > 0 && onClear && (
+            <button
+              className="px-2 py-1 text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md whitespace-nowrap"
+              onClick={onClear}
+            >
+              Clear All Filters
+            </button>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+            title={isExpanded ? "Show less" : "Show more"}
+          >
+            {isExpanded ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+          </button>
+        </div>
+      </div>
 
       {/* No results message */}
       {searchQuery && filteredTags.length === 0 && (

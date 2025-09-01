@@ -1,10 +1,10 @@
 'use client';
 
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
 import { FiChevronDown } from 'react-icons/fi';
 import { Tag } from '../types/transaction';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface CashFlowItem {
   id: string;
@@ -54,8 +54,6 @@ interface TransactionData {
   userAccountNumber?: string;
 }
 
-
-
 interface CashFlowGroup {
   id: string;
   title: string;
@@ -71,6 +69,7 @@ interface CashFlowSection {
 }
 
 export default function ReportsPage() {
+  const { theme } = useTheme();
 
   // Initial data
   const initialData: CashFlowSection[] = [
@@ -1141,6 +1140,23 @@ export default function ReportsPage() {
       clearTimeout(visibilityTimeoutId);
     };
   }, [handleRefreshTags, isRefreshing, cashFlowData]);
+
+  // Listen for tag updates from the tags page
+  useEffect(() => {
+    const handleTagUpdated = (event: CustomEvent) => {
+      console.log('Tag updated event received:', event.detail);
+      // Trigger a refresh after a short delay to allow backend updates to complete
+      setTimeout(() => {
+        handleRefreshTags();
+      }, 1000);
+    };
+
+    window.addEventListener('tagUpdated', handleTagUpdated as EventListener);
+
+    return () => {
+      window.removeEventListener('tagUpdated', handleTagUpdated as EventListener);
+    };
+  }, [handleRefreshTags]);
 
       // Helper function to calculate item total including sub-items
   const calculateItemTotal = useCallback((item: CashFlowItem): number => {
@@ -2358,7 +2374,7 @@ export default function ReportsPage() {
     }
   };
 
-  // Helper: open tag transactions modal by tag name (no Redux) – fetch from backend per-bank tables
+      // Helper: open tag transactions modal by tag name – fetch from backend per-bank tables
   const openTagTransactions = useCallback(async (tagName: string) => {
     try {
       setActiveTagName(tagName);
@@ -2433,7 +2449,11 @@ export default function ReportsPage() {
   };
 
     return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10 px-4 overflow-y-auto">
+    <div className={`min-h-screen py-10 px-4 overflow-y-auto ${
+      theme === 'dark' 
+        ? 'bg-gray-900 text-gray-100' 
+        : 'bg-gradient-to-br from-blue-50 via-white to-purple-50 text-gray-900'
+    }`}>
       <div className="max-w-7xl mx-auto">
       {/* Header */}
         
@@ -2441,9 +2461,7 @@ export default function ReportsPage() {
         {/* Analytics Summary */}
    
 
-        {/* No Redux loading/error UI */}
 
-        {/* No Redux warning */}
 
                  {/* Main Content - Two Column Layout */}
          <div className="flex flex-col lg:flex-row gap-6 max-h-[90vh]">
@@ -2461,7 +2479,11 @@ export default function ReportsPage() {
       </div>
 
           {/* Cashflow Statement (Center) */}
-          <div className="flex-1 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden overflow-y-auto">
+          <div className={`flex-1 rounded-xl shadow-lg overflow-hidden overflow-y-auto ${
+            theme === 'dark' 
+              ? 'bg-gray-800 border border-gray-700' 
+              : 'bg-white border border-gray-200'
+          }`}>
                        {/* Statement Header */}
              <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 relative sticky top-0 z-10">
                <div className="flex items-center justify-center">
@@ -2474,15 +2496,23 @@ export default function ReportsPage() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                                  <thead>
-                   <tr className="border-b-2 border-gray-300">
-                     <th className="text-left py-3 px-4 font-bold text-gray-800 text-lg">PARTICULAR</th>
-                     <th className="text-right py-3 px-4 font-bold text-gray-800 text-lg">AMT.</th>
-                   </tr>
+                                       <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-300'}`}>
+                      <th className={`text-left py-3 px-4 font-bold text-lg ${
+                        theme === 'dark' ? 'text-white' : 'text-gray-800'
+                      }`}>PARTICULAR</th>
+                      <th className={`text-right py-3 px-4 font-bold text-lg ${
+                        theme === 'dark' ? 'text-white' : 'text-gray-800'
+                      }`}>AMT.</th>
+                    </tr>
                  </thead>
                 <tbody>
                                      {/* INFLOWS Section */}
-                   <tr className="border-b-2 border-gray-400">
-                     <td className="py-3 px-4 font-bold text-blue-700 text-lg bg-blue-50 flex items-center justify-between">
+                                       <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-400'}`}>
+                      <td className={`py-3 px-4 font-bold text-lg flex items-center justify-between ${
+                        theme === 'dark' 
+                          ? 'text-blue-300 bg-blue-900/30' 
+                          : 'text-blue-700 bg-blue-50'
+                      }`}>
                        <span>{cashFlowData[0].title}</span>
                        {isEditing && (
                          <button
@@ -2494,7 +2524,11 @@ export default function ReportsPage() {
                          </button>
                        )}
                      </td>
-                     <td className="py-3 px-4 text-right font-bold text-blue-700 text-lg bg-blue-50">
+                                           <td className={`py-3 px-4 text-right font-bold text-lg ${
+                        theme === 'dark' 
+                          ? 'text-blue-300 bg-blue-900/30' 
+                          : 'text-blue-700 bg-blue-50'
+                      }`}>
                        {totalInflow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                      </td>
                    </tr>
@@ -2505,11 +2539,17 @@ export default function ReportsPage() {
                     return (
                       <React.Fragment key={group.id}>
                         {/* Group Header */}
-                        <tr 
-                          className="border-b border-gray-300 hover:bg-gray-50 cursor-pointer"
-                          onClick={() => toggleGroup(cashFlowData[0].id, group.id)}
-                        >
-                                                     <td className="py-2 pl-4 pr-4 font-semibold text-gray-800 flex items-center gap-2">
+                                                  <tr 
+                            className={`border-b cursor-pointer ${
+                              theme === 'dark' 
+                                ? 'border-gray-600 hover:bg-gray-700' 
+                                : 'border-gray-300 hover:bg-gray-50'
+                            }`}
+                            onClick={() => toggleGroup(cashFlowData[0].id, group.id)}
+                          >
+                                                     <td className={`py-2 pl-4 pr-4 font-semibold flex items-center gap-2 ${
+                                                       theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                                                     }`}>
                              {group.isExpanded ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
                              {group.title}
                              {isEditing && (
@@ -2519,7 +2559,11 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openEditGroupModal(cashFlowData[0].id, group.id, group.title);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                   className={`p-1 rounded transition-colors ${
+                                     theme === 'dark' 
+                                       ? 'text-gray-400 hover:text-blue-400 hover:bg-blue-900/30' 
+                                       : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                                   }`}
                                    title="Edit group"
                                  >
                                    <RiEdit2Line size={14} />
@@ -2529,7 +2573,11 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openAddModal(cashFlowData[0].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                   className={`p-1 rounded transition-colors ${
+                                     theme === 'dark' 
+                                       ? 'text-gray-400 hover:text-green-400 hover:bg-green-900/30' 
+                                       : 'text-gray-600 hover:text-green-600 hover:bg-green-50'
+                                   }`}
                                    title="Add new item"
                                  >
                                    <RiAddLine size={14} />
@@ -2539,7 +2587,11 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openDeleteModal(cashFlowData[0].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                   className={`p-1 rounded transition-colors ${
+                                     theme === 'dark' 
+                                       ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' 
+                                       : 'text-gray-600 hover:text-red-600 hover:bg-red-50'
+                                   }`}
                                    title="Delete group"
                                  >
                                    <RiDeleteBin6Line size={14} />
@@ -2547,7 +2599,9 @@ export default function ReportsPage() {
             </div>
                              )}
                            </td>
-                          <td className="py-2 px-4 text-right font-semibold text-gray-800">
+                                                     <td className={`py-2 px-4 text-right font-semibold ${
+                             theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                           }`}>
                             {groupTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -2557,14 +2611,20 @@ export default function ReportsPage() {
                           <React.Fragment key={item.id}>
                             {/* Main Item */}
                             <tr
-                              className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`}
+                              className={`border-b ${item.createdByTag ? 'cursor-pointer' : ''} ${
+                                theme === 'dark' 
+                                  ? 'border-gray-600 hover:bg-gray-700' 
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}
                               onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}
                               draggable={Boolean((item as unknown as { createdByTag?: boolean }).createdByTag)}
                               onDragStart={() => handleDragStartItem(cashFlowData[0].id, group.id, itemIndex)}
                               onDragOver={handleDragOver}
                               onDrop={(e) => handleDropItem(e, cashFlowData[0].id, group.id, itemIndex)}
                             >
-                              <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
+                              <td className={`py-2 pl-16 pr-4 flex items-center justify-between ${
+                                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                              }`}>
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-2">
                                     {item.subItems && item.subItems.length > 0 && (
@@ -2635,14 +2695,20 @@ export default function ReportsPage() {
                            {item.isExpanded && item.subItems && item.subItems.map((subItem, subIndex) => (
                              <tr
                                key={subItem.id}
-                               className={`border-b border-gray-300 border-dotted hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
+                               className={`border-b border-dotted ${subItem.createdByTag ? 'cursor-pointer' : ''} ${
+                                 theme === 'dark' 
+                                   ? 'border-gray-600 hover:bg-gray-700' 
+                                   : 'border-gray-300 hover:bg-gray-50'
+                               }`}
                                onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}
                                draggable={Boolean((subItem as unknown as { createdByTag?: boolean }).createdByTag)}
                                onDragStart={() => handleDragStartSubItem(cashFlowData[0].id, group.id, item.id, subIndex)}
                                onDragOver={handleDragOver}
                                onDrop={(e) => handleDropSubItem(e, cashFlowData[0].id, group.id, item.id, subIndex)}
                              >
-                               <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
+                               <td className={`py-2 pl-24 pr-4 flex items-center justify-between ${
+                                 theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                               }`}>
                                  <div className="flex flex-col">
                                    <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
                                    {subItem.createdByTag && subItem.tagData && (
@@ -2685,7 +2751,7 @@ export default function ReportsPage() {
                                      </div>
                                    )}
                                </td>
-                               <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                               <td className="py-2 px-4 text-right text-gray-400 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                              </tr>
                            ))}
                          </React.Fragment>
@@ -3197,12 +3263,12 @@ export default function ReportsPage() {
                {/* Add Item Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-700">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">Add New Sub Group</h3>
+                <h3 className="text-lg font-semibold text-white">Add New Sub Group</h3>
                 <button
                   onClick={closeAddModal}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-gray-400 hover:text-gray-300 transition-colors"
                 >
                   <RiCloseLine size={20} />
                 </button>
@@ -3210,7 +3276,7 @@ export default function ReportsPage() {
               
               <div className="space-y-4">
               <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     Sub Group Name
                   </label>
                   <input
@@ -3218,7 +3284,7 @@ export default function ReportsPage() {
                     value={newItemName}
                     onChange={(e) => setNewItemName(e.target.value)}
                     placeholder="Enter sub group name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
                     autoFocus
                   />
               </div>
@@ -3227,7 +3293,7 @@ export default function ReportsPage() {
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={closeAddModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
                 >
                   Cancel
                 </button>
@@ -3338,47 +3404,47 @@ export default function ReportsPage() {
                      {/* Group Option Modal */}
            {showGroupOptionModal && (
              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+               <div className="bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-700">
                  <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-lg font-semibold text-gray-800">Add Sub Group</h3>
+                   <h3 className="text-lg font-semibold text-white">Add Sub Group</h3>
                    <button
                      onClick={closeGroupOptionModal}
-                     className="text-gray-400 hover:text-gray-600 transition-colors"
+                     className="text-gray-400 hover:text-gray-300 transition-colors"
                    >
                      <RiCloseLine size={20} />
                    </button>
                  </div>
                  
                  <div className="space-y-4">
-                   <p className="text-gray-600 mb-4">How would you like to add this sub group?</p>
+                   <p className="text-gray-400 mb-4">How would you like to add this sub group?</p>
                    
             <div className="space-y-3">
                      <button
                        onClick={openAddGroupNameModal}
-                       className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                       className="w-full p-4 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors text-left"
                      >
             <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                           <RiAddLine className="text-blue-600" size={20} />
+                         <div className="w-10 h-10 bg-blue-900/30 rounded-lg flex items-center justify-center">
+                           <RiAddLine className="text-blue-400" size={20} />
               </div>
               <div>
-                           <h4 className="font-semibold text-gray-800">Add Sub Group by Name</h4>
-                           <p className="text-sm text-gray-600">Create a sub group with a custom name</p>
+                           <h4 className="font-semibold text-gray-200">Add Sub Group by Name</h4>
+                           <p className="text-sm text-gray-400">Create a sub group with a custom name</p>
               </div>
             </div>
                      </button>
                      
                      <button
                        onClick={openAddGroupTagsModal}
-                       className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                       className="w-full p-4 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors text-left"
                      >
             <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                           <RiBarChartLine className="text-green-600" size={20} />
+                         <div className="w-10 h-10 bg-green-900/30 rounded-lg flex items-center justify-center">
+                           <RiBarChartLine className="text-green-400" size={20} />
               </div>
               <div>
-                           <h4 className="font-semibold text-gray-800">Add by Tags</h4>
-                           <p className="text-sm text-gray-600">Create a sub group using predefined tags</p>
+                           <h4 className="font-semibold text-gray-200">Add by Tags</h4>
+                           <p className="text-sm text-gray-400">Create a sub group using predefined tags</p>
               </div>
             </div>
                      </button>
@@ -3388,7 +3454,7 @@ export default function ReportsPage() {
                  <div className="flex gap-3 mt-6">
                    <button
                      onClick={closeGroupOptionModal}
-                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                     className="flex-1 px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
                    >
                      Cancel
                    </button>

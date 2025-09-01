@@ -539,7 +539,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
                 }}
                 className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-1"
               />
-              <span className="text-xs font-medium text-gray-700 truncate" title={header}>
+              <span className="text-xs font-medium text-white truncate" title={header}>
                 {header}
               </span>
             </label>

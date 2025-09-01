@@ -66,6 +66,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   // Removed unused localTagsSummary state
   const [allTransactions, setAllTransactions] = useState<Record<string, unknown>[]>([]);
   const [accountInfoMap, setAccountInfoMap] = useState<{ [accountId: string]: { accountName: string; accountNumber: string; bankName?: string } }>({});
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
 
   // Fetch tags summary, and bank/account information.
   // For breakdowns, prefer provided `transactions` (already filtered on page),
@@ -74,41 +75,68 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     const fetchData = async () => {
       try {
         const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
-        if (!userId) return;
+        if (!userId) {
+          console.log('No userId found, skipping data fetch');
+          setIsLoadingAccounts(false);
+          return;
+        }
         
         // Fetch tags summary (not used in current implementation)
         if (!tagsSummary) {
-          const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
-          if (res.ok) {
-            // Summary fetched but not stored since it's not used
-            await res.json();
+          try {
+            const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
+            if (res.ok) {
+              // Summary fetched but not stored since it's not used
+              await res.json();
+            } else {
+              console.warn('Tags summary API returned non-OK status:', res.status);
+            }
+          } catch (error) {
+            console.warn('Failed to fetch tags summary:', error);
+            // If this fails, likely AWS credentials are missing, so skip other API calls
+            setIsLoadingAccounts(false);
+            return;
           }
         }
         
         // Use provided transactions if available; otherwise fetch all
         let workingTransactions: Array<Record<string, unknown>> = Array.isArray(transactions) ? transactions : [];
         if (!workingTransactions.length) {
-          const txRes = await fetch(`/api/transactions/all?userId=${encodeURIComponent(userId)}`);
-          if (txRes.ok) {
-            workingTransactions = await txRes.json();
+          try {
+            const txRes = await fetch(`/api/transactions/all?userId=${encodeURIComponent(userId)}`);
+            if (txRes.ok) {
+              workingTransactions = await txRes.json();
+            } else {
+              console.warn('Transactions API returned non-OK status:', txRes.status);
+            }
+          } catch (error) {
+            console.warn('Failed to fetch transactions:', error);
+            // If this fails, likely AWS credentials are missing, so skip other API calls
+            setIsLoadingAccounts(false);
+            return;
           }
         }
-        if (workingTransactions.length) {
+        if (workingTransactions.length > 0) {
           console.log('Transactions for breakdown sample:', workingTransactions.slice(0, 3));
           setAllTransactions(workingTransactions);
+          setIsLoadingAccounts(true);
           
           // Fetch bank information first
-          const bankRes = await fetch('/api/bank');
           const bankMap: { [bankId: string]: string } = {};
-          if (bankRes.ok) {
-            const banks = await bankRes.json();
-            console.log('Fetched banks:', banks);
-            banks.forEach((bank: Record<string, unknown>) => {
-              if (bank.id && bank.bankName) {
-                bankMap[bank.id as string] = bank.bankName as string;
-              }
-            });
-            console.log('Bank map:', bankMap);
+          try {
+            const bankRes = await fetch('/api/bank');
+            if (bankRes.ok) {
+              const banks = await bankRes.json();
+              console.log('Fetched banks:', banks);
+              banks.forEach((bank: Record<string, unknown>) => {
+                if (bank.id && bank.bankName) {
+                  bankMap[bank.id as string] = bank.bankName as string;
+                }
+              });
+              console.log('Bank map:', bankMap);
+            }
+          } catch (error) {
+            console.warn('Failed to fetch banks:', error);
           }
           
           // Fetch account information for all unique accounts
@@ -139,9 +167,14 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           }
           
           setAccountInfoMap(accountMap);
+          setIsLoadingAccounts(false);
+        } else {
+          // No transactions to process
+          setIsLoadingAccounts(false);
         }
       } catch (err) {
         console.error('Failed to load data:', err);
+        setIsLoadingAccounts(false);
       }
     };
 
@@ -248,7 +281,9 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       const accountDetails = Array.from(data.accounts.entries()).map(([accountId, count]) => {
         // Get actual account number from accountInfoMap
         const accountInfo = accountInfoMap[accountId];
-        const displayAccount = accountInfo?.accountNumber || accountId;
+        const displayAccount = isLoadingAccounts ? 'Loading...' : 
+          (accountInfo?.accountNumber || 
+          (accountId ? `****${accountId.slice(-4)}` : 'N/A'));
         
         return {
           account: displayAccount,
@@ -316,7 +351,9 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     bankCredits.forEach((data, bankName) => {
       const accountDetails = Array.from(data.accounts.entries()).map(([accountId, credit]) => {
         const accountInfo = accountInfoMap[accountId];
-        const displayAccount = accountInfo?.accountNumber || accountId;
+        const displayAccount = isLoadingAccounts ? 'Loading...' : 
+          (accountInfo?.accountNumber || 
+          (accountId ? `****${accountId.slice(-4)}` : 'N/A'));
         
         return {
           account: displayAccount,
@@ -382,7 +419,9 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     bankDebits.forEach((data, bankName) => {
       const accountDetails = Array.from(data.accounts.entries()).map(([accountId, debit]) => {
         const accountInfo = accountInfoMap[accountId];
-        const displayAccount = accountInfo?.accountNumber || accountId;
+        const displayAccount = isLoadingAccounts ? 'Loading...' : 
+          (accountInfo?.accountNumber || 
+          (accountId ? `****${accountId.slice(-4)}` : 'N/A'));
         
         return {
           account: displayAccount,
@@ -450,7 +489,10 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     bankBalances.forEach((data, bankName) => {
       const accountDetails = Array.from(data.accounts.entries()).map(([accountId, balance]) => {
         const accountInfo = accountInfoMap[accountId];
-        const displayAccount = accountInfo?.accountNumber || accountId;
+        // Show account number if available, otherwise show a masked version of the UUID
+        const displayAccount = isLoadingAccounts ? 'Loading...' : 
+          (accountInfo?.accountNumber || 
+          (accountId ? `****${accountId.slice(-4)}` : 'N/A'));
         
         return {
           account: displayAccount,
