@@ -46,13 +46,13 @@ export const GlobalTabContent: React.FC = () => {
 
   // Render all tabs but only show the active one
   return (
-    <div className="h-full bg-white dark:bg-gray-800 overflow-hidden">
+    <div className="h-full bg-gray-50 dark:bg-gray-900 overflow-hidden">
       {tabs.map(tab => (
         <div
           key={tab.id}
           className={`h-full ${tab.id === activeTabId ? 'block' : 'hidden'}`}
         >
-          <div className="h-full overflow-auto">
+          <div className="h-full overflow-y-auto">
             {tab.component}
           </div>
         </div>

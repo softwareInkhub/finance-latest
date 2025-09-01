@@ -247,15 +247,8 @@ const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpe
                 </thead>
                 <tbody>
                   {filteredData.map((row, i) => {
-                    // Determine row background color based on Dr./Cr. field
-                    const drCrValue = (row['Dr./Cr.'] || row['Dr./Cr'] || row['Dr / Cr'] || '').toString().toUpperCase();
-                    const baseRowClass = drCrValue === 'CR' 
-                      ? 'bg-green-200' 
-                      : drCrValue === 'DR' 
-                      ? 'bg-red-200' 
-                      : '';
-                    const selectedClass = selectedRows.has(i) ? 'bg-blue-50' : '';
-                    const rowClass = selectedClass || baseRowClass;
+                    // Neutral row background (no CR/DR colors)
+                    const rowClass = selectedRows.has(i) ? 'bg-blue-50' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50');
 
                     return (
                       <tr key={i} className={rowClass}>
@@ -267,7 +260,7 @@ const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpe
                           />
                         </td>
                         {headers.map((header, j) => (
-                          <td key={j} className="border px-2 py-1 whitespace-nowrap">
+                          <td key={j} className="border px-2 py-1 whitespace-nowrap text-gray-900 dark:text-gray-100">
                             {String(row[header])}
                           </td>
                         ))}

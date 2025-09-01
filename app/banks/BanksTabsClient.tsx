@@ -61,7 +61,7 @@ export default function BanksTabsClient() {
     fetchBanks();
   }, []);
 
-  // Fetch tags
+  // Fetch tags and set up event listeners
   useEffect(() => {
     const fetchTags = async () => {
       try {
@@ -77,7 +77,40 @@ export default function BanksTabsClient() {
         console.error('Error fetching tags:', error);
       }
     };
+
+    // Load tags on mount
     fetchTags();
+
+    // Set up event listeners for tag changes
+    const handleTagDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag deleted event received in BanksTabsClient:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    const handleTagsBulkDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags bulk deleted event received in BanksTabsClient:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    const handleTagUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag updated event received in BanksTabsClient:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    // Add event listeners
+    window.addEventListener('tagDeleted', handleTagDeleted);
+    window.addEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+    window.addEventListener('tagUpdated', handleTagUpdated);
+
+    // Cleanup event listeners
+    return () => {
+      window.removeEventListener('tagDeleted', handleTagDeleted);
+      window.removeEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+      window.removeEventListener('tagUpdated', handleTagUpdated);
+    };
   }, []);
 
   // Fetch bank statistics

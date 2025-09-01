@@ -131,7 +131,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
               onDragEnd={handleDragEnd}
               onDrop={(e) => handleDrop(e, tab.id)}
               className={`
-                flex items-center min-w-0 max-w-xs px-4 py-2 border-r border-gray-200 dark:border-gray-700 cursor-pointer
+                flex items-center min-w-0 max-w-xs px-3 py-1 border-r border-gray-200 dark:border-gray-700 cursor-pointer
                 transition-all duration-200 ease-in-out group relative
                 ${activeTabId === tab.id 
                   ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' 
@@ -145,13 +145,13 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
             >
               {/* Tab Icon */}
               {tab.icon && (
-                <div className="mr-2 flex-shrink-0">
+                <div className="mr-1 flex-shrink-0">
                   {tab.icon}
                 </div>
               )}
               
               {/* Tab Title */}
-              <span className="truncate text-sm font-medium flex-1">
+              <span className="truncate text-xs font-medium flex-1">
                 {tab.title}
               </span>
               
@@ -160,7 +160,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
                 <button
                   onClick={(e) => handleCloseClick(e, tab.id)}
                   className={`
-                    ml-2 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200
+                    ml-1 p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200
                     hover:bg-gray-200 dark:hover:bg-gray-600 flex-shrink-0
                     ${activeTabId === tab.id ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'}
                   `}
@@ -184,7 +184,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
         
         {/* Add Tab Button */}
         <button
-          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
+          className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
           title="Add new tab"
           onClick={() => {
             // This would typically open a new tab or show a tab creation dialog

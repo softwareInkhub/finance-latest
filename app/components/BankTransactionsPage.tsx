@@ -121,10 +121,46 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
   }, [bankName]);
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    fetch('/api/tags?userId=' + userId)
-      .then(res => res.json())
-      .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
+    const fetchTags = async () => {
+      const userId = localStorage.getItem('userId');
+      const response = await fetch('/api/tags?userId=' + userId);
+      const data = await response.json();
+      if (Array.isArray(data)) setAllTags(data); else setAllTags([]);
+    };
+
+    // Load tags on mount
+    fetchTags();
+
+    // Set up event listeners for tag changes
+    const handleTagDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag deleted event received in BankTransactionsPage:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    const handleTagsBulkDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags bulk deleted event received in BankTransactionsPage:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    const handleTagUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag updated event received in BankTransactionsPage:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    // Add event listeners
+    window.addEventListener('tagDeleted', handleTagDeleted);
+    window.addEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+    window.addEventListener('tagUpdated', handleTagUpdated);
+
+    // Cleanup event listeners
+    return () => {
+      window.removeEventListener('tagDeleted', handleTagDeleted);
+      window.removeEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+      window.removeEventListener('tagUpdated', handleTagUpdated);
+    };
   }, []);
 
   const handleRowSelect = (id: string) => {

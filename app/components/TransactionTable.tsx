@@ -525,13 +525,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             {rows.map((row, idx) => {
               const tx = transactions?.find(t => t.id === row.id);
               
-              // Determine row background color based on Dr./Cr. field
-              const drCrValue = (row['Dr./Cr.'] || row['Dr./Cr'] || row['Dr / Cr'] || '').toString().toUpperCase();
-              const rowBackgroundClass = drCrValue === 'CR' 
-                ? 'bg-green-200 hover:bg-green-300' 
-                : drCrValue === 'DR' 
-                ? 'bg-red-200 hover:bg-red-300' 
-                : 'hover:bg-gray-100';
+              // Use neutral background for all rows
+              const rowBackgroundClass = 'hover:bg-gray-100 dark:hover:bg-gray-700';
               
               return (
                 <tr key={idx} data-row-idx={idx} data-transaction-id={row.id} className={`${rowBackgroundClass} transition-colors duration-150`}>

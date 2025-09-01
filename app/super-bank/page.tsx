@@ -2018,7 +2018,6 @@ export default function SuperBankPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loadingProgress, setLoadingProgress] = useState<string>("Loading transactions...");
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger
   
   // Add debugging (only in development)
@@ -2107,6 +2106,73 @@ export default function SuperBankPage() {
   const extractTagIds = (tags: Tag[]): string[] => {
     return tags.map(tag => tag.id);
   };
+
+  // Event listener for tag deletion events
+  useEffect(() => {
+    console.log('SuperBank page: Setting up tag deletion event listeners...');
+    
+    // Function to refresh tags
+    const refreshTags = async () => {
+      try {
+        const userId = localStorage.getItem('userId');
+        const response = await fetch('/api/tags?userId=' + userId);
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setAllTags(data);
+          console.log('SuperBank page: Tags refreshed, new count:', data.length);
+        } else {
+          setAllTags([]);
+          console.log('SuperBank page: Tags refreshed, empty array');
+        }
+      } catch (error) {
+        console.error('SuperBank page: Error refreshing tags:', error);
+      }
+    };
+    
+    const handleTagDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag deleted event received in SuperBank:', customEvent.detail);
+      // Refresh both tags and transactions
+      refreshTags();
+      setRefreshTrigger(prev => prev + 1);
+    };
+
+    const handleTagsBulkDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags bulk deleted event received in SuperBank:', customEvent.detail);
+      // Refresh both tags and transactions
+      refreshTags();
+      setRefreshTrigger(prev => prev + 1);
+    };
+
+    const handleTagUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag updated event received in SuperBank:', customEvent.detail);
+      // Refresh both tags and transactions
+      refreshTags();
+      setRefreshTrigger(prev => prev + 1);
+    };
+
+    // Add event listeners
+    window.addEventListener('tagDeleted', handleTagDeleted);
+    window.addEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+    window.addEventListener('tagUpdated', handleTagUpdated);
+    
+    // Test tag event listener
+    const testTagEvent = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('SuperBank page: Test tag event received:', customEvent.detail);
+    };
+    window.addEventListener('testTagEvent', testTagEvent);
+
+    // Cleanup event listeners
+    return () => {
+      window.removeEventListener('tagDeleted', handleTagDeleted);
+      window.removeEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+      window.removeEventListener('tagUpdated', handleTagUpdated);
+      window.removeEventListener('testTagEvent', testTagEvent);
+    };
+  }, []);
 
   // Helper to reorder array
   const reorder = (arr: string[], from: number, to: number) => {
@@ -2218,9 +2284,7 @@ export default function SuperBankPage() {
         
         console.log('Starting streaming transactions for userId:', userId);
         
-        if (isComponentMounted) {
-          setLoadingProgress("Connecting to database...");
-        }
+        // Loading progress removed - using streaming instead
         
         // Use the new streaming API
         fetch(`/api/transactions/stream?userId=${userId}&limit=10000`, {
@@ -2260,15 +2324,11 @@ export default function SuperBankPage() {
                         
                         switch (data.type) {
                           case 'status':
-                            if (isComponentMounted) {
-                              setLoadingProgress(data.message);
-                            }
+                            // Status updates handled by streaming
                             break;
                             
                           case 'progress':
-                            if (isComponentMounted) {
-                              setLoadingProgress(`Fetched ${data.totalCount} transactions from ${data.bankName}...`);
-                            }
+                            // Progress updates handled by streaming
                             break;
                             
                           case 'transaction':
@@ -2280,7 +2340,6 @@ export default function SuperBankPage() {
                           case 'complete':
                             if (isComponentMounted) {
                               console.log(`Streaming completed: ${data.totalTransactions} transactions`);
-                              setLoadingProgress(`Completed! Loaded ${data.totalTransactions} transactions`);
                               setError(null);
                               setLoading(false); // Stop loading when complete
                               streamingCompleted = true; // Mark streaming as completed
@@ -2331,7 +2390,6 @@ export default function SuperBankPage() {
               if (retryCount < maxRetries && isComponentMounted) {
                 retryCount++;
                 console.log(`Retrying stream (attempt ${retryCount}/${maxRetries})...`);
-                setLoadingProgress(`Retrying... (${retryCount}/${maxRetries})`);
                 setTimeout(() => {
                   if (isComponentMounted) {
                     streamTransactions();
@@ -2617,15 +2675,19 @@ export default function SuperBankPage() {
       setPendingTag(null);
       setTagCreateMsg("Tag applied to transaction!");
       setTimeout(() => setTagCreateMsg(null), 1500);
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || "") + "&fetchAll=true")
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
+      
+      // Update local transactions state instead of refetching
+      setTransactions(prevTransactions => 
+        prevTransactions.map(tx => {
+          if (tx.id === transactionId) {
+            const existingTags = Array.isArray(tx.tags) ? tx.tags : [];
+            if (!existingTags.some(t => t.id === tagObj.id)) {
+              return { ...tx, tags: [...existingTags, tagObj] };
+            }
+          }
+          return tx;
         })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      );
     } catch (error) {
       setTagError(error as string || 'Failed to apply tag to transaction');
     } finally {
@@ -2676,12 +2738,13 @@ export default function SuperBankPage() {
         body: JSON.stringify({ updates: bulkUpdates })
       });
       
+      const responseData = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Bulk update failed');
+        throw new Error(responseData.error || 'Bulk update failed');
       }
       
-      const result = await response.json();
+      const result = responseData;
       
       // Handle results
       const failedTransactions = result.failed || [];
@@ -2700,15 +2763,19 @@ export default function SuperBankPage() {
       }
       
       setTimeout(() => setTagCreateMsg(null), 5000);
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || "") + "&fetchAll=true")
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
+      
+      // Update local transactions state instead of refetching
+      setTransactions(prevTransactions => 
+        prevTransactions.map(tx => {
+          if (matching.some(m => m.id === tx.id)) {
+            const existingTags = Array.isArray(tx.tags) ? tx.tags : [];
+            if (!existingTags.some(t => t.id === tagObj.id)) {
+              return { ...tx, tags: [...existingTags, tagObj] };
+            }
+          }
+          return tx;
         })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      );
     } catch (error) {
       setTagError('Failed to apply tag to all matching transactions');
       console.error('Bulk update error:', error);
@@ -3162,9 +3229,11 @@ export default function SuperBankPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates: bulkUpdates })
       });
+      
+      const responseData = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Bulk update failed');
+        throw new Error(responseData.error || 'Bulk update failed');
       }
       setTagSuccess('Tag added!');
       setSelectedTagId("");
@@ -3469,21 +3538,14 @@ export default function SuperBankPage() {
 
   // New handleTagDeleted function
   const handleTagDeleted = () => {
-    // Refetch all tags
+    // Refetch all tags (necessary when tags are deleted)
     const userId = localStorage.getItem('userId');
     fetch('/api/tags?userId=' + userId)
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
-    // Refetch all transactions
-    setLoading(true);
-    fetch("/api/transactions/all?userId=" + (userId || "") + "&fetchAll=true")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setTransactions(data);
-        else setError(data.error || "Failed to fetch transactions");
-      })
-      .catch(() => setError("Failed to fetch transactions"))
-      .finally(() => setLoading(false));
+    
+    // Note: Transactions don't need to be refetched when tags are deleted
+    // The tag management component should handle updating transaction references
   };
 
   // Handle tagged/untagged click filters
@@ -3665,12 +3727,13 @@ export default function SuperBankPage() {
         body: JSON.stringify({ updates: bulkUpdates })
       });
       
+      const responseData = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Bulk retry failed');
+        throw new Error(responseData.error || 'Bulk retry failed');
       }
       
-      const result = await response.json();
+      const result = responseData;
       
       // Handle results
       const retryFailed = result.failed || [];
@@ -3777,12 +3840,13 @@ export default function SuperBankPage() {
         body: JSON.stringify({ updates: bulkUpdates })
       });
       
+      const responseData = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Bulk update failed');
+        throw new Error(responseData.error || 'Bulk update failed');
       }
       
-      const result = await response.json();
+      const result = responseData;
       
       // Handle results
       const failedTransactions = result.failed || [];
@@ -3843,26 +3907,7 @@ export default function SuperBankPage() {
               <p className="text-sm text-gray-600">All Transactions Dashboard</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow font-semibold text-sm whitespace-nowrap flex items-center gap-2"
-              onClick={() => setRefreshTrigger(prev => prev + 1)}
-              title="Refresh transactions data"
-              disabled={loading}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {loading ? 'Refreshing...' : 'Refresh'}
-            </button>
-            <button
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow font-semibold text-sm whitespace-nowrap"
-              onClick={() => setShowHeaderSection(true)}
-              title="Configure custom column headers for the transaction table"
-            >
-              Header
-            </button>
-          </div>
+          <div className="flex items-center gap-2" />
         </div>
 
         {/* Error Display */}
@@ -3907,28 +3952,7 @@ export default function SuperBankPage() {
           </div>
         )}
 
-        {/* Progressive Loading Display */}
-        {loading && (
-          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-5 h-5 bg-blue-500 rounded-full animate-spin">
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-blue-800">Loading Transactions</h3>
-                <p className="text-sm text-blue-700 mt-1">{loadingProgress}</p>
-                {transactions.length > 0 && (
-                  <p className="text-xs text-blue-600 mt-1">
-                    Loaded {transactions.length} transactions so far...
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+
         {/* Super Bank Header Display and Edit - toggled by button */}
         {showHeaderSection && (
           <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-blue-50 rounded-lg shadow relative">
@@ -4107,6 +4131,9 @@ export default function SuperBankPage() {
            onDateRangeChange={setDateRange}
            onDownload={() => setReportOpen(true)}
            downloadDisabled={false}
+           onRefresh={() => setRefreshTrigger(prev => prev + 1)}
+           refreshDisabled={loading}
+           onOpenHeader={() => setShowHeaderSection(true)}
            searchField={searchField}
            onSearchFieldChange={setSearchField}
            searchFieldOptions={['all', ...superHeader.filter(header => !['Bank Name', 'Date', 'Dr./Cr.', 'Amount'].includes(header))]}

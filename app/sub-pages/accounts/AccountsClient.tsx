@@ -59,6 +59,13 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
   const [newCond, setNewCond] = useState({ ifField: '', ifOp: '', ifValue: '', then: [{ field: '', value: '' }] });
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; account: Account | null; loading: boolean }>({ open: false, account: null, loading: false });
 
+  const isAbortError = (err: unknown): boolean => {
+    // Robustly detect AbortError across browsers
+    if (!err || typeof err !== 'object') return false;
+    const anyErr = err as { name?: string; code?: number };
+    return anyErr.name === 'AbortError' || anyErr.code === 20; // 20 = Legacy ABORT_ERR
+  };
+
   useEffect(() => {
     if (!bankId) {
       setError('Bank ID is required');
@@ -105,20 +112,21 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           setError(null);
         }
       } catch (err) {
+        // Silently handle expected aborts to avoid noisy console overlays in dev
+        if (isAbortError(err)) {
+          if (isMounted) {
+            // Keep a debug log in development but don't emit a console.error
+            console.debug('Accounts request aborted');
+          }
+          return;
+        }
         console.error('Error fetching accounts:', err);
         if (isMounted) {
-          if (err instanceof Error) {
-            if (err.name === 'AbortError') {
-              // Don't set error for abort - it's expected when component unmounts
-              console.log('Request was aborted (likely due to component unmount)');
-              return; // Exit early for AbortError
-            } else if (err.message.includes('Failed to fetch')) {
-              setError('Network error. Please check your connection and try again.');
-            } else {
-              setError(err.message);
-            }
+          const message = err instanceof Error ? err.message : 'An error occurred while fetching accounts';
+          if (message.includes('Failed to fetch')) {
+            setError('Network error. Please check your connection and try again.');
           } else {
-            setError('An error occurred while fetching accounts');
+            setError(message);
           }
         }
       } finally {
@@ -172,14 +180,13 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           setBankName(bank?.bankName || "");
         }
       } catch (err) {
+        if (isMounted && isAbortError(err)) {
+          console.debug('Bank data request aborted');
+          return; // Exit early for AbortError
+        }
         console.error('Error fetching bank data:', err);
-        if (isMounted && err instanceof Error) {
-          if (err.name === 'AbortError') {
-            console.log('Bank data request was aborted (likely due to component unmount)');
-            return; // Exit early for AbortError
-          } else {
-            setBankName("");
-          }
+        if (isMounted) {
+          setBankName("");
         }
       }
     };
@@ -229,14 +236,13 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           }
         }
       } catch (err) {
+        if (isMounted && isAbortError(err)) {
+          console.debug('Bank header request aborted');
+          return; // Exit early for AbortError
+        }
         console.error('Error fetching bank header:', err);
-        if (isMounted && err instanceof Error) {
-          if (err.name === 'AbortError') {
-            console.log('Bank header request was aborted (likely due to component unmount)');
-            return; // Exit early for AbortError
-          } else {
-            setHeaderError("Failed to fetch bank header");
-          }
+        if (isMounted) {
+          setHeaderError("Failed to fetch bank header");
         }
       } finally {
         if (isMounted) {
@@ -280,14 +286,13 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           }
         }
       } catch (err) {
+        if (isMounted && isAbortError(err)) {
+          console.debug('Super bank header request aborted');
+          return; // Exit early for AbortError
+        }
         console.error('Error fetching super bank header:', err);
-        if (isMounted && err instanceof Error) {
-          if (err.name === 'AbortError') {
-            console.log('Super bank header request was aborted (likely due to component unmount)');
-            return; // Exit early for AbortError
-          } else {
-            setSuperHeaders([]);
-          }
+        if (isMounted) {
+          setSuperHeaders([]);
         }
       }
     };
@@ -334,15 +339,14 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           }
         }
       } catch (err) {
+        if (isMounted && isAbortError(err)) {
+          console.debug('Bank mapping request aborted');
+          return; // Exit early for AbortError
+        }
         console.error('Error fetching bank mapping:', err);
-        if (isMounted && err instanceof Error) {
-          if (err.name === 'AbortError') {
-            console.log('Bank mapping request was aborted (likely due to component unmount)');
-            return; // Exit early for AbortError
-          } else {
-            setMapping({});
-            setConditions([]);
-          }
+        if (isMounted) {
+          setMapping({});
+          setConditions([]);
         }
       }
     };

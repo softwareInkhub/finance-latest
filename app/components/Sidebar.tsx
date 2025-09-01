@@ -131,17 +131,17 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
             <div className="flex items-center space-x-3">
               {/* Enhanced Logo */}
               <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
-                  <span className="text-white font-bold text-sm">BF</span>
+                <div className="w-9 h-9 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-all duration-200 hover:shadow-xl">
+                  <span className="text-white font-bold text-xs">BF</span>
                 </div>
-                <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-white animate-pulse"></div>
+                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full border border-white animate-pulse"></div>
               </div>
               {(!isCollapsed || isMobile) && (
                 <div className="transform transition-all duration-200 ease-out overflow-hidden">
-                  <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                  <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 whitespace-nowrap">
                     Brmh Fintech
                   </h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Financial Platform</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">Financial Platform</p>
                 </div>
               )}
             </div>
@@ -227,14 +227,14 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                   
                   {/* Icon container with enhanced styling */}
                   <div className={`
-                    relative flex items-center justify-center w-10 h-10 rounded-xl mr-4 transition-all duration-200
+                    relative flex items-center justify-center w-8 h-8 rounded-xl mr-3 transition-all duration-200
                     ${isActive 
                       ? 'bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg transform scale-110 shadow-purple-500/25' 
                       : 'text-gray-500 dark:text-gray-400 group-hover:text-purple-600 bg-gray-100/50 dark:bg-gray-700/50 group-hover:bg-purple-50 dark:group-hover:bg-purple-900/50'
                     }
                     ${isCollapsed && !isMobile ? 'mr-0' : ''}
                   `}>
-                    <Icon size={20} className="transition-all duration-200 group-hover:scale-110 group-hover:rotate-3 drop-shadow-sm" />
+                    <Icon size={16} className="transition-all duration-200 group-hover:scale-110 group-hover:rotate-3 drop-shadow-sm" />
                     
                     {/* Hover effect ring - only on desktop */}
                     {isHovered && !isActive && !isMobile && (
@@ -244,10 +244,10 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                   
                   {(!isCollapsed || isMobile) && (
                     <div className="flex-1 min-w-0 transform transition-all duration-200 overflow-hidden text-left w-full">
-                      <div className="font-semibold text-base transition-colors duration-200 whitespace-nowrap w-full">
+                      <div className="font-semibold text-sm transition-colors duration-200 whitespace-nowrap w-full">
                         {item.name}
                       </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 truncate transition-colors duration-200 group-hover:text-gray-600 dark:group-hover:text-gray-300 whitespace-nowrap w-full">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate transition-colors duration-200 group-hover:text-gray-600 dark:group-hover:text-gray-300 whitespace-nowrap w-full">
                         {item.description}
                       </div>
                     </div>
@@ -267,13 +267,13 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
         <div className="absolute bottom-6 left-4 right-4">
           <div className="bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-gray-800/50 dark:to-gray-700/50 rounded-2xl p-4 border border-gray-200/50 dark:border-gray-600/50 backdrop-blur-sm">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center">
-                <span className="text-white text-sm font-bold">U</span>
+              <div className="w-7 h-7 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <span className="text-white text-xs font-bold">U</span>
               </div>
               {(!isCollapsed || isMobile) && (
                 <div className="flex-1 overflow-hidden">
-                  <div className="text-base font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">User Account</div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Premium Member</div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">User Account</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Premium Member</div>
                 </div>
               )}
             </div>

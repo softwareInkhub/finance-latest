@@ -563,7 +563,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
 
             <div className="relative group">
               <button
-                className="px-3 py-1.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
+                className="px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg text-sm font-semibold hover:from-green-600 hover:to-green-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
                 title="Click to view detailed credit transaction analysis"
               >
                 Cr.: ₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -577,7 +577,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                       <div key={index} className="text-sm mb-2">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-700 font-medium">{bank.name}</span>
-                          <span className="text-blue-600 font-bold">₹{bank.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          <span className="text-green-600 font-bold">₹{bank.credit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                         {bank.accounts && bank.accounts.length > 0 && (
                           <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
@@ -598,7 +598,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                 <div className="mt-3 pt-2 border-t border-gray-200">
                   <div className="flex justify-between items-center text-sm font-semibold">
                     <span className="text-gray-800">Total</span>
-                    <span className="text-blue-800">₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="text-green-800">₹{safeTotalCredit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
           </div>
@@ -648,11 +648,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         {showBalance && (
               <div className="relative group">
                 <button
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg ${
-                    balance >= 0 
-                      ? 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700' 
-                      : 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white hover:from-yellow-600 hover:to-yellow-700'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg bg-gradient-to-r from-teal-500 to-teal-600 text-white hover:from-teal-600 hover:to-teal-700`}
                   title="Click to view detailed balance analysis and financial health"
                 >
                   Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

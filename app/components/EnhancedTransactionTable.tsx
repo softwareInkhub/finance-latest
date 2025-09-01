@@ -90,10 +90,9 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
   const getTagBadge = (tag: Tag, onRemove?: () => void) => (
     <span
       key={tag.id}
-      className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-1 mb-1 group"
+      className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-1 mb-1 group text-gray-900 dark:text-gray-100 hover:text-gray-900 hover:dark:text-gray-100 focus:text-gray-900 focus:dark:text-gray-100 active:text-gray-900 active:dark:text-gray-100"
       style={{
         backgroundColor: `${tag.color || '#6366F1'}15`,
-        color: tag.color || '#6366F1',
         border: `1px solid ${tag.color || '#6366F1'}30`,
       }}
     >
@@ -236,13 +235,8 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
     <tbody className="bg-white divide-y divide-gray-200">
       {rows.map((row, idx) => {
         
-        // Determine row background color based on Dr./Cr. field
-        const drCrValue = (row['Dr./Cr.'] || row['Dr./Cr'] || row['Dr / Cr'] || '').toString().toUpperCase();
-        const rowBackgroundClass = drCrValue === 'CR' 
-          ? 'bg-green-200 hover:bg-green-300' 
-          : drCrValue === 'DR' 
-          ? 'bg-red-200 hover:bg-red-300' 
-          : idx % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50/50 hover:bg-blue-50';
+        // Neutral row background (no CR/DR colors)
+        const rowBackgroundClass = idx % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50/50 hover:bg-blue-50';
         
         return (
           <tr 
@@ -257,14 +251,14 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
                 className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
               />
             </td>
-            <td className="px-4 py-3 text-sm font-medium text-gray-900 border-r border-gray-200">
+            <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 border-r border-gray-200 dark:border-gray-700">
               {idx + 1}
             </td>
             {headers.map((header) => (
               <td 
                 key={header} 
-                className={`px-4 py-3 text-sm border-r border-gray-200 ${
-                  header === headers[headers.length - 1] ? '' : 'border-r border-gray-200'
+                className={`px-4 py-3 text-sm border-r border-gray-200 dark:border-gray-700 ${
+                  header === headers[headers.length - 1] ? '' : 'border-r border-gray-200 dark:border-gray-700'
                 }`}
                 style={{ width: columnWidths[header] || 150 }}
               >
@@ -279,7 +273,7 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
                   if (header.toLowerCase().includes('amount')) {
                     const amount = typeof value === 'number' ? value : parseFloat(String(value || 0));
                     return (
-                      <span className="font-semibold text-gray-900">
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
                         ₹{amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                     );
@@ -288,7 +282,7 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
                   if (header.toLowerCase().includes('date')) {
                     const dateValue = typeof value === 'string' ? fixAndConvertToISO(value) : String(value || '');
                     return (
-                      <span className="text-gray-700 font-medium">
+                      <span className="text-gray-700 dark:text-gray-300 font-medium">
                         {formatDisplayDate(dateValue)}
                       </span>
                     );
@@ -299,14 +293,14 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
                     return (
                       <div className="flex items-center space-x-2">
                         <span className="text-lg">{getBankLogo(bankName)}</span>
-                        <span className="font-medium text-gray-900">{bankName}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{bankName}</span>
                       </div>
                     );
                   }
                   
                   if (header.toLowerCase().includes('account') && header.toLowerCase().includes('no')) {
                     return (
-                      <span className="font-mono text-gray-600">
+                      <span className="font-mono text-gray-600 dark:text-gray-400">
                         {maskAccountNumber(String(value || ''))}
                       </span>
                     );
@@ -333,7 +327,7 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
                   }
                   
                   return (
-                    <span className="text-gray-700 truncate block">
+                    <span className="text-gray-700 dark:text-gray-300 truncate block">
                       {String(value || '')}
                     </span>
                   );

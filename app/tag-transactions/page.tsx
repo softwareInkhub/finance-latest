@@ -314,10 +314,9 @@ export default function TagTransactionsPage() {
                               {tags.map(tag => (
                                 <span 
                                   key={tag.id} 
-                                  className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1"
+                                  className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1 text-gray-900 dark:text-gray-100"
                                   style={{
                                     backgroundColor: `${tag.color || '#6366F1'}15`,
-                                    color: tag.color || '#6366F1',
                                     border: `1px solid ${tag.color || '#6366F1'}`
                                   }}
                                 >

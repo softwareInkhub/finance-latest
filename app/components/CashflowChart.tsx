@@ -56,19 +56,8 @@ const CashflowChart: React.FC<CashflowChartProps> = ({ data, loading = false }) 
   useEffect(() => {
     const loadChart = async () => {
       try {
-        const { Chart: ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } = await import('chart.js');
+        await import('chart.js/auto');
         const { Line } = await import('react-chartjs-2');
-
-        ChartJS.register(
-          CategoryScale,
-          LinearScale,
-          PointElement,
-          LineElement,
-          Title,
-          Tooltip,
-          Legend,
-          Filler
-        );
 
         setChartComponent(() => Line);
       } catch (error) {

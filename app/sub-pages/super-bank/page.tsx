@@ -1311,10 +1311,9 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap }: 
                                   {tags.map(tag => (
                                     <span 
                                       key={tag.id} 
-                                      className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1"
+                                      className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1 text-gray-900 dark:text-gray-100"
                                       style={{
                                         backgroundColor: `${tag.color || '#6366F1'}15`,
-                                        color: tag.color || '#6366F1',
                                         border: `1px solid ${tag.color || '#6366F1'}`
                                       }}
                                     >
@@ -1730,12 +1729,54 @@ export default function SuperBankPage() {
       });
   }, []);
 
-  // Fetch all tags
+  // Fetch all tags and set up event listeners
   useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    fetch('/api/tags?userId=' + userId)
-      .then(res => res.json())
-      .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
+    const fetchTags = async () => {
+      const userId = localStorage.getItem('userId');
+      const response = await fetch('/api/tags?userId=' + userId);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setAllTags(data);
+        console.log('Sub-pages SuperBank: Tags loaded, count:', data.length);
+      } else {
+        setAllTags([]);
+        console.log('Sub-pages SuperBank: Tags loaded, empty array');
+      }
+    };
+
+    // Load tags on mount
+    fetchTags();
+
+    // Set up event listeners for tag changes
+    const handleTagDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag deleted event received in Sub-pages SuperBank:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    const handleTagsBulkDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags bulk deleted event received in Sub-pages SuperBank:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    const handleTagUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag updated event received in Sub-pages SuperBank:', customEvent.detail);
+      fetchTags(); // Refresh tags
+    };
+
+    // Add event listeners
+    window.addEventListener('tagDeleted', handleTagDeleted);
+    window.addEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+    window.addEventListener('tagUpdated', handleTagUpdated);
+
+    // Cleanup event listeners
+    return () => {
+      window.removeEventListener('tagDeleted', handleTagDeleted);
+      window.removeEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+      window.removeEventListener('tagUpdated', handleTagUpdated);
+    };
   }, []);
 
 

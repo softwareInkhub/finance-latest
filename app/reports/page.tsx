@@ -530,6 +530,195 @@ export default function ReportsPage() {
   const [sortDropdownOpen, setSortDropdownOpen] = useState<string | null>(null);
   const [dateSortOrder, setDateSortOrder] = useState<'newest' | 'oldest' | ''>('');
 
+  // Load tags on component mount and set up event listeners
+  useEffect(() => {
+    console.log('Reports page: Setting up event listeners and loading tags...');
+    
+    // Load tags when component mounts
+    fetchTags();
+
+    // Test event listener setup
+    const testEvent = () => {
+      console.log('Reports page: Event listener test - working!');
+    };
+    window.addEventListener('testEvent', testEvent);
+    
+    // Test tag event listener
+    const testTagEvent = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Reports page: Test tag event received:', customEvent.detail);
+    };
+    window.addEventListener('testTagEvent', testTagEvent);
+    
+    // Test the event listener
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('testEvent'));
+    }, 1000);
+
+    const handleTagDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag deleted event received in Reports:', customEvent.detail);
+      const { tagName } = customEvent.detail;
+      console.log('Removing tag from cashflow data:', tagName);
+      
+      // Remove the deleted tag from cashflow data
+      setCashFlowData(prevData => {
+        console.log('Current cashflow data before removal:', prevData);
+        
+        const updatedData = prevData.map(section => ({
+          ...section,
+          groups: section.groups.map(group => ({
+            ...group,
+            items: group.items.filter(item => {
+              // Remove items that match the deleted tag name (case-insensitive)
+              const itemName = item.particular?.toLowerCase();
+              const deletedTagName = tagName?.toLowerCase();
+              
+              console.log('Checking item:', item.particular, 'against deleted tag:', tagName);
+              
+              if (itemName === deletedTagName) {
+                console.log('Removing item:', item.particular);
+                return false;
+              }
+              
+              // Also remove from sub-items
+              if (item.subItems) {
+                item.subItems = item.subItems.filter(subItem => {
+                  const subItemName = subItem.particular?.toLowerCase();
+                  if (subItemName === deletedTagName) {
+                    console.log('Removing sub-item:', subItem.particular);
+                    return false;
+                  }
+                  
+                  // Also remove from sub-sub-items
+                  if (subItem.subItems) {
+                    subItem.subItems = subItem.subItems.filter(subSubItem => {
+                      const subSubItemName = subSubItem.particular?.toLowerCase();
+                      if (subSubItemName === deletedTagName) {
+                        console.log('Removing sub-sub-item:', subSubItem.particular);
+                        return false;
+                      }
+                      return true;
+                    });
+                  }
+                  
+                  return true;
+                });
+              }
+              
+              return true;
+            })
+          }))
+        }));
+        
+        console.log('Updated cashflow data after removal:', updatedData);
+        return updatedData;
+      });
+      
+      // Refresh tags data to remove deleted tags
+      fetchTags();
+    };
+
+    const handleTagsBulkDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags bulk deleted event received in Reports:', customEvent.detail);
+      const { deletedTagIds } = customEvent.detail;
+      
+      // Get the names of deleted tags from allTags
+      const deletedTagNames = allTags
+        .filter(tag => deletedTagIds.includes(tag.id))
+        .map(tag => tag.name);
+      
+      console.log('Deleting tags with names:', deletedTagNames);
+      
+      // Remove all deleted tags from cashflow data
+      setCashFlowData(prevData => {
+        console.log('Current cashflow data before bulk removal:', prevData);
+        
+        const updatedData = prevData.map(section => ({
+          ...section,
+          groups: section.groups.map(group => ({
+            ...group,
+            items: group.items.filter(item => {
+              // Remove items that match any of the deleted tag names (case-insensitive)
+              const itemName = item.particular?.toLowerCase();
+              const shouldRemove = deletedTagNames.some(tagName => 
+                itemName === tagName?.toLowerCase()
+              );
+              
+              if (shouldRemove) {
+                console.log('Removing item in bulk delete:', item.particular);
+                return false;
+              }
+              
+              // Also remove from sub-items
+              if (item.subItems) {
+                item.subItems = item.subItems.filter(subItem => {
+                  const subItemName = subItem.particular?.toLowerCase();
+                  const shouldRemoveSub = deletedTagNames.some(tagName => 
+                    subItemName === tagName?.toLowerCase()
+                  );
+                  
+                  if (shouldRemoveSub) {
+                    console.log('Removing sub-item in bulk delete:', subItem.particular);
+                    return false;
+                  }
+                  
+                  // Also remove from sub-sub-items
+                  if (subItem.subItems) {
+                    subItem.subItems = subItem.subItems.filter(subSubItem => {
+                      const subSubItemName = subSubItem.particular?.toLowerCase();
+                      const shouldRemoveSubSub = deletedTagNames.some(tagName => 
+                        subSubItemName === tagName?.toLowerCase()
+                      );
+                      
+                      if (shouldRemoveSubSub) {
+                        console.log('Removing sub-sub-item in bulk delete:', subSubItem.particular);
+                        return false;
+                      }
+                      return true;
+                    });
+                  }
+                  
+                  return true;
+                });
+              }
+              
+              return true;
+            })
+          }))
+        }));
+        
+        console.log('Updated cashflow data after bulk removal:', updatedData);
+        return updatedData;
+      });
+      
+      // Refresh tags data to remove deleted tags
+      fetchTags();
+    };
+
+    const handleTagUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag updated event received in Reports:', customEvent.detail);
+      // Refresh tags data to update tag information
+      fetchTags();
+    };
+
+    // Add event listeners
+    window.addEventListener('tagDeleted', handleTagDeleted);
+    window.addEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+    window.addEventListener('tagUpdated', handleTagUpdated);
+
+    // Cleanup event listeners
+    return () => {
+      window.removeEventListener('tagDeleted', handleTagDeleted);
+      window.removeEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+      window.removeEventListener('tagUpdated', handleTagUpdated);
+      window.removeEventListener('testEvent', testEvent);
+      window.removeEventListener('testTagEvent', testTagEvent);
+    };
+  }, [allTags]); // Include allTags in dependencies since it's used in the effect
+
   // Filter handlers for tag transactions table
   // const handleDateFilter = (date: string | 'clear') => {
   //   if (date === 'clear') {

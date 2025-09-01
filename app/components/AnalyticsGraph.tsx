@@ -31,20 +31,8 @@ const AnalyticsGraph: React.FC<AnalyticsGraphProps> = ({ transactions }) => {
   useEffect(() => {
     const loadChart = async () => {
       try {
-        const { Chart: ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, ArcElement } = await import('chart.js');
+        await import('chart.js/auto');
         const { Pie, Bar, Doughnut } = await import('react-chartjs-2');
-
-        ChartJS.register(
-          CategoryScale,
-          LinearScale,
-          PointElement,
-          LineElement,
-          Title,
-          Tooltip,
-          Legend,
-          Filler,
-          ArcElement
-        );
 
         setChartComponent({ Pie, Bar, Doughnut });
       } catch (error) {
