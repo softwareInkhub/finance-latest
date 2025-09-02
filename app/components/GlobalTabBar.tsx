@@ -117,9 +117,9 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
   }
 
   return (
-    <div className={`bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 ${className}`}>
+    <div className={`bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 ${className}`} style={{ lineHeight: 1 }}>
       {/* Tab Bar */}
-      <div className="flex items-center bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex items-center bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-1">
         <div className="flex-1 flex overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <div
@@ -131,7 +131,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
               onDragEnd={handleDragEnd}
               onDrop={(e) => handleDrop(e, tab.id)}
               className={`
-                flex items-center min-w-0 max-w-xs px-3 py-1 border-r border-gray-200 dark:border-gray-700 cursor-pointer
+                flex items-center min-w-0 max-w-xs px-3 py-0.5 border-r border-gray-200 dark:border-gray-700 cursor-pointer
                 transition-all duration-200 ease-in-out group relative
                 ${activeTabId === tab.id 
                   ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' 

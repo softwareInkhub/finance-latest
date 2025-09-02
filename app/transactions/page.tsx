@@ -82,6 +82,72 @@ export default function TransactionsPage() {
     fetchTransactions();
   }, [fetchTransactions]);
 
+  // Helper: refetch first page and replace data (used after tag changes/slicing)
+  const refetchFromStart = useCallback(async () => {
+    try {
+      setLoading(true);
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setError('User not authenticated');
+        return;
+      }
+
+      const response = await fetch(`/api/transactions/paginated?userId=${userId}&page=1&limit=50`);
+      const data = await response.json();
+      if (response.ok) {
+        const freshTransactions: Transaction[] = data.transactions || [];
+        const freshRows: TransactionRow[] = freshTransactions.map((tx: Transaction) => ({
+          id: tx.id,
+          Date: tx.Date || tx['Transaction Date'] || '',
+          Description: tx.Description || tx['Transaction Description'] || tx.Narration || '',
+          'Reference No.': tx['Reference No.'] || tx.Reference || tx['Cheque No.'] || '',
+          'Account Name': tx.accountName || tx.accountHolderName || '',
+          'Account No.': tx.accountNumber || '',
+          Amount: tx.AmountRaw || 0,
+          'Dr./Cr.': tx['Dr./Cr.'] || '',
+          'Bank Name': tx.bankName || '',
+          Tags: tx.tags || [],
+        }));
+        setTransactions(freshTransactions);
+        setTransactionRows(freshRows);
+        setHasMore(data.pagination?.hasMore || false);
+        setCurrentPage(1);
+        calculateSummaryData(freshTransactions);
+      } else {
+        setError(data.error || 'Failed to fetch transactions');
+      }
+    } catch (err) {
+      setError('Failed to fetch transactions');
+      console.error('Error refetching transactions:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Listen for global events from Tags page or other flows (slicing/uploads) and refresh automatically
+  useEffect(() => {
+    const handler = () => {
+      // Debounced immediate refresh from start
+      refetchFromStart();
+    };
+
+    const events = [
+      'tagUpdated',
+      'tagDeleted',
+      'tagsBulkDeleted',
+      'tagsAppliedToTransactions',
+      'tagsRemovedFromTransactions',
+      'transactionsUpdated',
+      'fileSliced',
+      'statementsUploaded',
+    ];
+
+    events.forEach(evt => window.addEventListener(evt, handler as EventListener));
+    return () => {
+      events.forEach(evt => window.removeEventListener(evt, handler as EventListener));
+    };
+  }, [refetchFromStart]);
+
   const calculateSummaryData = (txs: Transaction[]) => {
     let totalCredit = 0;
     let totalDebit = 0;

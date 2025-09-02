@@ -15,26 +15,7 @@ interface CashflowChartProps {
 }
 
 const CashflowChart: React.FC<CashflowChartProps> = ({ data, loading = false }) => {
-  const [ChartComponent, setChartComponent] = useState<React.ComponentType<{
-    data: {
-      labels: string[];
-      datasets: Array<{
-        label: string;
-        data: number[];
-        borderColor: string;
-        backgroundColor: string;
-        borderWidth: number;
-        fill: boolean;
-        tension: number;
-        pointBackgroundColor: string;
-        pointBorderColor: string;
-        pointBorderWidth: number;
-        pointRadius: number;
-        pointHoverRadius: number;
-      }>;
-    };
-    options: Record<string, unknown>;
-  }> | null>(null);
+  // Removed chart.js: no external chart component
   const [chartData, setChartData] = useState<{
     labels: string[];
     datasets: Array<{
@@ -53,20 +34,7 @@ const CashflowChart: React.FC<CashflowChartProps> = ({ data, loading = false }) 
     }>;
   } | null>(null);
 
-  useEffect(() => {
-    const loadChart = async () => {
-      try {
-        await import('chart.js/auto');
-        const { Line } = await import('react-chartjs-2');
-
-        setChartComponent(() => Line);
-      } catch (error) {
-        console.error('Failed to load Chart.js:', error);
-      }
-    };
-
-    loadChart();
-  }, []);
+  // Removed chart.js dynamic import
 
   useEffect(() => {
     if (data && data.length > 0) {
@@ -136,95 +104,7 @@ const CashflowChart: React.FC<CashflowChartProps> = ({ data, loading = false }) 
     }
   }, [data]);
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: {
-          usePointStyle: true,
-          padding: 20,
-          font: {
-            size: 12,
-            weight: '500',
-          },
-        },
-      },
-      title: {
-        display: false,
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        titleColor: '#fff',
-        bodyColor: '#fff',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 1,
-        cornerRadius: 8,
-        displayColors: true,
-        callbacks: {
-          label: function(context: { dataset: { label?: string }; parsed: { y: number | null } }) {
-            let label = context.dataset.label || '';
-            if (label) {
-              label += ': ';
-            }
-            if (context.parsed.y !== null) {
-              label += new Intl.NumberFormat('en-IN', {
-                style: 'currency',
-                currency: 'INR',
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 0,
-              }).format(context.parsed.y);
-            }
-            return label;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-        ticks: {
-          font: {
-            size: 11,
-          },
-          color: '#6b7280',
-        },
-      },
-      y: {
-        grid: {
-          color: 'rgba(0, 0, 0, 0.05)',
-          borderDash: [5, 5],
-        },
-        ticks: {
-          font: {
-            size: 11,
-          },
-          color: '#6b7280',
-          callback: function(value: number) {
-            return new Intl.NumberFormat('en-IN', {
-              style: 'currency',
-              currency: 'INR',
-              notation: 'compact',
-              maximumFractionDigits: 1,
-            }).format(value);
-          },
-        },
-      },
-    },
-    interaction: {
-      intersect: false,
-      mode: 'index' as const,
-    },
-    elements: {
-      point: {
-        hoverBackgroundColor: '#fff',
-        hoverBorderWidth: 3,
-      },
-    },
-  };
+  // removed unused chart options entirely
 
   if (loading) {
     return (
@@ -265,7 +145,7 @@ const CashflowChart: React.FC<CashflowChartProps> = ({ data, loading = false }) 
     );
   }
 
-  if (!ChartComponent || !chartData) {
+  if (!chartData) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between mb-6">
@@ -277,7 +157,7 @@ const CashflowChart: React.FC<CashflowChartProps> = ({ data, loading = false }) 
         <div className="h-80 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Loading chart component...</p>
+            <p className="text-gray-600 dark:text-gray-400">Preparing chart data...</p>
           </div>
         </div>
       </div>
@@ -308,7 +188,32 @@ const CashflowChart: React.FC<CashflowChartProps> = ({ data, loading = false }) 
       </div>
       
       <div className="w-full h-80">
-        <ChartComponent data={chartData} options={options} />
+        {/* Simple inline SVG line chart to avoid heavy deps */}
+        {(() => {
+          const width = 900;
+          const height = 320;
+          const pad = 32;
+          const labels = chartData.labels;
+          const ds = chartData.datasets;
+          const maxY = Math.max(1, ...ds.flatMap(d => d.data.map(v => Math.abs(v))));
+          const scaleX = (i: number) => pad + (i * (width - 2 * pad)) / Math.max(1, labels.length - 1);
+          const scaleY = (v: number) => height - pad - (Math.abs(v) * (height - 2 * pad)) / maxY;
+          const pathFor = (arr: number[]) => arr.map((v, i) => `${i === 0 ? 'M' : 'L'} ${scaleX(i)} ${scaleY(v)}`).join(' ');
+          return (
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
+              <rect x="0" y="0" width={width} height={height} fill="white" />
+              {/* Axes */}
+              <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="#e5e7eb" />
+              <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="#e5e7eb" />
+              {/* Series */}
+              {ds.map((d, idx) => (
+                <g key={idx}>
+                  <path d={pathFor(d.data)} fill="none" stroke={d.borderColor} strokeWidth={idx === 2 ? 3 : 2} />
+                </g>
+              ))}
+            </svg>
+          );
+        })()}
       </div>
       
       <div className="mt-4 grid grid-cols-3 gap-4 text-center">

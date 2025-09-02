@@ -14,8 +14,7 @@ import {
   RiPriceTag3Line,
   RiErrorWarningLine
 } from 'react-icons/ri';
-import CashflowChart from '../components/CashflowChart';
-import AnalyticsGraph from '../components/AnalyticsGraph';
+// Removed chart components from dashboard
 
 interface CashflowData {
   date: string;
@@ -34,8 +33,9 @@ export default function DashboardPage() {
     totalTransactions: 0
   });
 
-  const [cashflowData, setCashflowData] = useState<CashflowData[]>([]);
-  const [transactions, setTransactions] = useState<Array<Record<string, unknown>>>([]);
+  // Keep setters only; values are not rendered on dashboard
+  const [, setCashflowData] = useState<CashflowData[]>([]);
+  const [, setTransactions] = useState<Array<Record<string, unknown>>>([]);
   const [recentActivities, setRecentActivities] = useState<Array<{
     id: string;
     type: 'transaction' | 'statement' | 'bank' | 'account' | 'tag';
@@ -558,15 +558,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Cashflow Chart */}
-        <div className="mb-8">
-          <CashflowChart data={cashflowData} loading={false} />
-        </div>
-
-        {/* Analytics Graph */}
-        <div className="mb-8">
-          <AnalyticsGraph transactions={transactions} />
-        </div>
+        {/* Chart components removed as requested */}
           </>
         )}
       </div>

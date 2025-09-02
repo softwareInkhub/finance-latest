@@ -48,9 +48,15 @@ export const GlobalTabProvider: React.FC<GlobalTabProviderProps> = ({ children }
       // Check if tab already exists
       const existingTabIndex = prevTabs.findIndex(t => t.id === tab.id);
       if (existingTabIndex !== -1) {
-        // Update existing tab
+        // Preserve existing component instance to avoid remounting and API re-fetches
+        const existing = prevTabs[existingTabIndex];
+        const merged: GlobalTab = {
+          ...existing,
+          ...tab,
+          component: existing.component ?? tab.component,
+        };
         const newTabs = [...prevTabs];
-        newTabs[existingTabIndex] = { ...newTabs[existingTabIndex], ...tab };
+        newTabs[existingTabIndex] = merged;
         setActiveTabId(tab.id);
         return newTabs;
       }

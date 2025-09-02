@@ -198,7 +198,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           </colgroup>
           <thead className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
-              <th className="px-3 py-3 text-left border-r border-gray-200" style={{ width: 40 }} title="Select all transactions">
+              <th className="px-2 py-2 text-left border-r border-gray-200" style={{ width: 40 }} title="Select all transactions">
                 <input 
                   type="checkbox" 
                   checked={selectAll} 
@@ -206,11 +206,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
                 />
               </th>
-              <th className="px-3 py-3 text-left font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700" style={{ width: 40 }} title="Row number">#</th>
+              <th className="px-2 py-2 text-left font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700" style={{ width: 40 }} title="Row number">#</th>
               {headers.map((sh, index) => (
                 <th
                   key={sh}
-                  className={`px-3 py-3 text-left font-medium text-gray-700 dark:text-gray-300 group relative select-none whitespace-nowrap text-ellipsis ${index === headers.length - 1 ? '' : 'border-r border-gray-200 dark:border-gray-700'}`}
+                  className={`px-2 py-2 text-left font-medium text-gray-700 dark:text-gray-300 group relative select-none whitespace-nowrap text-ellipsis ${index === headers.length - 1 ? '' : 'border-r border-gray-200 dark:border-gray-700'}`}
                   style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}
                   draggable
                   onDragStart={() => handleDragStart(sh)}

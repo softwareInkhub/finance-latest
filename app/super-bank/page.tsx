@@ -3543,9 +3543,14 @@ export default function SuperBankPage() {
     fetch('/api/tags?userId=' + userId)
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
-    
-    // Note: Transactions don't need to be refetched when tags are deleted
-    // The tag management component should handle updating transaction references
+
+    // Also refresh transactions so removed tag chips disappear immediately
+    setRefreshTrigger(prev => prev + 1);
+
+    // Notify other pages (e.g., Transactions tab) to refresh too
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tagsRemovedFromTransactions', { detail: { source: 'super-bank' } }));
+    }
   };
 
   // Handle tagged/untagged click filters
@@ -3892,21 +3897,11 @@ export default function SuperBankPage() {
 
   return (
     <div className="h-full overflow-hidden">
-      <div className="h-full py-4 sm:py-6 px-2 sm:px-4 overflow-y-auto">
+      <div className="h-full py-2 sm:py-3 px-2 sm:px-3 overflow-y-auto">
         <div className="max-w-full mx-auto flex flex-col">
         {/* New Super Bank Header with Logo */}
-        <div className="flex flex-row items-center justify-between gap-2 mb-4 sm:mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center shadow">
-              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Super Bank</h1>
-              <p className="text-sm text-gray-600">All Transactions Dashboard</p>
-            </div>
-          </div>
+        <div className="flex flex-row items-center justify-between gap-2 mb-2 sm:mb-3">
+          <div className="flex items-center gap-2" />
           <div className="flex items-center gap-2" />
         </div>
 
@@ -3974,7 +3969,7 @@ export default function SuperBankPage() {
                 </button>
               )}
             </div>
-            <h2 className="font-bold text-blue-700 mb-2 text-sm sm:text-base">Super Bank Header</h2>
+            {/* Removed small 'Super Bank Header' heading to declutter above analytics */}
             <div className="mb-2 text-xs sm:text-sm text-gray-700">
               <span className="font-semibold">Current Header:</span>
               <div className="flex flex-wrap gap-1 sm:gap-2 mt-1">

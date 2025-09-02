@@ -51,6 +51,7 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
   const [transactionHeaders, setTransactionHeaders] = useState<string[]>([]);
   const [searchField, setSearchField] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('desc');
+  const [applyingBulkTag, setApplyingBulkTag] = useState(false);
 
   useEffect(() => {
     // Add a small delay to prevent rapid retries
@@ -428,9 +429,44 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
   }, [bankName, filteredTransactions.length]);
 
   // Add a handler for the tag menu action
-  const handleApplyTagToAllFromMenu = (tagName: string) => {
-    // Implementation for applying tag to all transactions
-    console.log('Apply tag to all:', tagName);
+  const handleApplyTagToAllFromMenu = async (tagName: string) => {
+    try {
+      const tagObj = allTags.find(t => t.name === tagName);
+      if (!tagObj) return;
+      const userId = localStorage.getItem('userId') || '';
+      setApplyingBulkTag(true);
+      const targetTxs = filteredTransactions;
+      if (targetTxs.length === 0) { setApplyingBulkTag(false); return; }
+      const updates = targetTxs.map(tx => {
+        const existing = Array.isArray(tx.tags) ? tx.tags.map(t => t.id) : [];
+        const unique = Array.from(new Set([...existing, tagObj.id]));
+        return {
+          transactionId: tx.id,
+          tags: unique,
+          bankName: String(tx.bankName || bankName),
+          transactionData: { userId },
+        };
+      });
+      const res = await fetch('/api/transaction/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to apply tag');
+      }
+      const refreshed = await fetch(`/api/transactions/bank?bankName=${encodeURIComponent(bankName)}&userId=${userId}`).then(r => r.json());
+      if (Array.isArray(refreshed)) setTransactions(refreshed); else setTransactionsError(refreshed.error || 'Failed to fetch transactions');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tagsAppliedToTransactions', { detail: { tagName, count: targetTxs.length } }));
+      }
+    } catch (e) {
+      console.error(e);
+      setTransactionsError(e instanceof Error ? e.message : 'Failed to apply tag');
+    } finally {
+      setApplyingBulkTag(false);
+    }
   };
 
   // Add a handler for tag deletion from the system
@@ -670,6 +706,11 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
                 </div>
               ) : (
                 <div className="overflow-x-auto relative h-[80vh]">
+                  {applyingBulkTag && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center">
+                      <div className="px-4 py-2 bg-white border rounded shadow text-sm">Applying tag to all matching transactions...</div>
+                    </div>
+                  )}
                   <TransactionTable
                     rows={sortedAndFilteredTransactions.map(tx => {
                       const filtered = Object.fromEntries(Object.entries(tx).filter(([key]) => key !== 'transactionData'));

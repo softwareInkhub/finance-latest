@@ -1146,9 +1146,8 @@ export default function ReportsPage() {
       setCashFlowData(prev => {
         const updated = prev.map(section => ({
           ...section,
-          groups: section.groups.map(group => ({
-            ...group,
-            items: group.items.map(item => {
+          groups: section.groups.map(group => {
+            const mappedItems = group.items.map(item => {
               const updateItem = (node: CashFlowItem): CashFlowItem => {
                 let next: CashFlowItem = { ...node };
                 if (node.createdByTag) {
@@ -1167,8 +1166,19 @@ export default function ReportsPage() {
                 return next;
               };
               return updateItem(item);
-            })
-          }))
+            });
+
+            // Remove tag-created items that no longer exist or have zeroed amounts
+            const filteredItems = mappedItems.filter(it => {
+              if (!it?.createdByTag) return true;
+              const data = tagToData.get(it.particular);
+              if (!data) return false; // tag deleted => remove
+              const zero = (data.credit || 0) === 0 && (data.debit || 0) === 0 && (data.balance || 0) === 0;
+              return !zero;
+            });
+
+            return { ...group, items: filteredItems };
+          })
         }));
 
         // Persist updates (debounced) and local cache

@@ -11,9 +11,12 @@ import ThemeToggle from './ThemeToggle';
 
 interface NavbarProps {
   onMobileMenuToggle?: () => void;
+  title?: string; // optional subtitle (shown after a slash)
+  brandTitle?: string; // primary title to show (defaults to Brmh Fintech)
+  brandIcon?: React.ReactNode; // optional icon to show before the brandTitle
 }
 
-export default function Navbar({ onMobileMenuToggle }: NavbarProps) {
+export default function Navbar({ onMobileMenuToggle, title, brandTitle, brandIcon }: NavbarProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const { user, logout } = useAuth();
 
@@ -35,9 +38,19 @@ export default function Navbar({ onMobileMenuToggle }: NavbarProps) {
       
       {/* App Title */}
       <div className="flex-1">
-        <h1 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent drop-shadow-sm select-none">
-          Brmh Fintech
-        </h1>
+        <div className="flex items-center gap-2">
+          {brandIcon && (
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-300">
+              {brandIcon}
+            </span>
+          )}
+          <h1 className="text-lg md:text-xl font-semibold bg-gradient-to-r from-gray-900 to-gray-700 dark:from-white dark:to-gray-300 bg-clip-text text-transparent drop-shadow-sm select-none">
+            {brandTitle || 'Brmh Fintech'}
+          </h1>
+          {title && (
+            <span className="text-sm md:text-base text-gray-500 dark:text-gray-400">/ {title}</span>
+          )}
+        </div>
       </div>
       
       {/* Right Side Controls */}
