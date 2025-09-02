@@ -6,6 +6,7 @@ import Modal from '../../components/Modals/Modal';
 import { RiAccountPinCircleLine, RiAddLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
 import HeaderEditor from '../../components/HeaderEditor';
 import ConfirmDeleteModal from '../../components/Modals/ConfirmDeleteModal';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Account {
   id: string;
@@ -29,6 +30,7 @@ type Condition = {
 };
 
 export default function AccountsClient({ bankId, onAccountClick, allTags = [] }: AccountsClientProps) {
+  const { theme } = useTheme();
   const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -595,15 +597,25 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
   }
 
   return (
-    <div className="min-h-screen py-4 px-4 space-y-4 bg-gradient-to-br from-gray-50 to-blue-50">
+    <div className={`min-h-screen py-4 px-4 space-y-4 ${
+      theme === 'dark' 
+        ? 'bg-gray-900' 
+        : 'bg-gradient-to-br from-gray-50 to-blue-50'
+    }`}>
       {/* Compact Bank Statement Header Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 relative overflow-hidden">
+      <div className={`rounded-xl shadow-sm border p-4 relative overflow-hidden ${
+        theme === 'dark' 
+          ? 'bg-gray-800 border-gray-700' 
+          : 'bg-white border-gray-200'
+      }`}>
         {/* Background Pattern */}
         <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-blue-100 to-transparent rounded-full opacity-30 transform translate-x-12 -translate-y-12"></div>
         
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <h2 className={`text-lg font-bold flex items-center gap-2 ${
+              theme === 'dark' ? 'text-gray-100' : 'text-gray-900'
+            }`}>
               <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4a2 2 0 00-2-2H6z" clipRule="evenodd" />
@@ -636,14 +648,18 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           </div>
           
           {headerLoading ? (
-            <div className="flex items-center gap-2 text-gray-600">
+            <div className={`flex items-center gap-2 ${
+              theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+            }`}>
               <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               Loading header...
             </div>
           ) : (
             <>
               <div className="mb-3">
-                <span className="text-sm font-semibold text-gray-700 mb-2 block">Current Header:</span>
+                <span className={`text-sm font-semibold mb-2 block ${
+                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                }`}>Current Header:</span>
                 <div className="flex flex-wrap gap-1">
                   {bankHeader.length > 0 ? (
                     bankHeader.map((col, idx) => (
@@ -655,7 +671,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                       </span>
                     ))
                   ) : (
-                    <div className="flex items-center gap-1 text-gray-400 bg-gray-50 rounded-lg px-2 py-1">
+                    <div className={`flex items-center gap-1 rounded-lg px-2 py-1 ${
+                      theme === 'dark' 
+                        ? 'text-gray-400 bg-gray-700' 
+                        : 'text-gray-400 bg-gray-50'
+                    }`}>
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                       </svg>
@@ -685,13 +705,22 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           <Modal isOpen={showMapping} onClose={() => setShowMapping(false)} title={`Map to Super Bank Header`}>
             <form onSubmit={handleSaveMapping} className="space-y-4">
               <div className="flex flex-col gap-3">
-                <div className="font-semibold text-blue-700">Advanced Field Conditions</div>
+                <div className={`font-semibold ${
+                  theme === 'dark' ? 'text-blue-400' : 'text-blue-700'
+                }`}>Advanced Field Conditions</div>
                 {conditions.map((cond, idx) => (
-                  <div key={idx} className="flex flex-wrap items-center gap-2 py-1 border-b border-gray-200">
+                  <div key={idx} className={`flex flex-wrap items-center gap-2 py-1 border-b ${
+                    theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                  }`}>
                     <span>If</span>
                     <select
                       value={cond.if.field}
                       onChange={e => setConditions(prev => prev.map((c, i) => i === idx ? { ...c, if: { ...c.if, field: e.target.value } } : c))}
+                      className={`${
+                        theme === 'dark' 
+                          ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                          : 'border-gray-300'
+                      }`}
                     >
                       <option value="">Select field</option>
                       {bankHeader.map((bh, i) => <option key={i} value={bh}>{bh}</option>)}
@@ -699,6 +728,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                     <select
                       value={cond.if.op}
                       onChange={e => setConditions(prev => prev.map((c, i) => i === idx ? { ...c, if: { ...c.if, op: e.target.value, value: '' } } : c))}
+                      className={`${
+                        theme === 'dark' 
+                          ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                          : 'border-gray-300'
+                      }`}
                     >
                       <option value="">Select operator</option>
                       <option value="present">is present</option>
@@ -716,7 +750,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                         value={cond.if.value || ''}
                         onChange={e => setConditions(prev => prev.map((c, i) => i === idx ? { ...c, if: { ...c.if, value: e.target.value } } : c))}
                         placeholder="Comparison val"
-                        className="border rounded px-1 w-24"
+                        className={`border rounded px-1 w-24 ${
+                          theme === 'dark' 
+                            ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                            : 'border-gray-300'
+                        }`}
                       />
                     )}
                     <span>then</span>
@@ -734,6 +772,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                               return { ...c, then: newThen };
                             }));
                           }}
+                          className={`${
+                            theme === 'dark' 
+                              ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                              : 'border-gray-300'
+                          }`}
                         >
                           <option value="">Select field</option>
                           {superHeaders.map((sh, i) => <option key={i} value={sh}>{sh}</option>)}
@@ -749,7 +792,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                               return { ...c, then: { ...c.then, [field]: newValue } };
                             }));
                           }}
-                          className="border rounded px-1 w-24"
+                          className={`border rounded px-1 w-24 ${
+                            theme === 'dark' 
+                              ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                              : 'border-gray-300'
+                          }`}
                           placeholder="Value or field ref"
                         />
                         <button type="button" onClick={() => {
@@ -777,16 +824,30 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                     <button type="button" onClick={() => removeCondition(idx)} className="text-red-500 ml-2">&times;</button>
                   </div>
                 ))}
-                <div className="flex flex-col gap-2 bg-white border border-blue-100 rounded px-2 py-1 text-xs mb-2">
+                <div className={`flex flex-col gap-2 border rounded px-2 py-1 text-xs mb-2 ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 border-blue-900' 
+                    : 'bg-white border-blue-100'
+                }`}>
                   <div className="flex items-center gap-2">
                     <span>If</span>
                     <div className="overflow-x-auto">
                       <div className="flex flex-wrap items-center gap-2 py-2 min-w-[600px]">
-                        <select value={newCond.ifField} onChange={e => setNewCond(nc => ({ ...nc, ifField: e.target.value }))}>
+                        <select value={newCond.ifField} onChange={e => setNewCond(nc => ({ ...nc, ifField: e.target.value }))}
+                          className={`${
+                            theme === 'dark' 
+                              ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                              : 'border-gray-300'
+                          }`}>
                           <option value="">Select field</option>
                           {bankHeader.map((bh, i) => <option key={i} value={bh}>{bh}</option>)}
                         </select>
-                        <select value={newCond.ifOp} onChange={e => setNewCond(nc => ({ ...nc, ifOp: e.target.value }))}>
+                        <select value={newCond.ifOp} onChange={e => setNewCond(nc => ({ ...nc, ifOp: e.target.value }))}
+                          className={`${
+                            theme === 'dark' 
+                              ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                              : 'border-gray-300'
+                          }`}>
                           <option value="">Select operator</option>
                           <option value="present">is present</option>
                           <option value="not_present">is not present</option>
@@ -803,7 +864,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                             value={newCond.ifValue}
                             onChange={e => setNewCond(nc => ({ ...nc, ifValue: e.target.value }))}
                             placeholder="Comparison value"
-                            className="border rounded px-1 w-24"
+                            className={`border rounded px-1 w-24 ${
+                              theme === 'dark' 
+                                ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                                : 'border-gray-300'
+                            }`}
                           />
                         )}
                         <span>then</span>
@@ -812,6 +877,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                             <select
                               value={thenItem.field}
                               onChange={e => updateThenField(i, 'field', e.target.value)}
+                              className={`${
+                                theme === 'dark' 
+                                  ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                                  : 'border-gray-300'
+                              }`}
                             >
                               <option value="">Select field</option>
                               {superHeaders.map((sh, idx) => <option key={idx} value={sh}>{sh}</option>)}
@@ -821,7 +891,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                               type="text"
                               value={thenItem.value}
                               onChange={e => updateThenField(i, 'value', e.target.value)}
-                              className="border rounded px-1 w-24"
+                              className={`border rounded px-1 w-24 ${
+                                theme === 'dark' 
+                                  ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                                  : 'border-gray-300'
+                              }`}
                               placeholder="Value or field ref"
                             />
                             <button type="button" onClick={() => removeThenField(i)} className="text-red-500">✕</button>
@@ -849,10 +923,20 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
               <div className="flex flex-col gap-3 mt-2">
                 {bankHeader.map((bh, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <span className="min-w-[120px] px-2 py-1 bg-blue-100 rounded text-blue-700 text-xs font-medium border border-blue-200">{bh}</span>
-                    <span className="text-gray-500">→</span>
+                    <span className={`min-w-[120px] px-2 py-1 rounded text-xs font-medium border ${
+                      theme === 'dark' 
+                        ? 'bg-blue-900 text-blue-300 border-blue-700' 
+                        : 'bg-blue-100 text-blue-700 border-blue-200'
+                    }`}>{bh}</span>
+                    <span className={`${
+                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                    }`}>→</span>
                     <select
-                      className="rounded border px-2 py-1 text-sm"
+                      className={`rounded border px-2 py-1 text-sm ${
+                        theme === 'dark' 
+                          ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                          : 'border-gray-300'
+                      }`}
                       value={mapping[bh] || ''}
                       onChange={e => setMapping(m => ({ ...m, [bh]: e.target.value }))}
                     >
@@ -874,7 +958,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                 </button>
                 <button
                   type="button"
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg shadow hover:bg-gray-300 transition-all font-semibold w-fit"
+                  className={`px-4 py-2 rounded-lg shadow transition-all font-semibold w-fit ${
+                    theme === 'dark' 
+                      ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
                   onClick={() => setShowMapping(false)}
                   disabled={mappingLoading}
                 >
@@ -896,8 +984,12 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
               <RiAccountPinCircleLine className="text-white" size={18} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Accounts</h2>
-              <p className="text-sm text-gray-600">Manage your bank accounts and holders</p>
+              <h2 className={`text-xl font-bold ${
+                theme === 'dark' ? 'text-gray-100' : 'text-gray-900'
+              }`}>Accounts</h2>
+              <p className={`text-sm ${
+                theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+              }`}>Manage your bank accounts and holders</p>
             </div>
           </div>
           <button
@@ -915,8 +1007,12 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
               <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <RiAccountPinCircleLine className="text-blue-600" size={32} />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">No accounts added yet</h3>
-              <p className="text-gray-600 mb-4 max-w-md mx-auto text-sm">Get started by adding your first account to begin managing your financial data.</p>
+              <h3 className={`text-lg font-bold mb-2 ${
+                theme === 'dark' ? 'text-gray-100' : 'text-gray-900'
+              }`}>No accounts added yet</h3>
+              <p className={`mb-4 max-w-md mx-auto text-sm ${
+                theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+              }`}>Get started by adding your first account to begin managing your financial data.</p>
               <button
                 onClick={handleAddAccount}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all duration-200 text-sm"
@@ -938,7 +1034,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                     );
                   }
                 }}
-                className="group cursor-pointer relative bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden"
+                className={`group cursor-pointer relative rounded-xl shadow-sm border p-4 transition-all duration-300 hover:shadow-lg hover:scale-105 overflow-hidden ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 border-gray-700' 
+                    : 'bg-white border-gray-200'
+                }`}
               >
                 {/* Background Pattern */}
                 <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-100 via-purple-100 to-transparent rounded-full opacity-20 transform translate-x-10 -translate-y-10 group-hover:scale-110 transition-transform duration-300"></div>
@@ -950,8 +1050,12 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                         <RiAccountPinCircleLine className="text-white text-sm" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 text-sm leading-tight truncate">{account.accountHolderName}</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">Account: {account.accountNumber}</p>
+                        <h3 className={`font-semibold text-sm leading-tight truncate ${
+                          theme === 'dark' ? 'text-gray-100' : 'text-gray-900'
+                        }`}>{account.accountHolderName}</h3>
+                        <p className={`text-xs mt-0.5 ${
+                          theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                        }`}>Account: {account.accountNumber}</p>
                       </div>
                     </div>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
@@ -999,11 +1103,19 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
                     </div>
                   )}
                   
-                  <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-lg p-3 border border-gray-100">
+                  <div className={`rounded-lg p-3 border ${
+                    theme === 'dark' 
+                      ? 'bg-gray-700 border-gray-600' 
+                      : 'bg-gradient-to-br from-gray-50 to-blue-50 border-gray-100'
+                  }`}>
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">IFSC Code</p>
-                        <p className="text-xs font-medium text-gray-900">{account.ifscCode}</p>
+                        <p className={`text-xs uppercase tracking-wide font-semibold ${
+                          theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                        }`}>IFSC Code</p>
+                        <p className={`text-xs font-medium ${
+                          theme === 'dark' ? 'text-gray-200' : 'text-gray-900'
+                        }`}>{account.ifscCode}</p>
                       </div>
                       <div className="w-6 h-6 bg-blue-200 rounded-lg flex items-center justify-center">
                         <svg className="w-3 h-3 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
@@ -1026,7 +1138,9 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="accountHolderName" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="accountHolderName" className={`block text-sm font-medium ${
+              theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+            }`}>
               Account Holder Name
             </label>
             <input
@@ -1034,13 +1148,19 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
               id="accountHolderName"
               value={formData.accountHolderName}
               onChange={(e) => setFormData({ ...formData, accountHolderName: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                theme === 'dark' 
+                  ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                  : 'border-gray-300'
+              }`}
               required
             />
           </div>
 
           <div>
-            <label htmlFor="accountNumber" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="accountNumber" className={`block text-sm font-medium ${
+              theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+            }`}>
               Account Number
             </label>
             <input
@@ -1048,13 +1168,19 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
               id="accountNumber"
               value={formData.accountNumber}
               onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                theme === 'dark' 
+                  ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                  : 'border-gray-300'
+              }`}
               required
             />
           </div>
 
           <div>
-            <label htmlFor="ifscCode" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="ifscCode" className={`block text-sm font-medium ${
+              theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+            }`}>
               IFSC Code
             </label>
             <input
@@ -1062,13 +1188,19 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
               id="ifscCode"
               value={formData.ifscCode}
               onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                theme === 'dark' 
+                  ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                  : 'border-gray-300'
+              }`}
               required
             />
           </div>
 
           <div>
-            <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="tags" className={`block text-sm font-medium ${
+              theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+            }`}>
               Tags (comma-separated)
             </label>
             <input
@@ -1076,7 +1208,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
               id="tags"
               value={formData.tags.join(', ')}
               onChange={(e) => setFormData({ ...formData, tags: e.target.value.split(',').map(tag => tag.trim()) })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                theme === 'dark' 
+                  ? 'border-gray-600 bg-gray-700 text-gray-100' 
+                  : 'border-gray-300'
+              }`}
             />
           </div>
 
@@ -1084,7 +1220,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              className={`px-4 py-2 text-sm font-medium rounded-md ${
+                theme === 'dark' 
+                  ? 'text-gray-300 bg-gray-700 hover:bg-gray-600' 
+                  : 'text-gray-700 bg-gray-100 hover:bg-gray-200'
+              }`}
             >
               Cancel
             </button>

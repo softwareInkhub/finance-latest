@@ -2960,8 +2960,12 @@ export default function ReportsPage() {
                   })}
 
                   {/* OUTFLOWS Section */}
-                  <tr className="border-b-2 border-gray-400">
-                    <td className="py-3 px-4 font-bold text-red-700 text-lg bg-red-50 flex items-center justify-between">
+                  <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-400'}`}>
+                    <td className={`py-3 px-4 font-bold text-lg flex items-center justify-between ${
+                      theme === 'dark' 
+                        ? 'text-red-300 bg-red-900/30' 
+                        : 'text-red-700 bg-red-50'
+                    }`}>
                       <span>{cashFlowData[1].title}</span>
                       {isEditing && (
                         <button
@@ -2973,7 +2977,11 @@ export default function ReportsPage() {
                         </button>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-red-700 text-lg bg-red-50">
+                    <td className={`py-3 px-4 text-right font-bold text-lg ${
+                      theme === 'dark' 
+                        ? 'text-red-300 bg-red-900/30' 
+                        : 'text-red-700 bg-red-50'
+                    }`}>
                       {totalOutflow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -2985,10 +2993,10 @@ export default function ReportsPage() {
                       <React.Fragment key={group.id}>
                         {/* Group Header */}
                         <tr 
-                          className="border-b border-gray-300 hover:bg-gray-50 cursor-pointer"
+                          className={`border-b border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer`}
                           onClick={() => toggleGroup(cashFlowData[1].id, group.id)}
                         >
-                                                   <td className="py-2 pl-4 pr-4 font-semibold text-gray-800 flex items-center gap-2">
+                          <td className={`py-2 pl-4 pr-4 font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2`}>
                              {group.isExpanded ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
                              {group.title}
                              {isEditing && (
@@ -2998,7 +3006,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openEditGroupModal(cashFlowData[1].id, group.id, group.title);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                    title="Edit group"
                                  >
                                    <RiEdit2Line size={14} />
@@ -3008,7 +3016,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openAddModal(cashFlowData[1].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                  className="p-1 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
                                    title="Add new item"
                                  >
                                    <RiAddLine size={14} />
@@ -3018,7 +3026,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openDeleteModal(cashFlowData[1].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                    title="Delete group"
                                  >
                                    <RiDeleteBin6Line size={14} />
@@ -3026,7 +3034,7 @@ export default function ReportsPage() {
           </div>
                              )}
                            </td>
-                                                   <td className="py-2 px-4 text-right font-semibold text-gray-800">
+                          <td className={`py-2 px-4 text-right font-semibold text-gray-800 dark:text-gray-200`}>
                              {groupTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                            </td>
                          </tr>
@@ -3036,14 +3044,14 @@ export default function ReportsPage() {
                            <React.Fragment key={item.id}>
                              {/* Main Item */}
                              <tr
-                               className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`}
+                               className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${item.createdByTag ? 'cursor-pointer' : ''}`}
                                onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}
                                draggable={Boolean((item as unknown as { createdByTag?: boolean }).createdByTag)}
                                onDragStart={() => handleDragStartItem(cashFlowData[1].id, group.id, itemIndex)}
                                onDragOver={handleDragOver}
                                onDrop={(e) => handleDropItem(e, cashFlowData[1].id, group.id, itemIndex)}
                              >
-                               <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
+                               <td className="py-2 pl-16 pr-4 text-gray-700 dark:text-gray-300 flex items-center justify-between">
                                  <div className="flex flex-col">
                                    <div className="flex items-center gap-2">
                                      {item.subItems && item.subItems.length > 0 && (
@@ -3052,15 +3060,15 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            toggleItemExpansion(cashFlowData[1].id, group.id, item.id);
                                          }}
-                                         className="text-gray-500 hover:text-gray-700"
+                                         className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                                        >
                                          {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
                                        </button>
                                      )}
-                                     <span className={`${item.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{item.particular}</span>
+                                     <span className={`${item.createdByTag ? 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium' : ''}`}>{item.particular}</span>
                                    </div>
                                    {item.createdByTag && item.tagData && (
-                                     <div className="text-xs text-gray-500 mt-1">
+                                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                        CR: ₹{(item.tagData.credit || 0).toLocaleString('en-IN')} | 
                                        DR: ₹{(item.tagData.debit || 0).toLocaleString('en-IN')} | 
                                        Bal: ₹{(item.tagData.balance || 0).toLocaleString('en-IN')}
@@ -3076,7 +3084,7 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            openEditMainItemModal(cashFlowData[1].id, group.id, item.id, item.particular);
                                          }}
-                                         className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                         className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                          title="Edit item"
                                        >
                                          <RiEdit2Line size={14} />
@@ -3088,7 +3096,7 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            openSubItemAddModal(cashFlowData[1].id, group.id, item.id);
                                          }}
-                                         className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                         className="p-1 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
                                          title="Add sub-item"
                                        >
                                          <RiAddLine size={14} />
@@ -3099,7 +3107,7 @@ export default function ReportsPage() {
                                          e.stopPropagation();
                                          openDeleteModal(cashFlowData[1].id, group.id, item.id);
                                        }}
-                                       className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                       className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                        title="Delete item"
                                      >
                                        <RiDeleteBin6Line size={14} />
@@ -3107,25 +3115,25 @@ export default function ReportsPage() {
                                    </div>
                                  )}
                                </td>
-                               <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                               <td className="py-2 px-4 text-right text-gray-700 dark:text-gray-300">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                              </tr>
                              
                              {/* Sub-Items */}
                              {item.isExpanded && item.subItems && item.subItems.map((subItem, subIndex) => (
                                <tr
                                  key={subItem.id}
-                                 className={`border-b border-gray-100 hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
+                                 className={`border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
                                  onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}
                                  draggable={Boolean((subItem as unknown as { createdByTag?: boolean }).createdByTag)}
                                  onDragStart={() => handleDragStartSubItem(cashFlowData[1].id, group.id, item.id, subIndex)}
                                  onDragOver={handleDragOver}
                                  onDrop={(e) => handleDropSubItem(e, cashFlowData[1].id, group.id, item.id, subIndex)}
                                >
-                                 <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
+                                 <td className="py-2 pl-24 pr-4 text-gray-600 dark:text-gray-400 flex items-center justify-between">
                                    <div className="flex flex-col">
-                                     <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
+                                     <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium' : ''}`}>{subItem.particular}</span>
                                      {subItem.createdByTag && subItem.tagData && (
-                                       <div className="text-xs text-gray-500 mt-1">
+                                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                          CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
                                          DR: ₹{(subItem.tagData.debit || 0).toLocaleString('en-IN')} | 
                                          Bal: ₹{(subItem.tagData.balance || 0).toLocaleString('en-IN')}
@@ -3141,7 +3149,7 @@ export default function ReportsPage() {
                                              e.stopPropagation();
                                              openSubSubItemAddModal(cashFlowData[1].id, group.id, item.id, subItem.id);
                                            }}
-                                           className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                           className="p-1 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
                                            title="Add sub-sub-item"
                                          >
                                            <RiAddLine size={14} />
@@ -3154,7 +3162,7 @@ export default function ReportsPage() {
                                              e.stopPropagation();
                                              openEditSubItemModal(cashFlowData[1].id, group.id, item.id, subItem.id, subItem.particular);
                                            }}
-                                           className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                           className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                            title="Edit sub-item"
                                          >
                                            <RiEdit2Line size={14} />
@@ -3165,7 +3173,7 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            openDeleteModal(cashFlowData[1].id, group.id, item.id, subItem.id);
                                          }}
-                                         className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                         className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                          title="Delete sub-item"
                                        >
                                          <RiDeleteBin6Line size={14} />
@@ -3173,7 +3181,7 @@ export default function ReportsPage() {
                                      </div>
                                    )}
                                  </td>
-                                 <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                 <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                                </tr>
                              ))}
                            </React.Fragment>
@@ -3183,11 +3191,19 @@ export default function ReportsPage() {
                   })}
 
                                      {/* NET CASH FLOW Section */}
-                   <tr className="border-b-2 border-gray-400">
-                     <td className="py-3 px-4 font-bold text-green-700 text-lg bg-green-50">
+                   <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-400'}`}>
+                     <td className={`py-3 px-4 font-bold text-lg ${
+                       theme === 'dark' 
+                         ? 'text-green-300 bg-green-900/30' 
+                         : 'text-green-700 bg-green-50'
+                     }`}>
                        {cashFlowData[2].title}
                      </td>
-                     <td className="py-3 px-4 text-right font-bold text-green-700 text-lg bg-green-50">
+                     <td className={`py-3 px-4 text-right font-bold text-lg ${
+                       theme === 'dark' 
+                         ? 'text-green-300 bg-green-900/30' 
+                         : 'text-green-700 bg-green-50'
+                     }`}>
                        {(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                      </td>
                    </tr>
@@ -3208,27 +3224,45 @@ export default function ReportsPage() {
               <div className="space-y-3">
                 <div className="space-y-3">
                   <div className="relative group">
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
-                      <div className="text-blue-700 font-medium text-sm mb-1">Total Inflow</div>
-                      <div className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    <div className={`rounded-lg p-4 border cursor-pointer transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-blue-900/30 border-blue-700 hover:bg-blue-900/50' 
+                        : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                    }`}>
+                      <div className={`font-medium text-sm mb-1 ${
+                        theme === 'dark' ? 'text-blue-300' : 'text-blue-700'
+                      }`}>Total Inflow</div>
+                      <div className={`text-2xl font-bold ${
+                        theme === 'dark' ? 'text-blue-200' : 'text-blue-800'
+                      }`}>₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                     </div>
                     {/* Inflow Tooltip */}
                     {(() => {
                       const inflowBreakdown = getBankBreakdown('inflow');
                       const inflowTotal = inflowBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
                       return (
-                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                          <div className="text-sm font-semibold text-gray-800 mb-3">Inflow Breakdown by Banks</div>
+                        <div className={`absolute right-full top-0 mr-2 w-80 border rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none ${
+                          theme === 'dark' 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}>
+                          <div className={`text-sm font-semibold mb-3 ${
+                            theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                          }`}>Inflow Breakdown by Banks</div>
                           {inflowBreakdown.length > 0 ? (
                             <div className="space-y-2">
                               {inflowBreakdown.map((bank, index) => (
                                 <div key={index} className="text-sm mb-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className={`font-medium ${
+                                      theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                                    }`}>{bank.name}</span>
                                     <span className="text-blue-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                                   </div>
                                   {bank.accounts && bank.accounts.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                    <div className={`text-xs mt-1 ml-2 ${
+                                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>
                                       Accounts: {bank.accounts.join(', ')}
                                     </div>
                                   )}
@@ -3236,11 +3270,17 @@ export default function ReportsPage() {
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm text-gray-500">No bank data available</div>
+                            <div className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                            }`}>No bank data available</div>
                           )}
-                          <div className="mt-3 pt-2 border-t border-gray-200">
+                          <div className={`mt-3 pt-2 border-t ${
+                            theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                          }`}>
                             <div className="flex justify-between items-center text-sm font-semibold">
-                              <span className="text-gray-800">Total</span>
+                              <span className={`${
+                                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                              }`}>Total</span>
                               <span className="text-blue-800">₹{inflowTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
                           </div>
@@ -3250,27 +3290,45 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="relative group">
-                    <div className="bg-red-50 rounded-lg p-4 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors">
-                      <div className="text-red-700 font-medium text-sm mb-1">Total Outflow</div>
-                      <div className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    <div className={`rounded-lg p-4 border cursor-pointer transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-red-900/30 border-red-700 hover:bg-red-900/50' 
+                        : 'bg-red-50 border-red-200 hover:bg-red-100'
+                    }`}>
+                      <div className={`font-medium text-sm mb-1 ${
+                        theme === 'dark' ? 'text-red-300' : 'text-red-700'
+                      }`}>Total Outflow</div>
+                      <div className={`text-2xl font-bold ${
+                        theme === 'dark' ? 'text-red-200' : 'text-red-800'
+                      }`}>₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                     </div>
                     {/* Outflow Tooltip */}
                     {(() => {
                       const outflowBreakdown = getBankBreakdown('outflow');
                       const outflowTotal = outflowBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
                       return (
-                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                          <div className="text-sm font-semibold text-gray-800 mb-3">Outflow Breakdown by Banks</div>
+                        <div className={`absolute right-full top-0 mr-2 w-80 border rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none ${
+                          theme === 'dark' 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}>
+                          <div className={`text-sm font-semibold mb-3 ${
+                            theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                          }`}>Outflow Breakdown by Banks</div>
                           {outflowBreakdown.length > 0 ? (
                             <div className="space-y-2">
                               {outflowBreakdown.map((bank, index) => (
                                 <div key={index} className="text-sm mb-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className={`font-medium ${
+                                      theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                                    }`}>{bank.name}</span>
                                     <span className="text-red-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                                   </div>
                                   {bank.accounts && bank.accounts.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                    <div className={`text-xs mt-1 ml-2 ${
+                                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>
                                       Accounts: {bank.accounts.join(', ')}
                                     </div>
                                   )}
@@ -3278,11 +3336,17 @@ export default function ReportsPage() {
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm text-gray-500">No bank data available</div>
+                            <div className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                            }`}>No bank data available</div>
                           )}
-                          <div className="mt-3 pt-2 border-t border-gray-200">
+                          <div className={`mt-3 pt-2 border-t ${
+                            theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                          }`}>
                             <div className="flex justify-between items-center text-sm font-semibold">
-                              <span className="text-gray-800">Total</span>
+                              <span className={`${
+                                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                              }`}>Total</span>
                               <span className="text-red-800">₹{outflowTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
                           </div>
@@ -3292,9 +3356,19 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="relative group">
-                    <div className="bg-green-50 rounded-lg p-4 border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
-                      <div className="text-green-700 font-medium text-sm mb-1">Net Cash Flow</div>
-                      <div className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                    <div className={`rounded-lg p-4 border cursor-pointer transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50' 
+                        : 'bg-green-50 border-green-200 hover:bg-green-100'
+                    }`}>
+                      <div className={`font-medium text-sm mb-1 ${
+                        theme === 'dark' ? 'text-green-300' : 'text-green-700'
+                      }`}>Net Cash Flow</div>
+                      <div className={`text-2xl font-bold ${
+                        theme === 'dark' 
+                          ? (netFlow >= 0 ? 'text-green-200' : 'text-red-200')
+                          : (netFlow >= 0 ? 'text-green-800' : 'text-red-800')
+                      }`}>
                   ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
           </div>
@@ -3303,21 +3377,31 @@ export default function ReportsPage() {
                       const netBreakdown = getBankBreakdown('net');
                       const netTotal = netBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
                       return (
-                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                          <div className="text-sm font-semibold text-gray-800 mb-3">Net Cash Flow by Banks</div>
+                        <div className={`absolute right-full top-0 mr-2 w-80 border rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none ${
+                          theme === 'dark' 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}>
+                          <div className={`text-sm font-semibold mb-3 ${
+                            theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                          }`}>Net Cash Flow by Banks</div>
                           {netBreakdown.length > 0 ? (
                             <div className="space-y-2">
                               {netBreakdown.map((bank, index) => (
                                 <div key={index} className="text-sm mb-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className={`font-medium ${
+                                      theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                                    }`}>{bank.name}</span>
                                     <span className={`font-bold ${bank.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                       ₹{Math.abs(bank.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                       {bank.amount >= 0 ? ' (Inflow)' : ' (Outflow)'}
                                     </span>
                                   </div>
                                   {bank.accounts && bank.accounts.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                    <div className={`text-xs mt-1 ml-2 ${
+                                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>
                                       Accounts: {bank.accounts.join(', ')}
                                     </div>
                                   )}
@@ -3325,11 +3409,17 @@ export default function ReportsPage() {
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm text-gray-500">No bank data available</div>
+                            <div className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                            }`}>No bank data available</div>
                           )}
-                          <div className="mt-3 pt-2 border-t border-gray-200">
+                          <div className={`mt-3 pt-2 border-t ${
+                            theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                          }`}>
                             <div className="flex justify-between items-center text-sm font-semibold">
-                              <span className="text-gray-800">Net Total</span>
+                              <span className={`${
+                                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                              }`}>Net Total</span>
                               <span className={`${netTotal >= 0 ? 'text-green-800' : 'text-red-800'}`}>
                                 ₹{netTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </span>
@@ -3344,7 +3434,9 @@ export default function ReportsPage() {
 
               {/* Operations Title */}
               <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Operations</h3>
+                <h3 className={`text-xl font-bold mb-4 ${
+                  theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                }`}>Operations</h3>
               </div>
 
               {/* Edit Mode Toggle */}
@@ -3462,12 +3554,12 @@ export default function ReportsPage() {
                {/* Add Item Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-700">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Add New Sub Group</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add New Sub Group</h3>
                 <button
                   onClick={closeAddModal}
-                  className="text-gray-400 hover:text-gray-300 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                 >
                   <RiCloseLine size={20} />
                 </button>
@@ -3475,7 +3567,7 @@ export default function ReportsPage() {
               
               <div className="space-y-4">
               <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Sub Group Name
                   </label>
                   <input
@@ -3483,7 +3575,7 @@ export default function ReportsPage() {
                     value={newItemName}
                     onChange={(e) => setNewItemName(e.target.value)}
                     placeholder="Enter sub group name"
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                     autoFocus
                   />
               </div>
@@ -3492,7 +3584,7 @@ export default function ReportsPage() {
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={closeAddModal}
-                  className="flex-1 px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Cancel
                 </button>
@@ -3603,47 +3695,47 @@ export default function ReportsPage() {
                      {/* Group Option Modal */}
            {showGroupOptionModal && (
              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-               <div className="bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-700">
+               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700">
                  <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-lg font-semibold text-white">Add Sub Group</h3>
+                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Sub Group</h3>
                    <button
                      onClick={closeGroupOptionModal}
-                     className="text-gray-400 hover:text-gray-300 transition-colors"
+                     className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                    >
                      <RiCloseLine size={20} />
                    </button>
                  </div>
                  
                  <div className="space-y-4">
-                   <p className="text-gray-400 mb-4">How would you like to add this sub group?</p>
+                   <p className="text-gray-600 dark:text-gray-400 mb-4">How would you like to add this sub group?</p>
                    
             <div className="space-y-3">
                      <button
                        onClick={openAddGroupNameModal}
-                       className="w-full p-4 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors text-left"
+                       className="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
                      >
             <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-blue-900/30 rounded-lg flex items-center justify-center">
-                           <RiAddLine className="text-blue-400" size={20} />
+                         <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                           <RiAddLine className="text-blue-600 dark:text-blue-400" size={20} />
               </div>
               <div>
-                           <h4 className="font-semibold text-gray-200">Add Sub Group by Name</h4>
-                           <p className="text-sm text-gray-400">Create a sub group with a custom name</p>
+                           <h4 className="font-semibold text-gray-900 dark:text-gray-200">Add Sub Group by Name</h4>
+                           <p className="text-sm text-gray-600 dark:text-gray-400">Create a sub group with a custom name</p>
               </div>
             </div>
                      </button>
                      
                      <button
                        onClick={openAddGroupTagsModal}
-                       className="w-full p-4 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors text-left"
+                       className="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
                      >
             <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-green-900/30 rounded-lg flex items-center justify-center">
-                           <RiBarChartLine className="text-green-400" size={20} />
+                         <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                           <RiBarChartLine className="text-green-600 dark:text-green-400" size={20} />
               </div>
               <div>
-                           <h4 className="font-semibold text-gray-200">Add by Tags</h4>
-                           <p className="text-sm text-gray-400">Create a sub group using predefined tags</p>
+                           <h4 className="font-semibold text-gray-900 dark:text-gray-200">Add by Tags</h4>
+                           <p className="text-sm text-gray-600 dark:text-gray-400">Create a sub group using predefined tags</p>
               </div>
             </div>
                      </button>
@@ -3653,7 +3745,7 @@ export default function ReportsPage() {
                  <div className="flex gap-3 mt-6">
                    <button
                      onClick={closeGroupOptionModal}
-                     className="flex-1 px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                    >
                      Cancel
                    </button>
