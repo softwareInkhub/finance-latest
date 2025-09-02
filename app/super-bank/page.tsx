@@ -3897,7 +3897,7 @@ export default function SuperBankPage() {
 
   return (
     <div className="h-full overflow-hidden">
-      <div className="h-full py-2 sm:py-3 px-2 sm:px-3 overflow-y-auto">
+      <div className="h-full py-2 sm:py-3 px-2 sm:px-3">
         <div className="max-w-full mx-auto flex flex-col">
         {/* New Super Bank Header with Logo */}
         <div className="flex flex-row items-center justify-between gap-2 mb-2 sm:mb-3">
