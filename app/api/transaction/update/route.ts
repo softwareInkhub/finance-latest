@@ -50,7 +50,8 @@ export async function POST(request: Request) {
     try {
       const userId = (transactionData && (transactionData as Record<string, unknown>).userId) as string | undefined;
       if (userId) {
-        await recomputeAndSaveTagsSummary(userId);
+        // Don't block the response on recompute to keep single updates snappy
+        recomputeAndSaveTagsSummary(userId).catch(() => {});
       }
     } catch (e) {
       console.warn('Tags summary recompute after transaction update failed (non-blocking):', e);

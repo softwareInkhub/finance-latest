@@ -841,13 +841,13 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
           <div className="mb-2">
 
-            <div className="font-semibold mb-1">Select fields to check for duplicate transactions:</div>
+            <div className="font-semibold mb-1 text-gray-900 dark:text-gray-100">Select fields to check for duplicate transactions:</div>
 
             <div className="flex flex-wrap gap-2 mb-2">
 
               {sliceData.length > 0 && sliceData[0].map((header, idx) => (
 
-                <label key={header + '-' + idx} className="flex items-center gap-1 text-xs bg-gray-100 px-2 py-1 rounded cursor-pointer">
+                <label key={header + '-' + idx} className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-2 py-1 rounded cursor-pointer border border-gray-300 dark:border-gray-700">
 
                   <input
 
@@ -899,15 +899,15 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
           <div className="overflow-x-auto max-h-[70vh]">
 
-            <table className="min-w-full border text-sm">
+            <table className="min-w-full border border-gray-200 dark:border-gray-700 text-sm bg-white dark:bg-gray-900">
 
-              <thead className="sticky top-0 z-20 bg-white">
+              <thead className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-900">
 
                 <tr>
 
                   {sliceData[0]?.map((header, idx) => (
 
-                    <th key={idx} className="border px-2 py-2 font-bold bg-blue-50 text-blue-900 whitespace-nowrap">{header}</th>
+                    <th key={idx} className="border border-gray-200 dark:border-gray-700 px-2 py-2 font-bold bg-blue-50 dark:bg-gray-800 text-blue-900 dark:text-gray-200 whitespace-nowrap">{header}</th>
 
                   ))}
 
@@ -923,7 +923,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
                     {row.map((cell, j) => (
 
-                      <td key={j} className="border px-2 py-1 whitespace-nowrap">{cell}</td>
+                      <td key={j} className="border border-gray-200 dark:border-gray-700 px-2 py-1 whitespace-nowrap text-gray-900 dark:text-gray-100">{cell}</td>
 
                     ))}
 
@@ -3979,7 +3979,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3 ">
 
-        <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-2">
 
           <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 
@@ -3997,7 +3997,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
           {previewData[0]?.filter(header => header && header.trim() !== '').map((header, idx) => (
 
-            <label key={idx} className="flex items-center space-x-1 p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
+            <label key={idx} className="flex items-center space-x-1 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
 
               <input
 
@@ -4019,11 +4019,11 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                 }}
 
-                className="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-1"
+                className="w-3 h-3 text-blue-600 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-1"
 
               />
 
-              <span className="text-xs font-medium text-white truncate" title={header}>
+              <span className="text-xs font-medium text-gray-800 dark:text-gray-100 truncate" title={header}>
 
                 {header}
 

@@ -409,6 +409,9 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
       })
       .catch(() => setTransactionsError('Failed to fetch transactions'))
       .finally(() => setLoadingTransactions(false));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tagsRemovedFromTransactions', { detail: { transactionId: tx.id, tagId } }));
+    }
   };
 
   useEffect(() => {
@@ -573,6 +576,9 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
                     const existingTag = Array.isArray(existingTags) ? existingTags.find(t => t.name === name) : null;
                     if (existingTag) {
                       setSelectedTagId(existingTag.id);
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('tagUpdated', { detail: { action: 'exists', tag: existingTag } }));
+                      }
                       return existingTag.id;
                     }
                     throw new Error('Tag already exists');
@@ -582,6 +588,9 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
                   const tag = await res.json();
                   setAllTags(prev => [...prev, tag]);
                   setSelectedTagId(tag.id);
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('tagUpdated', { detail: { action: 'created', tag } }));
+                  }
                   return tag.id;
                 }}
               />

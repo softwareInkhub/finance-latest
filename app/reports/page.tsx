@@ -195,6 +195,11 @@ export default function ReportsPage() {
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [tagSearchQuery, setTagSearchQuery] = useState('');
+  // Keep a ref in sync with allTags to avoid capturing it in effects
+  const allTagsRef = useRef<Tag[]>([]);
+  useEffect(() => {
+    allTagsRef.current = allTags;
+  }, [allTags]);
 
   const [modalSelectedTags, setModalSelectedTags] = useState<Tag[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -427,6 +432,44 @@ export default function ReportsPage() {
     fetchRemote();
   }, [saveCashFlowData]);
 
+  // Recompute tags summary on backend and reload
+  const recomputeAndLoadTagsSummary = useCallback(async () => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const userId = localStorage.getItem('userId');
+      console.log('Recomputing tags summary for userId:', userId);
+      if (!userId) {
+        console.log('No userId found for recompute');
+        return null;
+      }
+      console.log('Sending POST to recompute tags summary...');
+      const postRes = await fetch('/api/reports/tags-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      console.log('POST response status:', postRes.status);
+      if (!postRes.ok) {
+        console.log('POST failed:', postRes.statusText);
+        return null;
+      }
+      console.log('Fetching updated tags summary...');
+      const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
+      console.log('GET response status:', res.status);
+      if (!res.ok) {
+        console.log('GET failed:', res.statusText);
+        return null;
+      }
+      const summary = await res.json();
+      console.log('Updated summary received:', summary);
+      setTagsSummary(summary);
+      return summary as typeof tagsSummary;
+    } catch (err) {
+      console.error('Failed to recompute/load tags summary:', err);
+      return null;
+    }
+  }, []);
+
   // Load tags summary from backend on mount
   useEffect(() => {
     const load = async () => {
@@ -454,48 +497,19 @@ export default function ReportsPage() {
     load();
   }, []);
 
-  // Recompute tags summary on backend and reload
-  const recomputeAndLoadTagsSummary = useCallback(async () => {
-    try {
-      if (typeof window === 'undefined') return null;
-      const userId = localStorage.getItem('userId');
-      console.log('Recomputing tags summary for userId:', userId);
-      if (!userId) {
-        console.log('No userId found for recompute');
-        return null;
+  // Fallback: if summary loads empty, trigger a recompute once
+  const didRecomputeOnEmptyRef = useRef(false);
+  useEffect(() => {
+    if (!didRecomputeOnEmptyRef.current) {
+      const isEmpty = !tagsSummary || (typeof tagsSummary === 'object' && Object.keys(tagsSummary).length === 0);
+      if (isEmpty) {
+        didRecomputeOnEmptyRef.current = true;
+        recomputeAndLoadTagsSummary();
       }
-      
-      console.log('Sending POST to recompute tags summary...');
-      const postRes = await fetch('/api/reports/tags-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      console.log('POST response status:', postRes.status);
-      
-      if (!postRes.ok) {
-        console.log('POST failed:', postRes.statusText);
-        return null;
-      }
-      
-      console.log('Fetching updated tags summary...');
-      const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
-      console.log('GET response status:', res.status);
-      
-      if (!res.ok) {
-        console.log('GET failed:', res.statusText);
-        return null;
-      }
-      
-      const summary = await res.json();
-      console.log('Updated summary received:', summary);
-      setTagsSummary(summary);
-      return summary as typeof tagsSummary;
-    } catch (err) {
-      console.error('Failed to recompute/load tags summary:', err);
-      return null;
     }
-  }, []);
+  }, [tagsSummary, recomputeAndLoadTagsSummary]);
+
+  
 
   // Function to fetch tag financial data - using backend summary
   const fetchTagFinancialData = useCallback(async (tagName: string, ensureFresh: boolean = false) => {
@@ -624,8 +638,9 @@ export default function ReportsPage() {
       console.log('Tags bulk deleted event received in Reports:', customEvent.detail);
       const { deletedTagIds } = customEvent.detail;
       
-      // Get the names of deleted tags from allTags
-      const deletedTagNames = allTags
+      // Get the names of deleted tags from the latest tags snapshot
+      const currentTags = allTagsRef.current || [];
+      const deletedTagNames = currentTags
         .filter(tag => deletedTagIds.includes(tag.id))
         .map(tag => tag.name);
       
@@ -700,7 +715,23 @@ export default function ReportsPage() {
     const handleTagUpdated = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.log('Tag updated event received in Reports:', customEvent.detail);
-      // Refresh tags data to update tag information
+      // Refresh tags data to update tag information and recompute summaries
+      fetchTags();
+      recomputeAndLoadTagsSummary();
+    };
+
+    // React to tags being applied/removed to keep summaries in sync
+    const handleTagsApplied = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags applied to transactions event in Reports:', customEvent.detail);
+      recomputeAndLoadTagsSummary();
+      fetchTags();
+    };
+
+    const handleTagsRemoved = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags removed from transactions event in Reports:', customEvent.detail);
+      recomputeAndLoadTagsSummary();
       fetchTags();
     };
 
@@ -708,16 +739,20 @@ export default function ReportsPage() {
     window.addEventListener('tagDeleted', handleTagDeleted);
     window.addEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
     window.addEventListener('tagUpdated', handleTagUpdated);
+    window.addEventListener('tagsAppliedToTransactions', handleTagsApplied as EventListener);
+    window.addEventListener('tagsRemovedFromTransactions', handleTagsRemoved as EventListener);
 
     // Cleanup event listeners
     return () => {
       window.removeEventListener('tagDeleted', handleTagDeleted);
       window.removeEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
       window.removeEventListener('tagUpdated', handleTagUpdated);
+      window.removeEventListener('tagsAppliedToTransactions', handleTagsApplied as EventListener);
+      window.removeEventListener('tagsRemovedFromTransactions', handleTagsRemoved as EventListener);
       window.removeEventListener('testEvent', testEvent);
       window.removeEventListener('testTagEvent', testTagEvent);
     };
-  }, [allTags]); // Include allTags in dependencies since it's used in the effect
+  }, [recomputeAndLoadTagsSummary]);
 
   // Filter handlers for tag transactions table
   // const handleDateFilter = (date: string | 'clear') => {
@@ -1131,8 +1166,9 @@ export default function ReportsPage() {
         return;
       }
       
+      // Normalize keys to lowercase so lookups are consistent
       const lookup = new Map<string, { credit: number; debit: number; balance: number }>(
-        (summary?.tags || []).map((t: Record<string, unknown>) => [t.tagName as string, { credit: t.credit as number, debit: t.debit as number, balance: t.balance as number }])
+        (summary?.tags || []).map((t: Record<string, unknown>) => [String(t.tagName || '').toLowerCase(), { credit: Number(t.credit || 0), debit: Number(t.debit || 0), balance: Number(t.balance || 0) }])
       );
       const tagToData = new Map(
         Array.from(tagNames).map((name) => {
@@ -1168,13 +1204,12 @@ export default function ReportsPage() {
               return updateItem(item);
             });
 
-            // Remove tag-created items that no longer exist or have zeroed amounts
+            // Keep tag-created items even if current balance is zero; only remove when tag deleted
             const filteredItems = mappedItems.filter(it => {
               if (!it?.createdByTag) return true;
               const data = tagToData.get(it.particular);
-              if (!data) return false; // tag deleted => remove
-              const zero = (data.credit || 0) === 0 && (data.debit || 0) === 0 && (data.balance || 0) === 0;
-              return !zero;
+              // If tag no longer exists, remove the item
+              return !!data;
             });
 
             return { ...group, items: filteredItems };
@@ -1920,21 +1955,24 @@ export default function ReportsPage() {
   };
 
   const openAddGroupTagsModal = async () => {
-    // Don't recompute tags summary on modal open - use existing data
-    // This was causing the slow performance
     setIsTagsModalLoading(true);
     setShowTagsModal(true);
     setShowGroupOptionModal(false);
     
     try {
+      // Ensure the latest tag-summary so CR/DR/Bal show immediately
+      await recomputeAndLoadTagsSummary();
       await fetchTags();
     } finally {
       setIsTagsModalLoading(false);
     }
   };
 
+  const isFetchingTagsRef = useRef(false);
   const fetchTags = async () => {
     try {
+      if (isFetchingTagsRef.current) return;
+      isFetchingTagsRef.current = true;
       const userId = localStorage.getItem('userId');
       if (!userId) {
         console.error('No user ID found');
@@ -1948,6 +1986,8 @@ export default function ReportsPage() {
       }
     } catch (error) {
       console.error('Error fetching tags:', error);
+    } finally {
+      isFetchingTagsRef.current = false;
     }
   };
 

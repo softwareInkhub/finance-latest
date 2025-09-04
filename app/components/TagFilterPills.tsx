@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FiMoreHorizontal, FiChevronDown, FiChevronUp, FiSearch } from 'react-icons/fi';
+import { FiMoreHorizontal, FiSearch } from 'react-icons/fi';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface Tag {
@@ -42,7 +42,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
   allTags, 
   tagFilters, 
   onToggleTag, 
-  onClear, 
+  // onClear is intentionally not destructured/used to avoid rendering the extra controls row
   onTagDeleted, 
   onApplyTagToAll, 
   tagStats, 
@@ -121,6 +121,10 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
       });
       setDeleteModal(null);
       setDeleteInput('');
+      // Broadcast globally so other pages (Reports, Super Bank) react immediately
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tagDeleted', { detail: { id: deleteModal.tag.id, tagName: deleteModal.tag.name } }));
+      }
       if (onTagDeleted) onTagDeleted();
     } catch {
       // Optionally show error
@@ -470,29 +474,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
         </div>
       )}
 
-      {/* Controls row */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          {tagFilters.length > 0 && onClear && (
-            <button
-              className="px-2 py-1 text-xs font-medium border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors rounded-md whitespace-nowrap"
-              onClick={onClear}
-            >
-              Clear All Filters
-            </button>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
-            title={isExpanded ? "Show less" : "Show more"}
-          >
-            {isExpanded ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
-          </button>
-        </div>
-      </div>
+      {/* Controls row removed to avoid blank extra row under pills */}
 
       {/* No results message */}
       {searchQuery && filteredTags.length === 0 && (

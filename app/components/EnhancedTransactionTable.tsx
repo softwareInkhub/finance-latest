@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { FiChevronDown, FiChevronUp, FiDownload, FiFilter, FiSearch } from 'react-icons/fi';
 import { RiPriceTag3Line, RiBankLine, RiCalendarLine, RiMoneyDollarCircleLine } from 'react-icons/ri';
 import { TransactionRow, Tag } from '../types/transaction';
@@ -57,6 +57,31 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const tableScrollRef = useRef<HTMLDivElement>(null);
+  // Lightweight virtualization
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(600);
+  const ROW_HEIGHT = 48; // approximate row height
+  const overscan = 10;
+  const enableVirtualization = rows.length > 500;
+  const totalHeight = rows.length * ROW_HEIGHT;
+  const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + overscan;
+  const startIndex = enableVirtualization ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - Math.floor(overscan / 2)) : 0;
+  const endIndex = enableVirtualization ? Math.min(rows.length, startIndex + visibleCount) : rows.length;
+  const topPad = enableVirtualization ? startIndex * ROW_HEIGHT : 0;
+  const bottomPad = enableVirtualization ? Math.max(0, totalHeight - topPad - (endIndex - startIndex) * ROW_HEIGHT) : 0;
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const onScroll = () => setScrollTop(el.scrollTop);
+    const onResize = () => setContainerHeight(el.clientHeight || 600);
+    onResize();
+    el.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', onResize);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
 
   // Utility functions
   const maskAccountNumber = (accountNumber: string) => {
@@ -233,7 +258,11 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
   // Enhanced table body
   const renderBody = () => (
     <tbody className="bg-white divide-y divide-gray-200">
-      {rows.map((row, idx) => {
+      {enableVirtualization && topPad > 0 && (
+        <tr style={{ height: topPad }}><td colSpan={2 + headers.length} /></tr>
+      )}
+      {rows.slice(startIndex, endIndex).map((row, localIdx) => {
+        const idx = enableVirtualization ? startIndex + localIdx : localIdx;
         
         // Neutral row background (no CR/DR colors)
         const rowBackgroundClass = idx % 2 === 0 ? 'bg-white hover:bg-blue-50' : 'bg-gray-50/50 hover:bg-blue-50';
@@ -337,6 +366,9 @@ const EnhancedTransactionTable: React.FC<EnhancedTransactionTableProps> = ({
           </tr>
         );
       })}
+      {enableVirtualization && bottomPad > 0 && (
+        <tr style={{ height: bottomPad }}><td colSpan={2 + headers.length} /></tr>
+      )}
     </tbody>
   );
 
