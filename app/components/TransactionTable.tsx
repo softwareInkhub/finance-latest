@@ -185,7 +185,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 
 
   return (
-    <div className="flex flex-col h-[65vh]" style={{ minHeight: '500px' }}>
+    <div className="flex flex-col h-[60vh]" style={{ minHeight: '420px' }}>
       {/* Table container with vertical scroll only */}
              <div ref={tableScrollRef} className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded">
       {loading ? (

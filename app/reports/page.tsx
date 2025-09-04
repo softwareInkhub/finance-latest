@@ -911,7 +911,7 @@ export default function ReportsPage() {
     const toNumber = (val: unknown): number => {
       if (typeof val === 'number' && !isNaN(val)) return val;
       if (typeof val === 'string') {
-        const match = val.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+        const match = val.replace(/₹|,/g, '').match(/-?\d+(?:\.\d+)?/);
         if (match) return parseFloat(match[0]);
       }
       return 0;
@@ -2622,11 +2622,29 @@ export default function ReportsPage() {
       setShowTagTransactionsModal(true); // open immediately
       // Fetch all transactions for user across banks from backend, then filter client-side by tag name for the modal
       const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
-      const res = await fetch(userId ? `/api/transactions/all?userId=${encodeURIComponent(userId)}` : `/api/transactions/all`);
+      // Fast path: load a limited batch quickly for instant render
+      const fastUrl = userId
+        ? `/api/transactions/all?userId=${encodeURIComponent(userId)}&limit=3000`
+        : `/api/transactions/all?limit=3000`;
+      const fastRes = await fetch(fastUrl);
       let txs: TransactionData[] = [];
-      if (res.ok) {
-        const allTx = await res.json();
-        txs = Array.isArray(allTx) ? allTx.filter((tx: Record<string, unknown>) => Array.isArray(tx.tags) && tx.tags.some((t: Record<string, unknown>) => t?.name === tagName)) : [];
+      if (fastRes.ok) {
+        const allTx = await fastRes.json();
+        const selectedLower = tagName.toLowerCase();
+        txs = Array.isArray(allTx)
+          ? allTx.filter((tx: Record<string, unknown>) =>
+              Array.isArray(tx.tags) &&
+              tx.tags.some((t: unknown) => {
+                if (typeof t === 'string') return t.toLowerCase() === selectedLower;
+                if (t && typeof t === 'object') {
+                  const anyTag = t as Record<string, unknown>;
+                  const name = typeof anyTag.name === 'string' ? anyTag.name.toLowerCase() : '';
+                  return name === selectedLower;
+                }
+                return false;
+              })
+            )
+          : [];
       }
         // Fetch user account numbers for unique accountIds
       const uniqueAccountIds: string[] = Array.from(new Set(txs.map((t: TransactionData) => t.accountId as string).filter((v): v is string => typeof v === 'string' && v.length > 0)));
@@ -2651,9 +2669,60 @@ export default function ReportsPage() {
             tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A'
         }));
         setActiveTagTransactions(enriched);
+        setIsTagModalLoading(false);
+
+        // Background: fetch all and update when complete
+        const fullUrl = userId
+          ? `/api/transactions/all?userId=${encodeURIComponent(userId)}&fetchAll=true`
+          : `/api/transactions/all?fetchAll=true`;
+        fetch(fullUrl)
+          .then(async (res) => {
+            if (!res.ok) return null;
+            const allTx = await res.json();
+            const selectedLower = tagName.toLowerCase();
+            const txsAll: TransactionData[] = Array.isArray(allTx)
+              ? allTx.filter((tx: Record<string, unknown>) =>
+                  Array.isArray(tx.tags) &&
+                  tx.tags.some((t: unknown) => {
+                    if (typeof t === 'string') return t.toLowerCase() === selectedLower;
+                    if (t && typeof t === 'object') {
+                      const anyTag = t as Record<string, unknown>;
+                      const name = typeof anyTag.name === 'string' ? anyTag.name.toLowerCase() : '';
+                      return name === selectedLower;
+                    }
+                    return false;
+                  })
+                )
+              : [];
+            const uniqueIds: string[] = Array.from(new Set(
+              txsAll.map((t: TransactionData) => t.accountId as string).filter((v): v is string => typeof v === 'string' && v.length > 0)
+            ));
+            const entriesAll = await Promise.all(
+              uniqueIds.map(async (accountId: string) => {
+                try {
+                  const r = await fetch(`/api/account?accountId=${encodeURIComponent(accountId)}`);
+                  if (!r.ok) return [accountId, null] as const;
+                  const account = await r.json();
+                  const acctNo: string | null = (account?.accountNumber as string) || null;
+                  return [accountId, acctNo] as const;
+                } catch {
+                  return [accountId, null] as const;
+                }
+              })
+            );
+            const mapAll: { [id: string]: string | null } = Object.fromEntries(entriesAll);
+            const enrichedAll: TransactionData[] = txsAll.map((tx: TransactionData) => ({
+              ...tx,
+              userAccountNumber:
+                (tx.accountId && mapAll[tx.accountId]) ||
+                tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A'
+            }));
+            if (enrichedAll.length > enriched.length) {
+              setActiveTagTransactions(enrichedAll);
+            }
+          });
     } catch {
       setActiveTagTransactions([]);
-    } finally {
       setIsTagModalLoading(false);
     }
   }, []);

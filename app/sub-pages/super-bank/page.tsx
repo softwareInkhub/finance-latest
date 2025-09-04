@@ -3264,9 +3264,14 @@ export default function SuperBankPage() {
               </span>
             )}
             {tagFilters.length > 0 && (
-              <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs">
-                Tags: {tagFilters.length}
-              </span>
+              tagFilters.map((tagName) => (
+                <span
+                  key={`active-tag-${tagName}`}
+                  className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs"
+                >
+                  Tag: {tagName}
+                </span>
+              ))
             )}
             <button
               onClick={clearAllFilters}

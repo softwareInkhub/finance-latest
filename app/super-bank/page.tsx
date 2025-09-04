@@ -4196,9 +4196,14 @@ export default function SuperBankPage() {
             )}
             {/* Date range chip removed; a Clear button is shown near the picker */}
             {tagFilters.length > 0 && (
-              <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs">
-                Tags: {tagFilters.length}
-              </span>
+              tagFilters.map((tagName) => (
+                <span
+                  key={`active-tag-${tagName}`}
+                  className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs"
+                >
+                  Tag: {tagName}
+                </span>
+              ))
             )}
             {(bankFilter || accountFilter || drCrFilter || search || tagFilters.length > 0) && (
               <button
