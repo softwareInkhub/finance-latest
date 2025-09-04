@@ -33,6 +33,8 @@ export async function GET(request: Request) {
         TableName: tableName,
         FilterExpression: filterExpression,
         ExpressionAttributeValues: expressionAttributeValues,
+        // Higher page size to reduce round trips
+        Limit: 250,
       };
       
       if (lastEvaluatedKey) {
@@ -47,10 +49,7 @@ export async function GET(request: Request) {
       lastEvaluatedKey = result.LastEvaluatedKey;
       hasMoreItems = !!lastEvaluatedKey;
       
-      // Add a small delay to avoid overwhelming DynamoDB
-      if (hasMoreItems) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      // No artificial delay; let AWS SDK handle throttling/backoff
     }
 
     // Fetch all tags to populate tag data

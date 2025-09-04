@@ -1545,6 +1545,76 @@ export default function SuperBankPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Stream all transactions progressively via SSE (no data loss)
+  const loadTransactionsStream = (limit = 1000000) => {
+    try {
+      setLoading(true);
+      setError(null);
+      setTransactions([]);
+
+      const userId = localStorage.getItem('userId') || '';
+      if (!userId) {
+        setError('User not found. Please log in again.');
+        setLoading(false);
+        return;
+      }
+
+      // Close any existing stream
+      if (eventSourceRef.current) {
+        try { eventSourceRef.current.close(); } catch { /* noop */ }
+      }
+
+      const streamUrl = `/api/transactions/stream?userId=${encodeURIComponent(userId)}&limit=${limit}`;
+      const es = new EventSource(streamUrl);
+      eventSourceRef.current = es;
+
+      let buffered: Transaction[] = [];
+      let receivedCount = 0;
+
+      const flushBuffer = () => {
+        if (buffered.length > 0) {
+          const batch = buffered;
+          buffered = [];
+          setTransactions(prev => (prev.length ? [...prev, ...batch] : batch));
+        }
+      };
+
+      es.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'transaction') {
+            buffered.push(msg.data as Transaction);
+            receivedCount += 1;
+            // Flush every 100 items to reduce renders
+            if (receivedCount % 100 === 0) {
+              flushBuffer();
+            }
+          } else if (msg.type === 'complete') {
+            flushBuffer();
+            setLoading(false);
+            es.close();
+          } else if (msg.type === 'error') {
+            setError(msg.message || 'Failed to fetch transactions');
+            setLoading(false);
+            es.close();
+          }
+        } catch {
+          // Ignore malformed chunks
+        }
+      };
+
+      es.onerror = () => {
+        setError('Stream error. Please try again.');
+        setLoading(false);
+        es.close();
+      };
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unexpected error while starting stream');
+      setLoading(false);
+    }
+  };
 
   // Super Bank header state
   const [superHeader, setSuperHeader] = useState<string[]>([]);
@@ -1671,19 +1741,14 @@ export default function SuperBankPage() {
     }
   };
 
-  // Fetch all transactions
+  // Load all transactions via streaming on mount
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const userId = localStorage.getItem("userId") || "";
-    fetch(`/api/transactions/all?userId=${userId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setTransactions(data);
-        else setError(data.error || "Failed to fetch transactions");
-      })
-      .catch(() => setError("Failed to fetch transactions"))
-      .finally(() => setLoading(false));
+    loadTransactionsStream();
+    return () => {
+      if (eventSourceRef.current) {
+        try { eventSourceRef.current.close(); } catch { /* noop */ }
+      }
+    };
   }, []);
 
   // Fetch Super Bank header
@@ -1912,15 +1977,7 @@ export default function SuperBankPage() {
       setPendingTag(null);
       setTagCreateMsg("Tag applied to transaction!");
       setTimeout(() => setTagCreateMsg(null), 1500);
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
-        })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      loadTransactionsStream();
     } catch (error) {
       setTagError(error as string || 'Failed to apply tag to transaction');
     } finally {
@@ -2062,15 +2119,7 @@ export default function SuperBankPage() {
       }
       
       setTimeout(() => setTagCreateMsg(null), 5000);
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
-        })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      loadTransactionsStream();
     } catch (error) {
       setTagError('Failed to apply tag to all matching transactions');
       console.error('Bulk update error:', error);
@@ -2448,15 +2497,7 @@ export default function SuperBankPage() {
       setSelectedTagId("");
       setSelectedRows(new Set());
       setTimeout(() => setTagSuccess(null), 1500);
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
-        })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      loadTransactionsStream();
     } catch (e) {
       setTagError(e instanceof Error ? e.message : 'Failed to add tag');
     } finally {
@@ -2493,17 +2534,7 @@ export default function SuperBankPage() {
       });
       setTagCreateMsg('Tag removed!');
       setTimeout(() => setTagCreateMsg(null), 1500);
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
-        })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => {
-          setLoading(false);
-        });
+      loadTransactionsStream();
     } catch (error) {
       setTagError(error as string || 'Failed to remove tag');
     } finally {
@@ -2708,16 +2739,8 @@ export default function SuperBankPage() {
     fetch('/api/tags?userId=' + userId)
       .then(res => res.json())
       .then(data => { if (Array.isArray(data)) setAllTags(data); else setAllTags([]); });
-    // Refetch all transactions
-    setLoading(true);
-    fetch("/api/transactions/all?userId=" + (userId || ""))
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setTransactions(data);
-        else setError(data.error || "Failed to fetch transactions");
-      })
-      .catch(() => setError("Failed to fetch transactions"))
-      .finally(() => setLoading(false));
+    // Refetch all transactions via stream
+    loadTransactionsStream();
   };
 
   // Handle tagged/untagged click filters
@@ -3002,15 +3025,7 @@ export default function SuperBankPage() {
       setTimeout(() => setTagCreateMsg(null), 3000);
       
       // Refresh transactions
-      setLoading(true);
-      fetch("/api/transactions/all?userId=" + (localStorage.getItem("userId") || ""))
-        .then((res) => res.json())
-        .then((data) => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setError(data.error || "Failed to fetch transactions");
-        })
-        .catch(() => setError("Failed to fetch transactions"))
-        .finally(() => setLoading(false));
+      loadTransactionsStream();
     } catch (error) {
       setTagError('Failed to retry failed transactions');
       console.error('Bulk retry error:', error);

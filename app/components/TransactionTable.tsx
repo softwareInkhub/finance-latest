@@ -42,6 +42,7 @@ interface TransactionTableProps {
 }
 
 const DEFAULT_WIDTH = 120;
+const VIRTUALIZATION_ROW_HEIGHT = 44; // approximate row height in px
 
 
 
@@ -81,6 +82,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 
   // Table scroll logic
   const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(600);
 
   // Sort dropdown state
   const [sortDropdownOpen, setSortDropdownOpen] = useState<string | null>(null);
@@ -109,6 +112,34 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mouseup', handleMouseUp);
   };
+  // Virtualized window calculations
+  const overscanCount = 10;
+  const enableVirtualization = rows.length > 500; // enable only for larger datasets
+  const totalContentHeight = rows.length * VIRTUALIZATION_ROW_HEIGHT;
+  const visibleCount = Math.ceil(containerHeight / VIRTUALIZATION_ROW_HEIGHT) + overscanCount;
+  const startIndex = enableVirtualization ? Math.max(0, Math.floor(scrollTop / VIRTUALIZATION_ROW_HEIGHT) - Math.floor(overscanCount / 2)) : 0;
+  const endIndex = enableVirtualization ? Math.min(rows.length, startIndex + visibleCount) : rows.length;
+  const topSpacerHeight = enableVirtualization ? startIndex * VIRTUALIZATION_ROW_HEIGHT : 0;
+  const bottomSpacerHeight = enableVirtualization ? Math.max(0, totalContentHeight - topSpacerHeight - (endIndex - startIndex) * VIRTUALIZATION_ROW_HEIGHT) : 0;
+
+  // Track container scroll to compute window
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      setScrollTop(el.scrollTop);
+    };
+    const handleResize = () => {
+      setContainerHeight(el.clientHeight || 600);
+    };
+    handleResize();
+    el.addEventListener('scroll', handleScroll);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      el.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   const handleDragStart = (header: string) => {
     setDraggedHeader(header);
@@ -522,7 +553,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, idx) => {
+            {enableVirtualization && topSpacerHeight > 0 && (
+              <tr style={{ height: topSpacerHeight }}>
+                <td colSpan={2 + headers.length} />
+              </tr>
+            )}
+            {rows.slice(startIndex, endIndex).map((row, idxLocal) => {
+              const idx = enableVirtualization ? startIndex + idxLocal : idxLocal;
               const tx = transactions?.find(t => t.id === row.id);
               
               // Use neutral background for all rows
@@ -605,6 +642,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 </tr>
               );
             })}
+            {enableVirtualization && bottomSpacerHeight > 0 && (
+              <tr style={{ height: bottomSpacerHeight }}>
+                <td colSpan={2 + headers.length} />
+              </tr>
+            )}
           </tbody>
         </table>
       )}

@@ -61,7 +61,8 @@ export async function GET(request: Request) {
             while (hasMoreItems && totalTransactions < limit) {
               const params: ScanCommandInput = {
                 TableName: tableName,
-                Limit: Math.min(50, limit - totalTransactions), // Reduced batch size for faster processing
+                // Increase batch size to reduce number of round trips
+                Limit: Math.min(250, limit - totalTransactions),
               };
               
               if (userId) {
@@ -118,10 +119,7 @@ export async function GET(request: Request) {
                 hasMoreItems = !!lastEvaluatedKey;
               }
               
-              // Small delay to avoid overwhelming DynamoDB
-              if (hasMoreItems) {
-                await new Promise(resolve => setTimeout(resolve, 5)); // Further reduced delay for faster streaming
-              }
+              // No artificial delay; rely on AWS SDK backoff if needed
             }
             
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({

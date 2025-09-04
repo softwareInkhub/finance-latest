@@ -46,7 +46,8 @@ export async function GET(request: Request) {
         while (hasMoreItems && allTransactions.length < limit) {
           const params: ScanCommandInput = {
             TableName: tableName,
-            Limit: Math.min(100, limit - allTransactions.length), // Limit each scan to 100 items
+            // Increase batch size to reduce round trips
+            Limit: Math.min(250, limit - allTransactions.length),
           };
           
           if (userId) {
@@ -85,10 +86,7 @@ export async function GET(request: Request) {
             hasMoreItems = !!lastEvaluatedKey;
           }
           
-          // Add a small delay to avoid overwhelming DynamoDB
-          if (hasMoreItems) {
-            await new Promise(resolve => setTimeout(resolve, 50)); // Reduced delay for faster fetching
-          }
+          // Remove artificial delay; rely on SDK retry/backoff
         }
         
         console.log(`Completed fetching from ${bank.bankName}: ${bankTransactionCount} transactions`);
