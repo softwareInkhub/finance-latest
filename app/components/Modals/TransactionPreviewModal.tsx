@@ -246,37 +246,42 @@ const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpe
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredData.map((row, i) => (
-                    <tr key={i} className={selectedRows.has(i) ? 'bg-blue-50' : ''}>
-                      <td className="border px-2 py-1 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedRows.has(i)}
-                          onChange={() => handleRowSelect(i)}
-                        />
-                      </td>
-                      {headers.map((header, j) => (
-                        <td key={j} className="border px-2 py-1 whitespace-nowrap">
-                          {String(row[header])}
+                  {filteredData.map((row, i) => {
+                    // Neutral row background (no CR/DR colors)
+                    const rowClass = selectedRows.has(i) ? 'bg-blue-50' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50');
+
+                    return (
+                      <tr key={i} className={rowClass}>
+                        <td className="border px-2 py-1 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedRows.has(i)}
+                            onChange={() => handleRowSelect(i)}
+                          />
                         </td>
-                      ))}
-                      <td className="border px-2 py-1 whitespace-nowrap">
-                        {Array.isArray(row.tags) && row.tags.length > 0 ? row.tags.map((tag: Tag, tagIdx: number) => (
-                          <span key={tag.id + '-' + tagIdx} className="inline-block text-xs px-2 py-0.5 rounded mr-1 mb-1" style={{ background: tag.color, color: '#222' }}>
-                            {tag.name}
-                            <button
-                              type="button"
-                              className="ml-1 text-red-500 hover:text-red-700 font-bold focus:outline-none"
-                              title="Remove tag"
-                              onClick={e => { e.stopPropagation(); handleRemoveTag(i, tag.id); }}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        )) : null}
-                      </td>
-                    </tr>
-                  ))}
+                        {headers.map((header, j) => (
+                          <td key={j} className="border px-2 py-1 whitespace-nowrap text-gray-900 dark:text-gray-100">
+                            {String(row[header])}
+                          </td>
+                        ))}
+                        <td className="border px-2 py-1 whitespace-nowrap">
+                          {Array.isArray(row.tags) && row.tags.length > 0 ? row.tags.map((tag: Tag, tagIdx: number) => (
+                            <span key={tag.id + '-' + tagIdx} className="inline-block text-xs px-2 py-0.5 rounded mr-1 mb-1" style={{ background: tag.color, color: '#222' }}>
+                              {tag.name}
+                              <button
+                                type="button"
+                                className="ml-1 text-red-500 hover:text-red-700 font-bold focus:outline-none"
+                                title="Remove tag"
+                                onClick={e => { e.stopPropagation(); handleRemoveTag(i, tag.id); }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          )) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -301,4 +306,4 @@ const TransactionPreviewModal: React.FC<TransactionPreviewModalProps> = ({ isOpe
   );
 };
 
-export default TransactionPreviewModal; 
+export default TransactionPreviewModal;

@@ -290,8 +290,15 @@ export default function TagTransactionsPage() {
                         const accountName = (tx.accountName || tx.accountHolderName || 'N/A') as string;
                         const accountNumber = (tx.accountNumber || 'N/A') as string;
 
+                        // Determine row background color based on Dr./Cr. field
+                        const rowBackgroundClass = crdr === 'CR' 
+                          ? 'bg-green-200 hover:bg-green-300' 
+                          : crdr === 'DR' 
+                          ? 'bg-red-200 hover:bg-red-300' 
+                          : 'hover:bg-gray-50';
+
                         return (
-                          <tr key={idx} className="hover:bg-gray-50">
+                          <tr key={idx} className={`${rowBackgroundClass} transition-colors duration-150`}>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{date}</td>
                             <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">{description}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{reference}</td>
@@ -307,10 +314,9 @@ export default function TagTransactionsPage() {
                               {tags.map(tag => (
                                 <span 
                                   key={tag.id} 
-                                  className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1"
+                                  className="inline-block px-2 py-1 text-xs rounded-full mr-1 mb-1 text-gray-900 dark:text-gray-100"
                                   style={{
                                     backgroundColor: `${tag.color || '#6366F1'}15`,
-                                    color: tag.color || '#6366F1',
                                     border: `1px solid ${tag.color || '#6366F1'}`
                                   }}
                                 >

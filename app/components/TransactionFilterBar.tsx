@@ -10,6 +10,9 @@ interface TransactionFilterBarProps {
   onDateRangeChange: (range: { from: string; to: string }) => void;
   onDownload: () => void;
   downloadDisabled?: boolean;
+  onRefresh?: () => void;
+  refreshDisabled?: boolean;
+  onOpenHeader?: () => void;
   searchField?: string;
   onSearchFieldChange?: (v: string) => void;
   searchFieldOptions?: string[];
@@ -29,6 +32,9 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
   onDateRangeChange,
   onDownload,
   downloadDisabled,
+  onRefresh,
+  refreshDisabled,
+  onOpenHeader,
   searchField,
   onSearchFieldChange,
   searchFieldOptions,
@@ -595,6 +601,32 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
           </button>
         )}
         
+
+      {onRefresh && (
+        <button
+          className="px-3 py-0.5 rounded bg-green-600 hover:bg-green-700 shadow-lg flex items-center justify-center text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed gap-1"
+          onClick={onRefresh}
+          disabled={refreshDisabled}
+          title="Refresh transactions data"
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>Refresh</span>
+        </button>
+      )}
+
+      {onOpenHeader && (
+        <button
+          className="px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed gap-1"
+          onClick={onOpenHeader}
+          title="Configure custom column headers for the transaction table"
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+        >
+          <span>Header</span>
+        </button>
+      )}
 
       <button
         className="px-3 py-0.5 rounded bg-blue-600 hover:bg-blue-700 shadow-lg flex items-center justify-center text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed gap-1"

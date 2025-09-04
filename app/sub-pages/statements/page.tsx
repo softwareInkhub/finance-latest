@@ -40,7 +40,7 @@ function StatementsContent() {
 
   const [tab] = useState<'transactions'>('transactions');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [loadingTransactions, setLoadingTransactions] = useState(true); // Start with loading true
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
   const [bankName, setBankName] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -71,22 +71,6 @@ function StatementsContent() {
 
 
   useEffect(() => {
-    if (tab === 'transactions' && accountId && bankName) {
-      setLoadingTransactions(true);
-      setTransactionsError(null);
-      const userId = localStorage.getItem("userId") || "";
-      fetch(`/api/transactions?accountId=${accountId}&userId=${userId}&bankName=${encodeURIComponent(bankName)}`)
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data)) setTransactions(data);
-          else setTransactionsError(data.error || 'Failed to fetch transactions');
-        })
-        .catch(() => setTransactionsError('Failed to fetch transactions'))
-        .finally(() => setLoadingTransactions(false));
-    }
-  }, [tab, accountId, bankName]);
-
-  useEffect(() => {
     if (bankId) {
       fetch(`/api/bank`).then(res => res.json()).then((banks) => {
         const bank = Array.isArray(banks) ? banks.find((b) => b.id === bankId) : null;
@@ -94,6 +78,68 @@ function StatementsContent() {
       });
     }
   }, [bankId]);
+
+  useEffect(() => {
+    if (tab === 'transactions' && accountId && bankName) {
+      setLoadingTransactions(true);
+      setTransactionsError(null);
+      const userId = localStorage.getItem("userId") || "";
+      
+      // Add error handling and timeout
+      let timeoutId: NodeJS.Timeout | null = null;
+      let controller: AbortController | null = null;
+      
+      try {
+        controller = new AbortController();
+        timeoutId = setTimeout(() => {
+          if (controller) {
+            controller.abort();
+          }
+        }, 30000); // 30 second timeout
+        
+        fetch(`/api/transactions?accountId=${accountId}&userId=${userId}&bankName=${encodeURIComponent(bankName)}`, {
+          signal: controller.signal
+        })
+          .then(res => {
+            if (!res.ok) {
+              throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            return res.json();
+          })
+          .then(data => {
+            if (Array.isArray(data)) {
+              setTransactions(data);
+              console.log(`Loaded ${data.length} transactions for account ${accountId}`);
+            } else {
+              setTransactionsError(data.error || 'Failed to fetch transactions');
+            }
+          })
+          .catch((error) => {
+            console.error('Error fetching transactions:', error);
+            if (error.name === 'AbortError') {
+              setTransactionsError('Request timed out. Please try again.');
+            } else if (error.message.includes('Failed to fetch')) {
+              setTransactionsError('Network error. Please check your connection and try again.');
+            } else {
+              setTransactionsError(`Failed to fetch transactions: ${error.message}`);
+            }
+          })
+          .finally(() => {
+            // Always clear the timeout to prevent memory leaks
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
+            setLoadingTransactions(false);
+          });
+      } catch (error) {
+        console.error('Error setting up fetch request:', error);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        setLoadingTransactions(false);
+      }
+    }
+  }, [tab, accountId, bankName]);
 
   useEffect(() => {
     const userId = localStorage.getItem('userId');
@@ -296,8 +342,8 @@ function StatementsContent() {
       });
     }));
     setPendingTag(null);
-    setTagCreateMsg(`Tag applied to all ${matching.length} matching transactions!`);
-    setTimeout(() => setTagCreateMsg(null), 1500);
+    setTagCreateMsg(`Tag applied to all ${matching.length} matching transactions! (Tag summary updating in background...)`);
+    setTimeout(() => setTagCreateMsg(null), 3000);
     // Refresh transactions
     setLoadingTransactions(true);
     const userId = localStorage.getItem("userId") || "";
@@ -617,20 +663,20 @@ function StatementsContent() {
   };
 
   return (
-    <div className="min-h-screen py-6 sm:py-10 px-3 sm:px-4 space-y-6 sm:space-y-8">
+    <div className="min-h-screen overflow-y-auto py-4 sm:py-6 lg:py-10 px-2 sm:px-4 lg:px-6 space-y-4 sm:space-y-6 lg:space-y-8">
       <Toaster position="top-center" />
      
-      <div className="w-[70vw] mx-auto space-y-4 sm:space-y-6">
+      <div className="w-full max-w-7xl mx-auto space-y-3 sm:space-y-4 lg:space-y-6">
         {/* File Migration Banner removed */}
         
-        <div className="flex flex-row justify-between items-center gap-2 sm:gap-4 mb-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4 mb-2">
           <div className="flex items-center gap-2">
-            <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-xl sm:text-2xl shadow">
+            <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-lg sm:text-xl lg:text-2xl shadow">
               <RiFileList3Line />
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Transactions</h1>
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Transactions</h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
 
           </div>
         </div>
@@ -801,12 +847,12 @@ function StatementsContent() {
 
             {/* Transaction Table with Advanced Tag Creation Features - ADDED */}
             {(
-              <div ref={tableRef} className="overflow-x-auto relative h-[52vh]">
+              <div ref={tableRef} className="overflow-x-auto relative max-h-[50vh] sm:h-[55vh] lg:h-[60vh]">
                 {/* Floating create tag button - ADDED */}
                 {selection && (
                   <button
                     style={{ position: 'absolute', left: selection.x, top: selection.y + 8, zIndex: 1000 }}
-                    className="px-3 py-1 bg-blue-600 text-white rounded shadow font-semibold text-xs hover:bg-blue-700 transition-all"
+                    className="px-2 sm:px-3 py-1 bg-blue-600 text-white rounded shadow font-semibold text-xs hover:bg-blue-700 transition-all"
                     onClick={handleCreateTagFromSelection}
                   >
                     + Create Tag from Selection
@@ -820,14 +866,14 @@ function StatementsContent() {
                     left: selection?.x, 
                     top: selection?.y !== undefined ? selection.y + 8 : 48, 
                     zIndex: 1001 
-                  }} className="bg-white border border-blue-200 rounded shadow-lg px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 sm:gap-3 items-center max-w-md">
-                    <span className="text-sm">Apply tag &quot;{pendingTag.tagName}&quot; to:</span>
+                  }} className="bg-white border border-blue-200 rounded shadow-lg px-2 sm:px-3 lg:px-4 py-2 sm:py-3 flex flex-col gap-2 sm:gap-3 items-center max-w-xs sm:max-w-md">
+                    <span className="text-xs sm:text-sm">Apply tag &quot;{pendingTag.tagName}&quot; to:</span>
                     {/* Preview of matching transactions */}
                     <div className="w-full">
                       <div className="text-xs text-gray-600 mb-2">
                         Matching transactions with &quot;{pendingTag.selectionText}&quot;:
                       </div>
-                      <div className="max-h-24 overflow-y-auto bg-gray-50 rounded p-2">
+                      <div className="max-h-20 sm:max-h-24 overflow-y-auto bg-gray-50 rounded p-2">
                         {transactions.filter((tx) => {
                           return Object.entries(tx).some(([key, val]) =>
                             key !== 'tags' &&
@@ -868,15 +914,15 @@ function StatementsContent() {
                         )}
                       </div>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <button className="px-3 py-1 bg-green-600 text-white rounded font-semibold text-xs hover:bg-green-700" onClick={handleApplyTagToRow} disabled={tagging}>Only this transaction</button>
-                      <button className="px-3 py-1 bg-blue-600 text-white rounded font-semibold text-xs hover:bg-blue-700" onClick={handleApplyTagToAll} disabled={applyingTagToAll}>All transactions with this text</button>
-                      <button className="px-3 py-1 bg-gray-200 text-gray-700 rounded font-semibold text-xs hover:bg-gray-300" onClick={() => setPendingTag(null)}>Cancel</button>
+                    <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
+                      <button className="px-2 sm:px-3 py-1 bg-green-600 text-white rounded font-semibold text-xs hover:bg-green-700" onClick={handleApplyTagToRow} disabled={tagging}>Only this transaction</button>
+                      <button className="px-2 sm:px-3 py-1 bg-blue-600 text-white rounded font-semibold text-xs hover:bg-blue-700" onClick={handleApplyTagToAll} disabled={applyingTagToAll}>All transactions with this text</button>
+                      <button className="px-2 sm:px-3 py-1 bg-gray-200 text-gray-700 rounded font-semibold text-xs hover:bg-gray-300" onClick={() => setPendingTag(null)}>Cancel</button>
                     </div>
                     {/* Loading indicator for bulk apply */}
                     {applyingTagToAll && (
                       <div className="w-full flex flex-col items-center mt-2">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mb-2"></div>
+                        <div className="animate-spin rounded-full h-4 sm:h-6 w-4 sm:w-6 border-b-2 border-blue-600 mb-2"></div>
                         <span className="text-xs text-blue-700">Applying tag to all matching transactions...</span>
                       </div>
                     )}
@@ -885,7 +931,7 @@ function StatementsContent() {
                 
                 {/* Success message - ADDED */}
                 {tagCreateMsg && (
-                  <div className="absolute left-1/2 top-2 -translate-x-1/2 bg-green-100 text-green-800 px-3 sm:px-4 py-2 rounded shadow text-xs sm:text-sm z-50">
+                  <div className="absolute left-1/2 top-2 -translate-x-1/2 bg-green-100 text-green-800 px-2 sm:px-3 lg:px-4 py-2 rounded shadow text-xs sm:text-sm z-50">
                     {tagCreateMsg}
                   </div>
                 )}

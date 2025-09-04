@@ -36,10 +36,15 @@ export async function POST(request: Request) {
       updatesByTable[tableName].push(update);
     });
 
-    // Process each table's updates
+    // Process each table's updates (limit concurrency to avoid DynamoDB throttling)
     const results = [];
     for (const [tableName, tableUpdates] of Object.entries(updatesByTable)) {
-      const updatePromises = tableUpdates.map(async (update) => {
+      const executeUpdate = async (update: {
+        transactionId: string;
+        tags: string[];
+        bankName: string;
+        transactionData?: Record<string, string | number | string[]>;
+      }) => {
         const updateFields = [];
         const exprAttrNames: Record<string, string> = {};
         const exprAttrValues: Record<string, string | number | string[]> = {};
@@ -78,21 +83,28 @@ export async function POST(request: Request) {
         } catch (error) {
           return { transactionId: update.transactionId, success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
-      });
-      
-      const tableResults = await Promise.all(updatePromises);
-      results.push(...tableResults);
+      };
+
+      const MAX_CONCURRENCY = 20; // keep under DynamoDB write capacity
+      for (let i = 0; i < tableUpdates.length; i += MAX_CONCURRENCY) {
+        const chunk = tableUpdates.slice(i, i + MAX_CONCURRENCY);
+        const tableResults = await Promise.all(chunk.map(executeUpdate));
+        results.push(...tableResults);
+      }
     }
 
     const successful = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success).length;
 
-    // Attempt to recompute tag summary if a single userId is provided in any update.transactionData
+    // Attempt to recompute tag summary asynchronously if a single userId is provided in any update.transactionData
     try {
       const anyWithUserId = (updates || []).find(u => u.transactionData && typeof (u.transactionData as Record<string, unknown>).userId === 'string');
       const userId = anyWithUserId ? (anyWithUserId.transactionData as Record<string, unknown>).userId as string : undefined;
       if (userId) {
-        await recomputeAndSaveTagsSummary(userId);
+        // Fire and forget - don't await this to avoid blocking the response
+        recomputeAndSaveTagsSummary(userId).catch(e => {
+          console.warn('Tags summary recompute after bulk update failed (non-blocking):', e);
+        });
       }
     } catch (e) {
       console.warn('Tags summary recompute after bulk update failed (non-blocking):', e);

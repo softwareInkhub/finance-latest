@@ -16,13 +16,24 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// Initialize AWS clients
+// Initialize AWS clients with optimized configuration
 const dynamoClient = new DynamoDBClient({
   region: process.env.AWS_REGION,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
   },
+  // Add timeout configurations for better performance
+  requestHandler: {
+    // Connection timeout
+    connectionTimeout: 5000, // 5 seconds
+    // Request timeout
+    requestTimeout: 30000, // 30 seconds
+  },
+  // Max connections in pool
+  maxAttempts: 3,
+  // Retry configuration
+  retryMode: 'adaptive',
 });
 
 const s3Client = new S3Client({
@@ -31,10 +42,26 @@ const s3Client = new S3Client({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
   },
+  // Add timeout configurations for S3
+  requestHandler: {
+    connectionTimeout: 5000,
+    requestTimeout: 30000,
+  },
+  maxAttempts: 3,
+  retryMode: 'adaptive',
 });
 
-// Create document client for easier DynamoDB operations
-export const docClient = DynamoDBDocumentClient.from(dynamoClient);
+// Create document client for easier DynamoDB operations with optimized settings
+export const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    // Remove undefined values to reduce payload size
+    removeUndefinedValues: true,
+  },
+  unmarshallOptions: {
+    // Wrap numbers to preserve precision
+    wrapNumbers: false,
+  },
+});
 
 // Export S3 client
 export const s3 = s3Client;

@@ -248,7 +248,12 @@ export async function recomputeAndSaveTagsSummary(userId: string): Promise<void>
       let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
       let hasMoreItems = true;
       while (hasMoreItems) {
-        const params: ScanCommandInput = { TableName: tableName, FilterExpression: 'userId = :userId', ExpressionAttributeValues: { ':userId': userId } };
+        const params: ScanCommandInput = { 
+          TableName: tableName, 
+          FilterExpression: 'userId = :userId', 
+          ExpressionAttributeValues: { ':userId': userId },
+          Limit: 1000 // Limit batch size for better performance
+        };
         if (lastEvaluatedKey) params.ExclusiveStartKey = lastEvaluatedKey;
         const result = await docClient.send(new ScanCommand(params));
         const txs = (result.Items || []) as TransactionItem[];
@@ -341,7 +346,7 @@ export async function recomputeAndSaveTagsSummary(userId: string): Promise<void>
 
         lastEvaluatedKey = result.LastEvaluatedKey;
         hasMoreItems = !!lastEvaluatedKey;
-        if (hasMoreItems) await new Promise(r => setTimeout(r, 100));
+        if (hasMoreItems) await new Promise(r => setTimeout(r, 50)); // Reduced delay for better performance
       }
     } catch (error) {
       console.error(`Error processing bank ${bankName} (table: ${tableName}):`, error);

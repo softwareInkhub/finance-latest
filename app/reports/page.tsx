@@ -1,10 +1,10 @@
 'use client';
 
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { RiEdit2Line, RiBarChartLine, RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCloseLine, RiDeleteBin6Line, RiSaveLine } from 'react-icons/ri';
 import { FiChevronDown } from 'react-icons/fi';
 import { Tag } from '../types/transaction';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface CashFlowItem {
   id: string;
@@ -54,8 +54,6 @@ interface TransactionData {
   userAccountNumber?: string;
 }
 
-
-
 interface CashFlowGroup {
   id: string;
   title: string;
@@ -71,6 +69,7 @@ interface CashFlowSection {
 }
 
 export default function ReportsPage() {
+  const { theme } = useTheme();
 
   // Initial data
   const initialData: CashFlowSection[] = [
@@ -196,6 +195,11 @@ export default function ReportsPage() {
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [tagSearchQuery, setTagSearchQuery] = useState('');
+  // Keep a ref in sync with allTags to avoid capturing it in effects
+  const allTagsRef = useRef<Tag[]>([]);
+  useEffect(() => {
+    allTagsRef.current = allTags;
+  }, [allTags]);
 
   const [modalSelectedTags, setModalSelectedTags] = useState<Tag[]>([]);
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -428,6 +432,44 @@ export default function ReportsPage() {
     fetchRemote();
   }, [saveCashFlowData]);
 
+  // Recompute tags summary on backend and reload
+  const recomputeAndLoadTagsSummary = useCallback(async () => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const userId = localStorage.getItem('userId');
+      console.log('Recomputing tags summary for userId:', userId);
+      if (!userId) {
+        console.log('No userId found for recompute');
+        return null;
+      }
+      console.log('Sending POST to recompute tags summary...');
+      const postRes = await fetch('/api/reports/tags-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      console.log('POST response status:', postRes.status);
+      if (!postRes.ok) {
+        console.log('POST failed:', postRes.statusText);
+        return null;
+      }
+      console.log('Fetching updated tags summary...');
+      const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
+      console.log('GET response status:', res.status);
+      if (!res.ok) {
+        console.log('GET failed:', res.statusText);
+        return null;
+      }
+      const summary = await res.json();
+      console.log('Updated summary received:', summary);
+      setTagsSummary(summary);
+      return summary as typeof tagsSummary;
+    } catch (err) {
+      console.error('Failed to recompute/load tags summary:', err);
+      return null;
+    }
+  }, []);
+
   // Load tags summary from backend on mount
   useEffect(() => {
     const load = async () => {
@@ -455,48 +497,19 @@ export default function ReportsPage() {
     load();
   }, []);
 
-  // Recompute tags summary on backend and reload
-  const recomputeAndLoadTagsSummary = useCallback(async () => {
-    try {
-      if (typeof window === 'undefined') return null;
-      const userId = localStorage.getItem('userId');
-      console.log('Recomputing tags summary for userId:', userId);
-      if (!userId) {
-        console.log('No userId found for recompute');
-        return null;
+  // Fallback: if summary loads empty, trigger a recompute once
+  const didRecomputeOnEmptyRef = useRef(false);
+  useEffect(() => {
+    if (!didRecomputeOnEmptyRef.current) {
+      const isEmpty = !tagsSummary || (typeof tagsSummary === 'object' && Object.keys(tagsSummary).length === 0);
+      if (isEmpty) {
+        didRecomputeOnEmptyRef.current = true;
+        recomputeAndLoadTagsSummary();
       }
-      
-      console.log('Sending POST to recompute tags summary...');
-      const postRes = await fetch('/api/reports/tags-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      });
-      console.log('POST response status:', postRes.status);
-      
-      if (!postRes.ok) {
-        console.log('POST failed:', postRes.statusText);
-        return null;
-      }
-      
-      console.log('Fetching updated tags summary...');
-      const res = await fetch(`/api/reports/tags-summary?userId=${encodeURIComponent(userId)}`);
-      console.log('GET response status:', res.status);
-      
-      if (!res.ok) {
-        console.log('GET failed:', res.statusText);
-        return null;
-      }
-      
-      const summary = await res.json();
-      console.log('Updated summary received:', summary);
-      setTagsSummary(summary);
-      return summary as typeof tagsSummary;
-    } catch (err) {
-      console.error('Failed to recompute/load tags summary:', err);
-      return null;
     }
-  }, []);
+  }, [tagsSummary, recomputeAndLoadTagsSummary]);
+
+  
 
   // Function to fetch tag financial data - using backend summary
   const fetchTagFinancialData = useCallback(async (tagName: string, ensureFresh: boolean = false) => {
@@ -530,6 +543,216 @@ export default function ReportsPage() {
   const [accountFilter, setAccountFilter] = useState<string>('');
   const [sortDropdownOpen, setSortDropdownOpen] = useState<string | null>(null);
   const [dateSortOrder, setDateSortOrder] = useState<'newest' | 'oldest' | ''>('');
+
+  // Load tags on component mount and set up event listeners
+  useEffect(() => {
+    console.log('Reports page: Setting up event listeners and loading tags...');
+    
+    // Load tags when component mounts
+    fetchTags();
+
+    // Test event listener setup
+    const testEvent = () => {
+      console.log('Reports page: Event listener test - working!');
+    };
+    window.addEventListener('testEvent', testEvent);
+    
+    // Test tag event listener
+    const testTagEvent = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Reports page: Test tag event received:', customEvent.detail);
+    };
+    window.addEventListener('testTagEvent', testTagEvent);
+    
+    // Test the event listener
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('testEvent'));
+    }, 1000);
+
+    const handleTagDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag deleted event received in Reports:', customEvent.detail);
+      const { tagName } = customEvent.detail;
+      console.log('Removing tag from cashflow data:', tagName);
+      
+      // Remove the deleted tag from cashflow data
+      setCashFlowData(prevData => {
+        console.log('Current cashflow data before removal:', prevData);
+        
+        const updatedData = prevData.map(section => ({
+          ...section,
+          groups: section.groups.map(group => ({
+            ...group,
+            items: group.items.filter(item => {
+              // Remove items that match the deleted tag name (case-insensitive)
+              const itemName = item.particular?.toLowerCase();
+              const deletedTagName = tagName?.toLowerCase();
+              
+              console.log('Checking item:', item.particular, 'against deleted tag:', tagName);
+              
+              if (itemName === deletedTagName) {
+                console.log('Removing item:', item.particular);
+                return false;
+              }
+              
+              // Also remove from sub-items
+              if (item.subItems) {
+                item.subItems = item.subItems.filter(subItem => {
+                  const subItemName = subItem.particular?.toLowerCase();
+                  if (subItemName === deletedTagName) {
+                    console.log('Removing sub-item:', subItem.particular);
+                    return false;
+                  }
+                  
+                  // Also remove from sub-sub-items
+                  if (subItem.subItems) {
+                    subItem.subItems = subItem.subItems.filter(subSubItem => {
+                      const subSubItemName = subSubItem.particular?.toLowerCase();
+                      if (subSubItemName === deletedTagName) {
+                        console.log('Removing sub-sub-item:', subSubItem.particular);
+                        return false;
+                      }
+                      return true;
+                    });
+                  }
+                  
+                  return true;
+                });
+              }
+              
+              return true;
+            })
+          }))
+        }));
+        
+        console.log('Updated cashflow data after removal:', updatedData);
+        return updatedData;
+      });
+      
+      // Refresh tags data to remove deleted tags
+      fetchTags();
+    };
+
+    const handleTagsBulkDeleted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags bulk deleted event received in Reports:', customEvent.detail);
+      const { deletedTagIds } = customEvent.detail;
+      
+      // Get the names of deleted tags from the latest tags snapshot
+      const currentTags = allTagsRef.current || [];
+      const deletedTagNames = currentTags
+        .filter(tag => deletedTagIds.includes(tag.id))
+        .map(tag => tag.name);
+      
+      console.log('Deleting tags with names:', deletedTagNames);
+      
+      // Remove all deleted tags from cashflow data
+      setCashFlowData(prevData => {
+        console.log('Current cashflow data before bulk removal:', prevData);
+        
+        const updatedData = prevData.map(section => ({
+          ...section,
+          groups: section.groups.map(group => ({
+            ...group,
+            items: group.items.filter(item => {
+              // Remove items that match any of the deleted tag names (case-insensitive)
+              const itemName = item.particular?.toLowerCase();
+              const shouldRemove = deletedTagNames.some(tagName => 
+                itemName === tagName?.toLowerCase()
+              );
+              
+              if (shouldRemove) {
+                console.log('Removing item in bulk delete:', item.particular);
+                return false;
+              }
+              
+              // Also remove from sub-items
+              if (item.subItems) {
+                item.subItems = item.subItems.filter(subItem => {
+                  const subItemName = subItem.particular?.toLowerCase();
+                  const shouldRemoveSub = deletedTagNames.some(tagName => 
+                    subItemName === tagName?.toLowerCase()
+                  );
+                  
+                  if (shouldRemoveSub) {
+                    console.log('Removing sub-item in bulk delete:', subItem.particular);
+                    return false;
+                  }
+                  
+                  // Also remove from sub-sub-items
+                  if (subItem.subItems) {
+                    subItem.subItems = subItem.subItems.filter(subSubItem => {
+                      const subSubItemName = subSubItem.particular?.toLowerCase();
+                      const shouldRemoveSubSub = deletedTagNames.some(tagName => 
+                        subSubItemName === tagName?.toLowerCase()
+                      );
+                      
+                      if (shouldRemoveSubSub) {
+                        console.log('Removing sub-sub-item in bulk delete:', subSubItem.particular);
+                        return false;
+                      }
+                      return true;
+                    });
+                  }
+                  
+                  return true;
+                });
+              }
+              
+              return true;
+            })
+          }))
+        }));
+        
+        console.log('Updated cashflow data after bulk removal:', updatedData);
+        return updatedData;
+      });
+      
+      // Refresh tags data to remove deleted tags
+      fetchTags();
+    };
+
+    const handleTagUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tag updated event received in Reports:', customEvent.detail);
+      // Refresh tags data to update tag information and recompute summaries
+      fetchTags();
+      recomputeAndLoadTagsSummary();
+    };
+
+    // React to tags being applied/removed to keep summaries in sync
+    const handleTagsApplied = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags applied to transactions event in Reports:', customEvent.detail);
+      recomputeAndLoadTagsSummary();
+      fetchTags();
+    };
+
+    const handleTagsRemoved = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Tags removed from transactions event in Reports:', customEvent.detail);
+      recomputeAndLoadTagsSummary();
+      fetchTags();
+    };
+
+    // Add event listeners
+    window.addEventListener('tagDeleted', handleTagDeleted);
+    window.addEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+    window.addEventListener('tagUpdated', handleTagUpdated);
+    window.addEventListener('tagsAppliedToTransactions', handleTagsApplied as EventListener);
+    window.addEventListener('tagsRemovedFromTransactions', handleTagsRemoved as EventListener);
+
+    // Cleanup event listeners
+    return () => {
+      window.removeEventListener('tagDeleted', handleTagDeleted);
+      window.removeEventListener('tagsBulkDeleted', handleTagsBulkDeleted);
+      window.removeEventListener('tagUpdated', handleTagUpdated);
+      window.removeEventListener('tagsAppliedToTransactions', handleTagsApplied as EventListener);
+      window.removeEventListener('tagsRemovedFromTransactions', handleTagsRemoved as EventListener);
+      window.removeEventListener('testEvent', testEvent);
+      window.removeEventListener('testTagEvent', testTagEvent);
+    };
+  }, [recomputeAndLoadTagsSummary]);
 
   // Filter handlers for tag transactions table
   // const handleDateFilter = (date: string | 'clear') => {
@@ -943,8 +1166,9 @@ export default function ReportsPage() {
         return;
       }
       
+      // Normalize keys to lowercase so lookups are consistent
       const lookup = new Map<string, { credit: number; debit: number; balance: number }>(
-        (summary?.tags || []).map((t: Record<string, unknown>) => [t.tagName as string, { credit: t.credit as number, debit: t.debit as number, balance: t.balance as number }])
+        (summary?.tags || []).map((t: Record<string, unknown>) => [String(t.tagName || '').toLowerCase(), { credit: Number(t.credit || 0), debit: Number(t.debit || 0), balance: Number(t.balance || 0) }])
       );
       const tagToData = new Map(
         Array.from(tagNames).map((name) => {
@@ -958,9 +1182,8 @@ export default function ReportsPage() {
       setCashFlowData(prev => {
         const updated = prev.map(section => ({
           ...section,
-          groups: section.groups.map(group => ({
-            ...group,
-            items: group.items.map(item => {
+          groups: section.groups.map(group => {
+            const mappedItems = group.items.map(item => {
               const updateItem = (node: CashFlowItem): CashFlowItem => {
                 let next: CashFlowItem = { ...node };
                 if (node.createdByTag) {
@@ -979,8 +1202,18 @@ export default function ReportsPage() {
                 return next;
               };
               return updateItem(item);
-            })
-          }))
+            });
+
+            // Keep tag-created items even if current balance is zero; only remove when tag deleted
+            const filteredItems = mappedItems.filter(it => {
+              if (!it?.createdByTag) return true;
+              const data = tagToData.get(it.particular);
+              // If tag no longer exists, remove the item
+              return !!data;
+            });
+
+            return { ...group, items: filteredItems };
+          })
         }));
 
         // Persist updates (debounced) and local cache
@@ -1141,6 +1374,23 @@ export default function ReportsPage() {
       clearTimeout(visibilityTimeoutId);
     };
   }, [handleRefreshTags, isRefreshing, cashFlowData]);
+
+  // Listen for tag updates from the tags page
+  useEffect(() => {
+    const handleTagUpdated = (event: CustomEvent) => {
+      console.log('Tag updated event received:', event.detail);
+      // Trigger a refresh after a short delay to allow backend updates to complete
+      setTimeout(() => {
+        handleRefreshTags();
+      }, 1000);
+    };
+
+    window.addEventListener('tagUpdated', handleTagUpdated as EventListener);
+
+    return () => {
+      window.removeEventListener('tagUpdated', handleTagUpdated as EventListener);
+    };
+  }, [handleRefreshTags]);
 
       // Helper function to calculate item total including sub-items
   const calculateItemTotal = useCallback((item: CashFlowItem): number => {
@@ -1705,21 +1955,24 @@ export default function ReportsPage() {
   };
 
   const openAddGroupTagsModal = async () => {
-    // Don't recompute tags summary on modal open - use existing data
-    // This was causing the slow performance
     setIsTagsModalLoading(true);
     setShowTagsModal(true);
     setShowGroupOptionModal(false);
     
     try {
+      // Ensure the latest tag-summary so CR/DR/Bal show immediately
+      await recomputeAndLoadTagsSummary();
       await fetchTags();
     } finally {
       setIsTagsModalLoading(false);
     }
   };
 
+  const isFetchingTagsRef = useRef(false);
   const fetchTags = async () => {
     try {
+      if (isFetchingTagsRef.current) return;
+      isFetchingTagsRef.current = true;
       const userId = localStorage.getItem('userId');
       if (!userId) {
         console.error('No user ID found');
@@ -1733,6 +1986,8 @@ export default function ReportsPage() {
       }
     } catch (error) {
       console.error('Error fetching tags:', error);
+    } finally {
+      isFetchingTagsRef.current = false;
     }
   };
 
@@ -2358,7 +2613,7 @@ export default function ReportsPage() {
     }
   };
 
-  // Helper: open tag transactions modal by tag name (no Redux) – fetch from backend per-bank tables
+      // Helper: open tag transactions modal by tag name – fetch from backend per-bank tables
   const openTagTransactions = useCallback(async (tagName: string) => {
     try {
       setActiveTagName(tagName);
@@ -2433,7 +2688,11 @@ export default function ReportsPage() {
   };
 
     return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-10 px-4 overflow-y-auto">
+    <div className={`min-h-screen py-10 px-4 overflow-y-auto ${
+      theme === 'dark' 
+        ? 'bg-gray-900 text-gray-100' 
+        : 'bg-gradient-to-br from-blue-50 via-white to-purple-50 text-gray-900'
+    }`}>
       <div className="max-w-7xl mx-auto">
       {/* Header */}
         
@@ -2441,9 +2700,7 @@ export default function ReportsPage() {
         {/* Analytics Summary */}
    
 
-        {/* No Redux loading/error UI */}
 
-        {/* No Redux warning */}
 
                  {/* Main Content - Two Column Layout */}
          <div className="flex flex-col lg:flex-row gap-6 max-h-[90vh]">
@@ -2461,7 +2718,11 @@ export default function ReportsPage() {
       </div>
 
           {/* Cashflow Statement (Center) */}
-          <div className="flex-1 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden overflow-y-auto">
+          <div className={`flex-1 rounded-xl shadow-lg overflow-hidden overflow-y-auto ${
+            theme === 'dark' 
+              ? 'bg-gray-800 border border-gray-700' 
+              : 'bg-white border border-gray-200'
+          }`}>
                        {/* Statement Header */}
              <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 relative sticky top-0 z-10">
                <div className="flex items-center justify-center">
@@ -2474,15 +2735,23 @@ export default function ReportsPage() {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                                  <thead>
-                   <tr className="border-b-2 border-gray-300">
-                     <th className="text-left py-3 px-4 font-bold text-gray-800 text-lg">PARTICULAR</th>
-                     <th className="text-right py-3 px-4 font-bold text-gray-800 text-lg">AMT.</th>
-                   </tr>
+                                       <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-300'}`}>
+                      <th className={`text-left py-3 px-4 font-bold text-lg ${
+                        theme === 'dark' ? 'text-white' : 'text-gray-800'
+                      }`}>PARTICULAR</th>
+                      <th className={`text-right py-3 px-4 font-bold text-lg ${
+                        theme === 'dark' ? 'text-white' : 'text-gray-800'
+                      }`}>AMT.</th>
+                    </tr>
                  </thead>
                 <tbody>
                                      {/* INFLOWS Section */}
-                   <tr className="border-b-2 border-gray-400">
-                     <td className="py-3 px-4 font-bold text-blue-700 text-lg bg-blue-50 flex items-center justify-between">
+                                       <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-400'}`}>
+                      <td className={`py-3 px-4 font-bold text-lg flex items-center justify-between ${
+                        theme === 'dark' 
+                          ? 'text-blue-300 bg-blue-900/30' 
+                          : 'text-blue-700 bg-blue-50'
+                      }`}>
                        <span>{cashFlowData[0].title}</span>
                        {isEditing && (
                          <button
@@ -2494,7 +2763,11 @@ export default function ReportsPage() {
                          </button>
                        )}
                      </td>
-                     <td className="py-3 px-4 text-right font-bold text-blue-700 text-lg bg-blue-50">
+                                           <td className={`py-3 px-4 text-right font-bold text-lg ${
+                        theme === 'dark' 
+                          ? 'text-blue-300 bg-blue-900/30' 
+                          : 'text-blue-700 bg-blue-50'
+                      }`}>
                        {totalInflow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                      </td>
                    </tr>
@@ -2505,11 +2778,17 @@ export default function ReportsPage() {
                     return (
                       <React.Fragment key={group.id}>
                         {/* Group Header */}
-                        <tr 
-                          className="border-b border-gray-300 hover:bg-gray-50 cursor-pointer"
-                          onClick={() => toggleGroup(cashFlowData[0].id, group.id)}
-                        >
-                                                     <td className="py-2 pl-4 pr-4 font-semibold text-gray-800 flex items-center gap-2">
+                                                  <tr 
+                            className={`border-b cursor-pointer ${
+                              theme === 'dark' 
+                                ? 'border-gray-600 hover:bg-gray-700' 
+                                : 'border-gray-300 hover:bg-gray-50'
+                            }`}
+                            onClick={() => toggleGroup(cashFlowData[0].id, group.id)}
+                          >
+                                                     <td className={`py-2 pl-4 pr-4 font-semibold flex items-center gap-2 ${
+                                                       theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                                                     }`}>
                              {group.isExpanded ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
                              {group.title}
                              {isEditing && (
@@ -2519,7 +2798,11 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openEditGroupModal(cashFlowData[0].id, group.id, group.title);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                   className={`p-1 rounded transition-colors ${
+                                     theme === 'dark' 
+                                       ? 'text-gray-400 hover:text-blue-400 hover:bg-blue-900/30' 
+                                       : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                                   }`}
                                    title="Edit group"
                                  >
                                    <RiEdit2Line size={14} />
@@ -2529,7 +2812,11 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openAddModal(cashFlowData[0].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                   className={`p-1 rounded transition-colors ${
+                                     theme === 'dark' 
+                                       ? 'text-gray-400 hover:text-green-400 hover:bg-green-900/30' 
+                                       : 'text-gray-600 hover:text-green-600 hover:bg-green-50'
+                                   }`}
                                    title="Add new item"
                                  >
                                    <RiAddLine size={14} />
@@ -2539,7 +2826,11 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openDeleteModal(cashFlowData[0].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                   className={`p-1 rounded transition-colors ${
+                                     theme === 'dark' 
+                                       ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/30' 
+                                       : 'text-gray-600 hover:text-red-600 hover:bg-red-50'
+                                   }`}
                                    title="Delete group"
                                  >
                                    <RiDeleteBin6Line size={14} />
@@ -2547,7 +2838,9 @@ export default function ReportsPage() {
             </div>
                              )}
                            </td>
-                          <td className="py-2 px-4 text-right font-semibold text-gray-800">
+                                                     <td className={`py-2 px-4 text-right font-semibold ${
+                             theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                           }`}>
                             {groupTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -2557,14 +2850,20 @@ export default function ReportsPage() {
                           <React.Fragment key={item.id}>
                             {/* Main Item */}
                             <tr
-                              className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`}
+                              className={`border-b ${item.createdByTag ? 'cursor-pointer' : ''} ${
+                                theme === 'dark' 
+                                  ? 'border-gray-600 hover:bg-gray-700' 
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}
                               onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}
                               draggable={Boolean((item as unknown as { createdByTag?: boolean }).createdByTag)}
                               onDragStart={() => handleDragStartItem(cashFlowData[0].id, group.id, itemIndex)}
                               onDragOver={handleDragOver}
                               onDrop={(e) => handleDropItem(e, cashFlowData[0].id, group.id, itemIndex)}
                             >
-                              <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
+                              <td className={`py-2 pl-16 pr-4 flex items-center justify-between ${
+                                theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                              }`}>
                                 <div className="flex flex-col">
                                   <div className="flex items-center gap-2">
                                     {item.subItems && item.subItems.length > 0 && (
@@ -2635,14 +2934,20 @@ export default function ReportsPage() {
                            {item.isExpanded && item.subItems && item.subItems.map((subItem, subIndex) => (
                              <tr
                                key={subItem.id}
-                               className={`border-b border-gray-300 border-dotted hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
+                               className={`border-b border-dotted ${subItem.createdByTag ? 'cursor-pointer' : ''} ${
+                                 theme === 'dark' 
+                                   ? 'border-gray-600 hover:bg-gray-700' 
+                                   : 'border-gray-300 hover:bg-gray-50'
+                               }`}
                                onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}
                                draggable={Boolean((subItem as unknown as { createdByTag?: boolean }).createdByTag)}
                                onDragStart={() => handleDragStartSubItem(cashFlowData[0].id, group.id, item.id, subIndex)}
                                onDragOver={handleDragOver}
                                onDrop={(e) => handleDropSubItem(e, cashFlowData[0].id, group.id, item.id, subIndex)}
                              >
-                               <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
+                               <td className={`py-2 pl-24 pr-4 flex items-center justify-between ${
+                                 theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                               }`}>
                                  <div className="flex flex-col">
                                    <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
                                    {subItem.createdByTag && subItem.tagData && (
@@ -2685,7 +2990,7 @@ export default function ReportsPage() {
                                      </div>
                                    )}
                                </td>
-                               <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                               <td className="py-2 px-4 text-right text-gray-400 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                              </tr>
                            ))}
                          </React.Fragment>
@@ -2695,8 +3000,12 @@ export default function ReportsPage() {
                   })}
 
                   {/* OUTFLOWS Section */}
-                  <tr className="border-b-2 border-gray-400">
-                    <td className="py-3 px-4 font-bold text-red-700 text-lg bg-red-50 flex items-center justify-between">
+                  <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-400'}`}>
+                    <td className={`py-3 px-4 font-bold text-lg flex items-center justify-between ${
+                      theme === 'dark' 
+                        ? 'text-red-300 bg-red-900/30' 
+                        : 'text-red-700 bg-red-50'
+                    }`}>
                       <span>{cashFlowData[1].title}</span>
                       {isEditing && (
                         <button
@@ -2708,7 +3017,11 @@ export default function ReportsPage() {
                         </button>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-red-700 text-lg bg-red-50">
+                    <td className={`py-3 px-4 text-right font-bold text-lg ${
+                      theme === 'dark' 
+                        ? 'text-red-300 bg-red-900/30' 
+                        : 'text-red-700 bg-red-50'
+                    }`}>
                       {totalOutflow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -2720,10 +3033,10 @@ export default function ReportsPage() {
                       <React.Fragment key={group.id}>
                         {/* Group Header */}
                         <tr 
-                          className="border-b border-gray-300 hover:bg-gray-50 cursor-pointer"
+                          className={`border-b border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer`}
                           onClick={() => toggleGroup(cashFlowData[1].id, group.id)}
                         >
-                                                   <td className="py-2 pl-4 pr-4 font-semibold text-gray-800 flex items-center gap-2">
+                          <td className={`py-2 pl-4 pr-4 font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2`}>
                              {group.isExpanded ? <RiArrowDownSLine /> : <RiArrowRightSLine />}
                              {group.title}
                              {isEditing && (
@@ -2733,7 +3046,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openEditGroupModal(cashFlowData[1].id, group.id, group.title);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                    title="Edit group"
                                  >
                                    <RiEdit2Line size={14} />
@@ -2743,7 +3056,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openAddModal(cashFlowData[1].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                  className="p-1 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
                                    title="Add new item"
                                  >
                                    <RiAddLine size={14} />
@@ -2753,7 +3066,7 @@ export default function ReportsPage() {
                                      e.stopPropagation();
                                      openDeleteModal(cashFlowData[1].id, group.id);
                                    }}
-                                   className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                    title="Delete group"
                                  >
                                    <RiDeleteBin6Line size={14} />
@@ -2761,7 +3074,7 @@ export default function ReportsPage() {
           </div>
                              )}
                            </td>
-                                                   <td className="py-2 px-4 text-right font-semibold text-gray-800">
+                          <td className={`py-2 px-4 text-right font-semibold text-gray-800 dark:text-gray-200`}>
                              {groupTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                            </td>
                          </tr>
@@ -2771,14 +3084,14 @@ export default function ReportsPage() {
                            <React.Fragment key={item.id}>
                              {/* Main Item */}
                              <tr
-                               className={`border-b border-gray-200 hover:bg-gray-50 ${item.createdByTag ? 'cursor-pointer' : ''}`}
+                               className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${item.createdByTag ? 'cursor-pointer' : ''}`}
                                onClick={() => item.createdByTag ? openTagTransactions(item.particular) : undefined}
                                draggable={Boolean((item as unknown as { createdByTag?: boolean }).createdByTag)}
                                onDragStart={() => handleDragStartItem(cashFlowData[1].id, group.id, itemIndex)}
                                onDragOver={handleDragOver}
                                onDrop={(e) => handleDropItem(e, cashFlowData[1].id, group.id, itemIndex)}
                              >
-                               <td className="py-2 pl-16 pr-4 text-gray-700 flex items-center justify-between">
+                               <td className="py-2 pl-16 pr-4 text-gray-700 dark:text-gray-300 flex items-center justify-between">
                                  <div className="flex flex-col">
                                    <div className="flex items-center gap-2">
                                      {item.subItems && item.subItems.length > 0 && (
@@ -2787,15 +3100,15 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            toggleItemExpansion(cashFlowData[1].id, group.id, item.id);
                                          }}
-                                         className="text-gray-500 hover:text-gray-700"
+                                         className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                                        >
                                          {item.isExpanded ? <RiArrowDownSLine size={14} /> : <RiArrowRightSLine size={14} />}
                                        </button>
                                      )}
-                                     <span className={`${item.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{item.particular}</span>
+                                     <span className={`${item.createdByTag ? 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium' : ''}`}>{item.particular}</span>
                                    </div>
                                    {item.createdByTag && item.tagData && (
-                                     <div className="text-xs text-gray-500 mt-1">
+                                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                        CR: ₹{(item.tagData.credit || 0).toLocaleString('en-IN')} | 
                                        DR: ₹{(item.tagData.debit || 0).toLocaleString('en-IN')} | 
                                        Bal: ₹{(item.tagData.balance || 0).toLocaleString('en-IN')}
@@ -2811,7 +3124,7 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            openEditMainItemModal(cashFlowData[1].id, group.id, item.id, item.particular);
                                          }}
-                                         className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                         className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                          title="Edit item"
                                        >
                                          <RiEdit2Line size={14} />
@@ -2823,7 +3136,7 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            openSubItemAddModal(cashFlowData[1].id, group.id, item.id);
                                          }}
-                                         className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                         className="p-1 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
                                          title="Add sub-item"
                                        >
                                          <RiAddLine size={14} />
@@ -2834,7 +3147,7 @@ export default function ReportsPage() {
                                          e.stopPropagation();
                                          openDeleteModal(cashFlowData[1].id, group.id, item.id);
                                        }}
-                                       className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                       className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                        title="Delete item"
                                      >
                                        <RiDeleteBin6Line size={14} />
@@ -2842,25 +3155,25 @@ export default function ReportsPage() {
                                    </div>
                                  )}
                                </td>
-                               <td className="py-2 px-4 text-right text-gray-700">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                               <td className="py-2 px-4 text-right text-gray-700 dark:text-gray-300">{calculateItemTotal(item).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                              </tr>
                              
                              {/* Sub-Items */}
                              {item.isExpanded && item.subItems && item.subItems.map((subItem, subIndex) => (
                                <tr
                                  key={subItem.id}
-                                 className={`border-b border-gray-100 hover:bg-gray-50 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
+                                 className={`border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${subItem.createdByTag ? 'cursor-pointer' : ''}`}
                                  onClick={() => subItem.createdByTag ? openTagTransactions(subItem.particular) : undefined}
                                  draggable={Boolean((subItem as unknown as { createdByTag?: boolean }).createdByTag)}
                                  onDragStart={() => handleDragStartSubItem(cashFlowData[1].id, group.id, item.id, subIndex)}
                                  onDragOver={handleDragOver}
                                  onDrop={(e) => handleDropSubItem(e, cashFlowData[1].id, group.id, item.id, subIndex)}
                                >
-                                 <td className="py-2 pl-24 pr-4 text-gray-600 flex items-center justify-between">
+                                 <td className="py-2 pl-24 pr-4 text-gray-600 dark:text-gray-400 flex items-center justify-between">
                                    <div className="flex flex-col">
-                                     <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 hover:text-blue-800 font-medium' : ''}`}>{subItem.particular}</span>
+                                     <span className={`text-sm ${subItem.createdByTag ? 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium' : ''}`}>{subItem.particular}</span>
                                      {subItem.createdByTag && subItem.tagData && (
-                                       <div className="text-xs text-gray-500 mt-1">
+                                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                          CR: ₹{(subItem.tagData.credit || 0).toLocaleString('en-IN')} | 
                                          DR: ₹{(subItem.tagData.debit || 0).toLocaleString('en-IN')} | 
                                          Bal: ₹{(subItem.tagData.balance || 0).toLocaleString('en-IN')}
@@ -2876,7 +3189,7 @@ export default function ReportsPage() {
                                              e.stopPropagation();
                                              openSubSubItemAddModal(cashFlowData[1].id, group.id, item.id, subItem.id);
                                            }}
-                                           className="p-1 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                           className="p-1 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
                                            title="Add sub-sub-item"
                                          >
                                            <RiAddLine size={14} />
@@ -2889,7 +3202,7 @@ export default function ReportsPage() {
                                              e.stopPropagation();
                                              openEditSubItemModal(cashFlowData[1].id, group.id, item.id, subItem.id, subItem.particular);
                                            }}
-                                           className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                           className="p-1 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                                            title="Edit sub-item"
                                          >
                                            <RiEdit2Line size={14} />
@@ -2900,7 +3213,7 @@ export default function ReportsPage() {
                                            e.stopPropagation();
                                            openDeleteModal(cashFlowData[1].id, group.id, item.id, subItem.id);
                                          }}
-                                         className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                         className="p-1 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                          title="Delete sub-item"
                                        >
                                          <RiDeleteBin6Line size={14} />
@@ -2908,7 +3221,7 @@ export default function ReportsPage() {
                                      </div>
                                    )}
                                  </td>
-                                 <td className="py-2 px-4 text-right text-gray-600 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                 <td className="py-2 px-4 text-right text-gray-600 dark:text-gray-400 text-sm">{(subItem.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                                </tr>
                              ))}
                            </React.Fragment>
@@ -2918,11 +3231,19 @@ export default function ReportsPage() {
                   })}
 
                                      {/* NET CASH FLOW Section */}
-                   <tr className="border-b-2 border-gray-400">
-                     <td className="py-3 px-4 font-bold text-green-700 text-lg bg-green-50">
+                   <tr className={`border-b-2 ${theme === 'dark' ? 'border-gray-600' : 'border-gray-400'}`}>
+                     <td className={`py-3 px-4 font-bold text-lg ${
+                       theme === 'dark' 
+                         ? 'text-green-300 bg-green-900/30' 
+                         : 'text-green-700 bg-green-50'
+                     }`}>
                        {cashFlowData[2].title}
                      </td>
-                     <td className="py-3 px-4 text-right font-bold text-green-700 text-lg bg-green-50">
+                     <td className={`py-3 px-4 text-right font-bold text-lg ${
+                       theme === 'dark' 
+                         ? 'text-green-300 bg-green-900/30' 
+                         : 'text-green-700 bg-green-50'
+                     }`}>
                        {(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                      </td>
                    </tr>
@@ -2943,27 +3264,45 @@ export default function ReportsPage() {
               <div className="space-y-3">
                 <div className="space-y-3">
                   <div className="relative group">
-                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
-                      <div className="text-blue-700 font-medium text-sm mb-1">Total Inflow</div>
-                      <div className="text-2xl font-bold text-blue-800">₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    <div className={`rounded-lg p-4 border cursor-pointer transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-blue-900/30 border-blue-700 hover:bg-blue-900/50' 
+                        : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                    }`}>
+                      <div className={`font-medium text-sm mb-1 ${
+                        theme === 'dark' ? 'text-blue-300' : 'text-blue-700'
+                      }`}>Total Inflow</div>
+                      <div className={`text-2xl font-bold ${
+                        theme === 'dark' ? 'text-blue-200' : 'text-blue-800'
+                      }`}>₹{(totalInflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                     </div>
                     {/* Inflow Tooltip */}
                     {(() => {
                       const inflowBreakdown = getBankBreakdown('inflow');
                       const inflowTotal = inflowBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
                       return (
-                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                          <div className="text-sm font-semibold text-gray-800 mb-3">Inflow Breakdown by Banks</div>
+                        <div className={`absolute right-full top-0 mr-2 w-80 border rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none ${
+                          theme === 'dark' 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}>
+                          <div className={`text-sm font-semibold mb-3 ${
+                            theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                          }`}>Inflow Breakdown by Banks</div>
                           {inflowBreakdown.length > 0 ? (
                             <div className="space-y-2">
                               {inflowBreakdown.map((bank, index) => (
                                 <div key={index} className="text-sm mb-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className={`font-medium ${
+                                      theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                                    }`}>{bank.name}</span>
                                     <span className="text-blue-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                                   </div>
                                   {bank.accounts && bank.accounts.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                    <div className={`text-xs mt-1 ml-2 ${
+                                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>
                                       Accounts: {bank.accounts.join(', ')}
                                     </div>
                                   )}
@@ -2971,11 +3310,17 @@ export default function ReportsPage() {
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm text-gray-500">No bank data available</div>
+                            <div className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                            }`}>No bank data available</div>
                           )}
-                          <div className="mt-3 pt-2 border-t border-gray-200">
+                          <div className={`mt-3 pt-2 border-t ${
+                            theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                          }`}>
                             <div className="flex justify-between items-center text-sm font-semibold">
-                              <span className="text-gray-800">Total</span>
+                              <span className={`${
+                                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                              }`}>Total</span>
                               <span className="text-blue-800">₹{inflowTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
                           </div>
@@ -2985,27 +3330,45 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="relative group">
-                    <div className="bg-red-50 rounded-lg p-4 border border-red-200 cursor-pointer hover:bg-red-100 transition-colors">
-                      <div className="text-red-700 font-medium text-sm mb-1">Total Outflow</div>
-                      <div className="text-2xl font-bold text-red-800">₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                    <div className={`rounded-lg p-4 border cursor-pointer transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-red-900/30 border-red-700 hover:bg-red-900/50' 
+                        : 'bg-red-50 border-red-200 hover:bg-red-100'
+                    }`}>
+                      <div className={`font-medium text-sm mb-1 ${
+                        theme === 'dark' ? 'text-red-300' : 'text-red-700'
+                      }`}>Total Outflow</div>
+                      <div className={`text-2xl font-bold ${
+                        theme === 'dark' ? 'text-red-200' : 'text-red-800'
+                      }`}>₹{(totalOutflow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                     </div>
                     {/* Outflow Tooltip */}
                     {(() => {
                       const outflowBreakdown = getBankBreakdown('outflow');
                       const outflowTotal = outflowBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
                       return (
-                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                          <div className="text-sm font-semibold text-gray-800 mb-3">Outflow Breakdown by Banks</div>
+                        <div className={`absolute right-full top-0 mr-2 w-80 border rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none ${
+                          theme === 'dark' 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}>
+                          <div className={`text-sm font-semibold mb-3 ${
+                            theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                          }`}>Outflow Breakdown by Banks</div>
                           {outflowBreakdown.length > 0 ? (
                             <div className="space-y-2">
                               {outflowBreakdown.map((bank, index) => (
                                 <div key={index} className="text-sm mb-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className={`font-medium ${
+                                      theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                                    }`}>{bank.name}</span>
                                     <span className="text-red-600 font-bold">₹{bank.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                                   </div>
                                   {bank.accounts && bank.accounts.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                    <div className={`text-xs mt-1 ml-2 ${
+                                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>
                                       Accounts: {bank.accounts.join(', ')}
                                     </div>
                                   )}
@@ -3013,11 +3376,17 @@ export default function ReportsPage() {
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm text-gray-500">No bank data available</div>
+                            <div className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                            }`}>No bank data available</div>
                           )}
-                          <div className="mt-3 pt-2 border-t border-gray-200">
+                          <div className={`mt-3 pt-2 border-t ${
+                            theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                          }`}>
                             <div className="flex justify-between items-center text-sm font-semibold">
-                              <span className="text-gray-800">Total</span>
+                              <span className={`${
+                                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                              }`}>Total</span>
                               <span className="text-red-800">₹{outflowTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
                           </div>
@@ -3027,9 +3396,19 @@ export default function ReportsPage() {
                   </div>
 
                   <div className="relative group">
-                    <div className="bg-green-50 rounded-lg p-4 border border-green-200 cursor-pointer hover:bg-green-100 transition-colors">
-                      <div className="text-green-700 font-medium text-sm mb-1">Net Cash Flow</div>
-                      <div className={`text-2xl font-bold ${netFlow >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                    <div className={`rounded-lg p-4 border cursor-pointer transition-colors ${
+                      theme === 'dark' 
+                        ? 'bg-green-900/30 border-green-700 hover:bg-green-900/50' 
+                        : 'bg-green-50 border-green-200 hover:bg-green-100'
+                    }`}>
+                      <div className={`font-medium text-sm mb-1 ${
+                        theme === 'dark' ? 'text-green-300' : 'text-green-700'
+                      }`}>Net Cash Flow</div>
+                      <div className={`text-2xl font-bold ${
+                        theme === 'dark' 
+                          ? (netFlow >= 0 ? 'text-green-200' : 'text-red-200')
+                          : (netFlow >= 0 ? 'text-green-800' : 'text-red-800')
+                      }`}>
                   ₹{(netFlow || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
           </div>
@@ -3038,21 +3417,31 @@ export default function ReportsPage() {
                       const netBreakdown = getBankBreakdown('net');
                       const netTotal = netBreakdown.reduce((sum, bank) => sum + bank.amount, 0);
                       return (
-                        <div className="absolute right-full top-0 mr-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none">
-                          <div className="text-sm font-semibold text-gray-800 mb-3">Net Cash Flow by Banks</div>
+                        <div className={`absolute right-full top-0 mr-2 w-80 border rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[100] pointer-events-none ${
+                          theme === 'dark' 
+                            ? 'bg-gray-800 border-gray-700' 
+                            : 'bg-white border-gray-200'
+                        }`}>
+                          <div className={`text-sm font-semibold mb-3 ${
+                            theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                          }`}>Net Cash Flow by Banks</div>
                           {netBreakdown.length > 0 ? (
                             <div className="space-y-2">
                               {netBreakdown.map((bank, index) => (
                                 <div key={index} className="text-sm mb-2">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-gray-700 font-medium">{bank.name}</span>
+                                    <span className={`font-medium ${
+                                      theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                                    }`}>{bank.name}</span>
                                     <span className={`font-bold ${bank.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                       ₹{Math.abs(bank.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                       {bank.amount >= 0 ? ' (Inflow)' : ' (Outflow)'}
                                     </span>
                                   </div>
                                   {bank.accounts && bank.accounts.length > 0 && (
-                                    <div className="text-xs text-gray-500 mt-1 ml-2">
+                                    <div className={`text-xs mt-1 ml-2 ${
+                                      theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                                    }`}>
                                       Accounts: {bank.accounts.join(', ')}
                                     </div>
                                   )}
@@ -3060,11 +3449,17 @@ export default function ReportsPage() {
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm text-gray-500">No bank data available</div>
+                            <div className={`text-sm ${
+                              theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                            }`}>No bank data available</div>
                           )}
-                          <div className="mt-3 pt-2 border-t border-gray-200">
+                          <div className={`mt-3 pt-2 border-t ${
+                            theme === 'dark' ? 'border-gray-600' : 'border-gray-200'
+                          }`}>
                             <div className="flex justify-between items-center text-sm font-semibold">
-                              <span className="text-gray-800">Net Total</span>
+                              <span className={`${
+                                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                              }`}>Net Total</span>
                               <span className={`${netTotal >= 0 ? 'text-green-800' : 'text-red-800'}`}>
                                 ₹{netTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </span>
@@ -3079,7 +3474,9 @@ export default function ReportsPage() {
 
               {/* Operations Title */}
               <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Operations</h3>
+                <h3 className={`text-xl font-bold mb-4 ${
+                  theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+                }`}>Operations</h3>
               </div>
 
               {/* Edit Mode Toggle */}
@@ -3197,12 +3594,12 @@ export default function ReportsPage() {
                {/* Add Item Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-800">Add New Sub Group</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add New Sub Group</h3>
                 <button
                   onClick={closeAddModal}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                 >
                   <RiCloseLine size={20} />
                 </button>
@@ -3210,7 +3607,7 @@ export default function ReportsPage() {
               
               <div className="space-y-4">
               <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Sub Group Name
                   </label>
                   <input
@@ -3218,7 +3615,7 @@ export default function ReportsPage() {
                     value={newItemName}
                     onChange={(e) => setNewItemName(e.target.value)}
                     placeholder="Enter sub group name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                     autoFocus
                   />
               </div>
@@ -3227,7 +3624,7 @@ export default function ReportsPage() {
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={closeAddModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Cancel
                 </button>
@@ -3338,47 +3735,47 @@ export default function ReportsPage() {
                      {/* Group Option Modal */}
            {showGroupOptionModal && (
              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-200 dark:border-gray-700">
                  <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-lg font-semibold text-gray-800">Add Sub Group</h3>
+                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Add Sub Group</h3>
                    <button
                      onClick={closeGroupOptionModal}
-                     className="text-gray-400 hover:text-gray-600 transition-colors"
+                     className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                    >
                      <RiCloseLine size={20} />
                    </button>
                  </div>
                  
                  <div className="space-y-4">
-                   <p className="text-gray-600 mb-4">How would you like to add this sub group?</p>
+                   <p className="text-gray-600 dark:text-gray-400 mb-4">How would you like to add this sub group?</p>
                    
             <div className="space-y-3">
                      <button
                        onClick={openAddGroupNameModal}
-                       className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                       className="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
                      >
             <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                           <RiAddLine className="text-blue-600" size={20} />
+                         <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                           <RiAddLine className="text-blue-600 dark:text-blue-400" size={20} />
               </div>
               <div>
-                           <h4 className="font-semibold text-gray-800">Add Sub Group by Name</h4>
-                           <p className="text-sm text-gray-600">Create a sub group with a custom name</p>
+                           <h4 className="font-semibold text-gray-900 dark:text-gray-200">Add Sub Group by Name</h4>
+                           <p className="text-sm text-gray-600 dark:text-gray-400">Create a sub group with a custom name</p>
               </div>
             </div>
                      </button>
                      
                      <button
                        onClick={openAddGroupTagsModal}
-                       className="w-full p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-left"
+                       className="w-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
                      >
             <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                           <RiBarChartLine className="text-green-600" size={20} />
+                         <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                           <RiBarChartLine className="text-green-600 dark:text-green-400" size={20} />
               </div>
               <div>
-                           <h4 className="font-semibold text-gray-800">Add by Tags</h4>
-                           <p className="text-sm text-gray-600">Create a sub group using predefined tags</p>
+                           <h4 className="font-semibold text-gray-900 dark:text-gray-200">Add by Tags</h4>
+                           <p className="text-sm text-gray-600 dark:text-gray-400">Create a sub group using predefined tags</p>
               </div>
             </div>
                      </button>
@@ -3388,7 +3785,7 @@ export default function ReportsPage() {
                  <div className="flex gap-3 mt-6">
                    <button
                      onClick={closeGroupOptionModal}
-                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                     className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                    >
                      Cancel
                    </button>

@@ -7,6 +7,8 @@ import { getUniqueColor, getExistingColors } from '../../utils/colorUtils';
 
 export const runtime = 'nodejs';
 
+
+
 // Type definitions for cashflow data structures
 interface CashFlowItem {
   id: string;
@@ -427,11 +429,14 @@ export async function DELETE(request: Request) {
         const tableName = getBankTransactionTable(typeof bank.bankName === 'string' ? bank.bankName : '');
         try {
           // Find transactions that contain this tag and belong to this user
+          // Note: Some records store tags as an array of IDs (string[]), others as an array of objects [{id,name,color}]
+          // contains() only works for exact element matches and will not match when tags are objects.
+          // So we first try a targeted scan; if the table stores objects, we'll filter client-side below.
           const transactionsWithTag = await docClient.send(new ScanCommand({
             TableName: tableName,
-            FilterExpression: 'contains(#tags, :tagId) AND #userId = :userId',
-            ExpressionAttributeNames: { '#tags': 'tags', '#userId': 'userId' },
-            ExpressionAttributeValues: { ':tagId': id, ':userId': tagUserId }
+            FilterExpression: '#userId = :userId',
+            ExpressionAttributeNames: { '#userId': 'userId' },
+            ExpressionAttributeValues: { ':userId': tagUserId }
           }));
           
           const transactionsToUpdate = transactionsWithTag.Items || [];
@@ -444,10 +449,20 @@ export async function DELETE(request: Request) {
               
               const updatePromises = batch.map(async (tx) => {
                 if (!Array.isArray(tx.tags) || tx.tags.length === 0) return;
-                // Filter out the tag ID to be deleted
-                const newTags = tx.tags.filter((tagId) => tagId !== id);
-                if (newTags.length === tx.tags.length) return; // no change
-                
+                let changed = false;
+                let newTags: unknown[] = [];
+                // If tags are strings (IDs)
+                if (typeof tx.tags[0] === 'string') {
+                  newTags = (tx.tags as string[]).filter((tagId) => tagId !== id);
+                  changed = (newTags as string[]).length !== (tx.tags as string[]).length;
+                } else if (typeof tx.tags[0] === 'object' && tx.tags[0] !== null) {
+                  // If tags are objects
+                  newTags = (tx.tags as Array<{ id?: string }>)
+                    .filter((t) => (typeof t?.id === 'string' ? t.id !== id : true));
+                  changed = (newTags as unknown[]).length !== (tx.tags as unknown[]).length;
+                }
+                if (!changed) return; // nothing to update
+
                 await docClient.send(new UpdateCommand({
                   TableName: tableName,
                   Key: { id: tx.id },
