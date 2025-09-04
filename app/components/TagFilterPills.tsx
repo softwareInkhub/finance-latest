@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { FiMoreHorizontal, FiSearch } from 'react-icons/fi';
+import { FiMoreHorizontal, FiSearch, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface Tag {
@@ -417,12 +417,23 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
               {tagSuccess && <span className="text-green-600 text-xs">{tagSuccess}</span>}
             </div>
           )}
+
+          {/* Expand / Collapse arrow */}
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="ml-1 p-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-100"
+            title={isExpanded ? 'Collapse tag list' : 'Expand tag list'}
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {isExpanded ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+          </button>
         </div>
       </div>
 
       {/* Second row - Additional tags when expanded */}
       {isExpanded && secondRowTags.length > 0 && (
-        <div className="p-3 border-b border-gray-100">
+        <div className="p-1 border-b border-gray-100">
           <div className="flex flex-wrap gap-2 items-center">
             {secondRowTags.map(tag => {
               const btnRef = React.createRef<HTMLButtonElement>();
@@ -430,7 +441,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
               return (
                 <span key={tag.id} className="relative inline-flex items-center group flex-shrink-0">
                   <button
-                    className={`px-2 py-1 rounded text-xs font-medium border transition-all duration-150 whitespace-nowrap ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
+                    className={`px-1.5 py-0.5 rounded text-xs font-medium border transition-all duration-150 ${tagFilters.includes(tag.name) ? 'scale-105 shadow-sm' : 'hover:scale-105 hover:shadow-sm'}`}
                     style={{
                       backgroundColor: tagFilters.includes(tag.name) ? tag.color || '#6366F1' : `${tag.color || '#6366F1'}30`,
                       color: theme === 'dark' ? '#ffffff' : '#000000',
@@ -443,7 +454,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                     {tag.name}
                     {typeof count === 'number' && (
                       <span 
-                        className="ml-1 bg-white/90 border rounded-full px-1 text-[9px] font-bold align-middle inline-block min-w-[14px] text-center text-black"
+                        className="ml-1 bg-white/90 border rounded-full px-0.5 text-[9px] font-bold align-middle inline-block min-w-[12px] text-center text-black"
                         style={{
                           borderColor: tag.color || '#6366F1',
                           color: 'black'
@@ -455,7 +466,7 @@ const TagFilterPills: React.FC<TagFilterPillsProps> = ({
                   </button>
                   <button
                     ref={btnRef}
-                    className="ml-1 p-0.5 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="ml-0.5 p-0.5 rounded-full hover:bg-gray-100 focus:bg-gray-200 focus:outline-none text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ lineHeight: 0 }}
                     onClick={e => {
                       e.stopPropagation();

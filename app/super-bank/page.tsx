@@ -2096,6 +2096,8 @@ export default function SuperBankPage() {
   // Custom confirmation modal state
   const [showRemoveTagsConfirm, setShowRemoveTagsConfirm] = useState(false);
   const [selectedTagsToRemove, setSelectedTagsToRemove] = useState<Set<string>>(new Set());
+  // Single-tag remove confirm modal
+  const [confirmRemoveModal, setConfirmRemoveModal] = useState<{ open: boolean; rowIdx?: number; tagId?: string; tagName?: string }>({ open: false });
   
   // Force refresh state for tag count updates (unused - kept for potential future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -3273,9 +3275,22 @@ export default function SuperBankPage() {
     const tagToRemove = Array.isArray(tx.tags) ? tx.tags.find(t => t.id === tagId) : null;
     const tagName = tagToRemove?.name || 'this tag';
     
-    // Show confirmation dialog
-    const confirmed = window.confirm(`Are you sure you want to remove the tag "${tagName}" from this transaction?`);
-    if (!confirmed) return;
+    // Open confirmation modal instead of alert
+    setConfirmRemoveModal({ open: true, rowIdx, tagId, tagName });
+  };
+
+  // Confirm handler for single-tag removal
+  const confirmRemoveTagNow = async () => {
+    if (!confirmRemoveModal.open || confirmRemoveModal.rowIdx === undefined || !confirmRemoveModal.tagId) {
+      setConfirmRemoveModal({ open: false });
+      return;
+    }
+    const rowIdx = confirmRemoveModal.rowIdx;
+    const tagId = confirmRemoveModal.tagId;
+    const row = sortedAndFilteredRows[rowIdx];
+    if (!row || !row.id) { setConfirmRemoveModal({ open: false }); return; }
+    const tx = transactions.find(t => t.id === row.id);
+    if (!tx) { setConfirmRemoveModal({ open: false }); return; }
     
     const tags = Array.isArray(tx.tags) ? tx.tags.filter((t) => t.id !== tagId) : [];
     if (tags.length === 0) {
@@ -3309,6 +3324,7 @@ export default function SuperBankPage() {
       setTagError(error as string || 'Failed to remove tag');
     } finally {
       setRemovingTag(false);
+      setConfirmRemoveModal({ open: false });
     }
   };
 
@@ -4372,6 +4388,45 @@ export default function SuperBankPage() {
         bankIdNameMap={bankIdNameMap}
         tagFilters={tagFilters}
       />
+
+      {/* Confirm single tag removal modal */}
+      {confirmRemoveModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M4.93 19.07A10 10 0 1119.07 4.93 10 10 0 014.93 19.07z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Remove tag</h3>
+                <p className="text-sm text-gray-500">This action will remove the tag from the transaction.</p>
+              </div>
+            </div>
+            <p className="text-gray-700 mb-6">Are you sure you want to remove the tag
+              {" "}
+              <span className="font-semibold">{confirmRemoveModal.tagName || 'this tag'}</span>
+              {" "}
+              from this transaction?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                onClick={() => setConfirmRemoveModal({ open: false })}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+                onClick={confirmRemoveTagNow}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom Remove Tags Confirmation Modal */}
       {showRemoveTagsConfirm && (() => {
