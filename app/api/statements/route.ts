@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../aws-client';
+import { TABLES } from '../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 
 
@@ -42,37 +42,12 @@ export async function GET(request: Request) {
       expressionAttributeValues[':userId'] = userId;
     }
     
-    // Fetch all statements with pagination
-    const allStatements: Record<string, unknown>[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
-    
-    while (hasMoreItems) {
-      const params: ScanCommandInput = {
-        TableName: TABLES.BANK_STATEMENTS,
-        FilterExpression: filterExpression,
-        ExpressionAttributeValues: expressionAttributeValues,
-      };
-      
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const result = await docClient.send(new ScanCommand(params));
-      const statements = result.Items || [];
-      allStatements.push(...statements);
-      
-      // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      
-      // Add a small delay to avoid overwhelming DynamoDB
-      if (hasMoreItems) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    
-    return NextResponse.json(allStatements);
+    const r = await brmhExecute<{ items?: Record<string, unknown>[] }>({ executeType: 'crud', crudOperation: 'get', tableName: TABLES.BANK_STATEMENTS, pagination: 'true', itemPerPage: 1000 });
+    let items = r.items || [];
+    if (accountId) items = items.filter(s => s.accountId === accountId);
+    if (bankId) items = items.filter(s => s.bankId === bankId);
+    if (userId) items = items.filter(s => s.userId === userId);
+    return NextResponse.json(items);
   } catch (error) {
     console.error('Error fetching statements:', error);
     return NextResponse.json({ error: 'Failed to fetch statements' }, { status: 500 });

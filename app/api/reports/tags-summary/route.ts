@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { docClient, TABLES } from '../../aws-client';
-import { GetCommand } from '@aws-sdk/lib-dynamodb';
+import { TABLES } from '../../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 import { recomputeAndSaveTagsSummary } from './aggregate';
 
 export async function GET(request: NextRequest) {
@@ -12,16 +12,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
     }
 
-    const result = await docClient.send(new GetCommand({
-      TableName: TABLES.REPORTS,
-      Key: { id: `tags_summary_${userId}` }
-    }));
+    const result = await brmhExecute<{ item?: Record<string, unknown> }>({
+      executeType: 'crud', crudOperation: 'get', tableName: TABLES.REPORTS, id: `tags_summary_${userId}`
+    });
 
-    if (!result.Item) {
+    if (!result.item) {
       return NextResponse.json(null);
     }
 
-    return NextResponse.json(result.Item);
+    return NextResponse.json(result.item);
   } catch (error) {
     console.error('Error fetching tags summary:', error);
     return NextResponse.json({ error: 'Failed to fetch tags summary' }, { status: 500 });

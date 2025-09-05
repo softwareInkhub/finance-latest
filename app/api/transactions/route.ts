@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../aws-client';
+import { getBankTransactionTable } from '../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 // GET /api/transactions?accountId=xxx&userId=yyy&bankName=zzz
 export async function GET(request: Request) {
@@ -17,58 +17,26 @@ export async function GET(request: Request) {
     // Get bank-specific table name
     const tableName = getBankTransactionTable(bankName);
     
-    let filterExpression = 'accountId = :accountId';
-    const expressionAttributeValues: Record<string, string> = { ':accountId': accountId };
-    if (userId) {
-      filterExpression += ' AND userId = :userId';
-      expressionAttributeValues[':userId'] = userId;
-    }
-
-    // Fetch all transactions with pagination
-    const allTransactions: Record<string, unknown>[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
-    
-    while (hasMoreItems) {
-      const params: ScanCommandInput = {
-        TableName: tableName,
-        FilterExpression: filterExpression,
-        ExpressionAttributeValues: expressionAttributeValues,
-      };
-      
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const result = await docClient.send(new ScanCommand(params));
-      const transactions = result.Items || [];
-      allTransactions.push(...transactions);
-      
-      // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      
-      // Add a small delay to avoid overwhelming DynamoDB
-      if (hasMoreItems) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
+    // Fetch all transactions for this account and optional user (filter client-side)
+    const txRes = await brmhExecute<{ items?: Record<string, unknown>[] }>({
+      executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 1000
+    });
+    const allTransactions = (txRes.items || []).filter(t => (t as Record<string, unknown>).accountId === accountId && (!userId || (t as Record<string, unknown>).userId === userId));
 
     // Fetch all tags to populate tag data
-    const tagsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'tags',
-      })
-    );
-    const allTags = tagsResult.Items || [];
-    const tagsMap = new Map(allTags.map(tag => [tag.id, tag]));
+    const tagsTable = process.env.AWS_DYNAMODB_TAGS_TABLE || 'tags';
+    const tagsRes = await brmhExecute<{ items?: Array<{ id?: string } & Record<string, unknown>> }>({ executeType: 'crud', crudOperation: 'get', tableName: tagsTable, pagination: 'true', itemPerPage: 1000 });
+    const allTags = tagsRes.items || [];
+    const tagsMap = new Map<string, Record<string, unknown>>(allTags.filter(t => typeof t.id === 'string').map(tag => [tag.id as string, tag]));
 
     // Populate tag data for each transaction (handle both string IDs and full objects)
-    const transactions = allTransactions.map(transaction => {
-      if (Array.isArray(transaction.tags)) {
-        transaction.tags = transaction.tags
-          .map(tag => typeof tag === 'string' ? tagsMap.get(tag) : tag)
+    const transactions = allTransactions.map((transaction: Record<string, unknown>) => {
+      const maybeTags = transaction.tags as unknown;
+      if (Array.isArray(maybeTags)) {
+        const mapped = (maybeTags as unknown[])
+          .map((tag: unknown) => (typeof tag === 'string' ? tagsMap.get(tag) : tag))
           .filter(Boolean);
+        transaction.tags = mapped as unknown[];
       }
       return transaction;
     });

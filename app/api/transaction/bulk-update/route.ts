@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { getBankTransactionTable } from '../../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 import { recomputeAndSaveTagsSummary } from '../../reports/tags-summary/aggregate';
 
 export const runtime = 'nodejs';
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     });
 
     // Process each table's updates (limit concurrency to avoid DynamoDB throttling)
-    const results = [];
+    const results: Array<{ transactionId: string; success: boolean; error?: string }> = [];
     for (const [tableName, tableUpdates] of Object.entries(updatesByTable)) {
       const executeUpdate = async (update: {
         transactionId: string;
@@ -45,40 +45,30 @@ export async function POST(request: Request) {
         bankName: string;
         transactionData?: Record<string, string | number | string[]>;
       }) => {
-        const updateFields = [];
-        const exprAttrNames: Record<string, string> = {};
-        const exprAttrValues: Record<string, string | number | string[]> = {};
-        
+        const updatesObject: Record<string, string | number | string[]> = {};
+
         if (update.tags) {
-          updateFields.push('tags');
-          exprAttrNames['#tags'] = 'tags';
-          exprAttrValues[':tags'] = Array.isArray(update.tags) ? update.tags : [];
+          updatesObject['tags'] = Array.isArray(update.tags) ? update.tags : [];
         }
-        
+
         if (update.transactionData) {
           for (const [key, value] of Object.entries(update.transactionData)) {
-            updateFields.push(key);
-            exprAttrNames[`#${key}`] = key;
-            exprAttrValues[`:${key}`] = value as string | number | string[];
+            updatesObject[key] = value as string | number | string[];
           }
         }
-        
-        if (updateFields.length === 0) {
+
+        if (Object.keys(updatesObject).length === 0) {
           return { transactionId: update.transactionId, success: false, error: 'No fields to update' };
         }
-        
-        const updateExpr = 'SET ' + updateFields.map(f => `#${f} = :${f}`).join(', ');
-        
+
         try {
-          await docClient.send(
-            new UpdateCommand({
-              TableName: tableName,
-              Key: { id: update.transactionId },
-              UpdateExpression: updateExpr,
-              ExpressionAttributeNames: exprAttrNames,
-              ExpressionAttributeValues: exprAttrValues,
-            })
-          );
+          await brmhExecute({
+            executeType: 'crud',
+            crudOperation: 'put',
+            tableName,
+            key: { id: update.transactionId },
+            updates: updatesObject
+          });
           return { transactionId: update.transactionId, success: true };
         } catch (error) {
           return { transactionId: update.transactionId, success: false, error: error instanceof Error ? error.message : 'Unknown error' };

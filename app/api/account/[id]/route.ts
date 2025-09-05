@@ -1,34 +1,26 @@
 import { NextResponse } from 'next/server';
-import { PutCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES, getBankTransactionTable } from '../../aws-client';
+import { brmhExecute } from '@/app/lib/brmhExecute';
+import { getBankTransactionTable } from '../../../config/database';
+
+type BankRow = { bankName?: string };
+type TxRow = { id?: string; accountId?: string };
+type StatementRow = { id?: string; accountId?: string };
 
 // PUT /api/account/[id]
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { bankId, accountHolderName, accountNumber, ifscCode, tags, userId } = await request.json();
-
-  if (!bankId || !accountHolderName || !accountNumber || !ifscCode) {
+  const updates = await request.json();
+  if (!updates?.bankId || !updates?.accountHolderName || !updates?.accountNumber || !updates?.ifscCode) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
-
-  const account = {
-    id,
-    bankId,
-    accountHolderName,
-    accountNumber,
-    ifscCode,
-    tags: Array.isArray(tags) ? tags : [],
-    userId: userId || '',
-  };
-
-  await docClient.send(
-    new PutCommand({
-      TableName: TABLES.ACCOUNTS,
-      Item: account,
-    })
-  );
-
-  return NextResponse.json(account);
+  const r = await brmhExecute({
+    executeType: 'crud',
+    crudOperation: 'put',
+    tableName: 'accounts',
+    key: { id },
+    updates
+  });
+  return NextResponse.json(r);
 }
 
 // DELETE /api/account/[id]
@@ -36,90 +28,79 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
 
   try {
-    // First, get all banks to know which tables to scan
-    const banksResult = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.BANKS,
-      })
-    );
-    const banks = banksResult.Items || [];
+    // First, list banks via BRMH
+    const banksRes = await brmhExecute<{ items?: BankRow[] }>({
+      executeType: 'crud',
+      crudOperation: 'get',
+      tableName: 'banks',
+      pagination: 'true',
+      itemPerPage: 1000
+    });
+    const banks = banksRes.items || [];
     let totalDeletedTransactions = 0;
 
-    // For each bank, scan its transaction table for transactions with this accountId
+    // For each bank, delete transactions with this accountId
     for (const bank of banks) {
-      const tableName = getBankTransactionTable(bank.bankName);
+      const tableName = getBankTransactionTable(String(bank.bankName || ''));
       try {
-        const transactionResult = await docClient.send(
-          new ScanCommand({
-            TableName: tableName,
-            FilterExpression: 'accountId = :accountId',
-            ExpressionAttributeValues: {
-              ':accountId': id,
-            },
-          })
-        );
-        const relatedTransactions = transactionResult.Items || [];
-        if (relatedTransactions.length > 0) {
-          const deleteTransactionPromises = relatedTransactions.map((transaction) =>
-            docClient.send(
-              new DeleteCommand({
-                TableName: tableName,
-                Key: { id: transaction.id },
-              })
-            )
-          );
-          await Promise.all(deleteTransactionPromises);
-          totalDeletedTransactions += relatedTransactions.length;
+        const txRes = await brmhExecute<{ items?: TxRow[] }>({
+          executeType: 'crud',
+          crudOperation: 'get',
+          tableName,
+          pagination: 'true',
+          itemPerPage: 1000
+        });
+        const relatedTransactions = (txRes.items || []).filter(tx => tx.accountId === id);
+        const toDelete = relatedTransactions.filter((t): t is TxRow & { id: string } => typeof t.id === 'string');
+        if (toDelete.length > 0) {
+          await Promise.all(toDelete.map((transaction) => brmhExecute({
+            executeType: 'crud',
+            crudOperation: 'delete',
+            tableName,
+            id: transaction.id
+          })));
+          totalDeletedTransactions += toDelete.length;
         }
       } catch {
-        // If table doesn't exist, skip
         continue;
       }
     }
 
-    // Find and delete all related statements
-    const statementResult = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.BANK_STATEMENTS,
-        FilterExpression: 'accountId = :accountId',
-        ExpressionAttributeValues: {
-          ':accountId': id,
-        },
-      })
-    );
-
-    const relatedStatements = statementResult.Items || [];
-    console.log(`Found ${relatedStatements.length} related statements to delete`);
-
-    // Delete all related statements
-    if (relatedStatements.length > 0) {
-      const deleteStatementPromises = relatedStatements.map((statement) =>
-        docClient.send(
-          new DeleteCommand({
-            TableName: TABLES.BANK_STATEMENTS,
-            Key: { id: statement.id },
-          })
-        )
-      );
-      await Promise.all(deleteStatementPromises);
-      console.log(`Successfully deleted ${relatedStatements.length} related statements`);
+    // Delete related statements
+    const statementsTable = process.env.AWS_DYNAMODB_STATEMENTS_TABLE || 'bank-statements';
+    const stmRes = await brmhExecute<{ items?: StatementRow[] }>({
+      executeType: 'crud',
+      crudOperation: 'get',
+      tableName: statementsTable,
+      pagination: 'true',
+      itemPerPage: 1000
+    });
+    const relatedStatements = (stmRes.items || []).filter(s => s.accountId === id);
+    const stmToDelete = relatedStatements.filter((s): s is StatementRow & { id: string } => typeof s.id === 'string');
+    if (stmToDelete.length > 0) {
+      await Promise.all(stmToDelete.map((statement) => brmhExecute({
+        executeType: 'crud',
+        crudOperation: 'delete',
+        tableName: statementsTable,
+        id: statement.id
+      })));
     }
 
-    // Finally, delete the account itself
-    await docClient.send(
-      new DeleteCommand({
-        TableName: TABLES.ACCOUNTS,
-        Key: { id },
-      })
-    );
+    // Delete the account
+    await brmhExecute({
+      executeType: 'crud',
+      crudOperation: 'delete',
+      tableName: 'accounts',
+      id
+    });
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       deletedTransactions: totalDeletedTransactions,
-      deletedStatements: relatedStatements.length
+      deletedStatements: stmToDelete.length
     });
   } catch (error) {
     console.error('Error deleting account:', error);
     return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 });
   }
-} 
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES, getBankTransactionTable } from '../../../aws-client';
+import { TABLES, getBankTransactionTable } from '../../../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 export async function GET(
   request: Request,
@@ -21,70 +21,24 @@ export async function GET(
     }
 
     // Get all banks to scan their transaction tables
-    const allBanks: Record<string, unknown>[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
-    
-    while (hasMoreItems) {
-      const banksParams: ScanCommandInput = { TableName: TABLES.BANKS };
-      if (lastEvaluatedKey) {
-        banksParams.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const banksResult = await docClient.send(new ScanCommand(banksParams));
-      const batchBanks = banksResult.Items || [];
-      allBanks.push(...batchBanks);
-      
-      lastEvaluatedKey = banksResult.LastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      
-      if (hasMoreItems) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-    }
+    type BankRow = { bankName?: string };
+    const allBanks: BankRow[] = [];
+    const banksRes = await brmhExecute<{ items?: BankRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName: TABLES.BANKS, pagination: 'true', itemPerPage: 1000 });
+    allBanks.push(...(banksRes.items || []));
 
     // Collect transactions that have the specified tag
     const transactions: Record<string, unknown>[] = [];
     
+    type TxRow = { id?: string; userId?: string; tags?: unknown[] } & Record<string, unknown>;
+
     for (const bank of allBanks) {
       const tableName = getBankTransactionTable(typeof bank.bankName === 'string' ? bank.bankName : '');
-      
       try {
-        // Scan transactions for this bank with pagination
-        let txLastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-        let txHasMoreItems = true;
-        
-        while (txHasMoreItems) {
-          const txParams: ScanCommandInput = { 
-            TableName: tableName,
-            FilterExpression: '#userId = :userId AND #tags = :tagName',
-            ExpressionAttributeNames: {
-              '#userId': 'userId',
-              '#tags': 'tags'
-            },
-            ExpressionAttributeValues: {
-              ':userId': userId,
-              ':tagName': tagName
-            }
-          };
-          
-          if (txLastEvaluatedKey) {
-            txParams.ExclusiveStartKey = txLastEvaluatedKey;
-          }
-          
-          const txResult = await docClient.send(new ScanCommand(txParams));
-          const batchTransactions = txResult.Items || [];
-          transactions.push(...batchTransactions);
-          
-          txLastEvaluatedKey = txResult.LastEvaluatedKey;
-          txHasMoreItems = !!txLastEvaluatedKey;
-          
-          if (txHasMoreItems) {
-            await new Promise(resolve => setTimeout(resolve, 50));
-          }
-        }
+        // Pull all and filter client-side
+        const txRes = await brmhExecute<{ items?: TxRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 1000 });
+        const batchTransactions = (txRes.items || []).filter((tx: TxRow) => tx.userId === userId && Array.isArray(tx.tags) && (tx.tags as unknown[]).includes(tagName));
+        transactions.push(...batchTransactions);
       } catch {
-        // If table doesn't exist, skip
         console.warn(`Table ${tableName} not found, skipping...`);
         continue;
       }
@@ -93,48 +47,10 @@ export async function GET(
     // Also check for transactions where tags is an array containing the tag name
     for (const bank of allBanks) {
       const tableName = getBankTransactionTable(typeof bank.bankName === 'string' ? bank.bankName : '');
-      
       try {
-        let txLastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-        let txHasMoreItems = true;
-        
-        while (txHasMoreItems) {
-          const txParams: ScanCommandInput = { 
-            TableName: tableName,
-            FilterExpression: '#userId = :userId',
-            ExpressionAttributeNames: {
-              '#userId': 'userId'
-            },
-            ExpressionAttributeValues: {
-              ':userId': userId
-            }
-          };
-          
-          if (txLastEvaluatedKey) {
-            txParams.ExclusiveStartKey = txLastEvaluatedKey;
-          }
-          
-          const txResult = await docClient.send(new ScanCommand(txParams));
-          const batchTransactions = txResult.Items || [];
-          
-          // Filter transactions that have the tag in their tags array
-          const taggedTransactions = batchTransactions.filter((tx: Record<string, unknown>) => {
-            if (!Array.isArray(tx.tags)) return false;
-            return (tx.tags as Array<unknown>).some((tag: unknown) => 
-              (typeof tag === 'string' && tag === tagName) ||
-              (typeof tag === 'object' && tag !== null && (tag as Record<string, unknown>).name === tagName)
-            );
-          });
-          
-          transactions.push(...taggedTransactions);
-          
-          txLastEvaluatedKey = txResult.LastEvaluatedKey;
-          txHasMoreItems = !!txLastEvaluatedKey;
-          
-          if (txHasMoreItems) {
-            await new Promise(resolve => setTimeout(resolve, 50));
-          }
-        }
+        const txRes2 = await brmhExecute<{ items?: TxRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 1000 });
+        const taggedTransactions = (txRes2.items || []).filter((tx: TxRow) => Array.isArray(tx.tags) && (tx.tags as unknown[]).some((t: unknown) => t === tagName || (t && typeof t === 'object' && (t as Record<string, unknown>).name === tagName)) && tx.userId === userId);
+        transactions.push(...taggedTransactions);
       } catch {
         console.warn(`Table ${tableName} not found, skipping...`);
         continue;
@@ -143,7 +59,7 @@ export async function GET(
 
     // Remove duplicates based on transaction ID
     const uniqueTransactions = transactions.filter((tx, index, self) => 
-      index === self.findIndex(t => t.id === tx.id)
+      index === self.findIndex(t => (t as Record<string, unknown>).id === (tx as Record<string, unknown>).id)
     );
 
     return NextResponse.json(uniqueTransactions);

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../../aws-client';
+import { brmhExecute } from '@/app/lib/brmhExecute';
+import { TABLES } from '../../../config/database';
 
 export async function GET(request: Request) {
   try {
@@ -8,7 +8,6 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
-    const lastKey = searchParams.get('lastKey');
 
     if (!userId) {
       return NextResponse.json(
@@ -17,34 +16,12 @@ export async function GET(request: Request) {
       );
     }
 
-    // Build scan parameters
-    const scanParams: {
-      TableName: string;
-      FilterExpression: string;
-      ExpressionAttributeValues: Record<string, string>;
-      Limit: number;
-      ExclusiveStartKey?: Record<string, unknown>;
-    } = {
-      TableName: TABLES.BANK_STATEMENTS,
-      FilterExpression: 'userId = :userId',
-      ExpressionAttributeValues: { ':userId': userId },
-      Limit: limit,
-    };
-
-    // Add exclusive start key if provided
-    if (lastKey) {
-      try {
-        scanParams.ExclusiveStartKey = JSON.parse(decodeURIComponent(lastKey));
-      } catch (error) {
-        console.error('Error parsing lastKey:', error);
-      }
-    }
-
-    // Fetch transactions with pagination
-    const result = await docClient.send(new ScanCommand(scanParams));
-    
-    const transactions = result.Items || [];
-    const hasMore = !!result.LastEvaluatedKey;
+    const tableName = TABLES.BANK_STATEMENTS;
+    const pageRes = await brmhExecute<{ items?: Record<string, unknown>[] }>({
+      executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: limit
+    });
+    const transactions = (pageRes.items || []).filter(t => (t as Record<string, unknown>).userId === userId);
+    const hasMore = false;
 
     // Sort transactions by date (most recent first)
     const sortedTransactions = transactions.sort((a: Record<string, unknown>, b: Record<string, unknown>) => 
@@ -57,7 +34,7 @@ export async function GET(request: Request) {
         page,
         limit,
         hasMore,
-        lastKey: hasMore ? encodeURIComponent(JSON.stringify(result.LastEvaluatedKey)) : null,
+        lastKey: null,
         totalLoaded: transactions.length,
       }
     });

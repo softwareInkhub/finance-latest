@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, PutCommand, UpdateCommand, DeleteCommand, ScanCommandInput, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { UpdateCommand, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES, getBankTransactionTable } from '../aws-client';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 import { recomputeAndSaveTagsSummary } from '../reports/tags-summary/aggregate';
 import { v4 as uuidv4 } from 'uuid';
 import { getUniqueColor, getExistingColors } from '../../utils/colorUtils';
@@ -220,40 +221,26 @@ async function clearAllTagBasedItemsFromCashflow(userId: string) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    
-    // Fetch all tags with pagination
-    const allTags: Record<string, unknown>[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
-    
-    while (hasMoreItems) {
-      const params: ScanCommandInput = { TableName: TABLES.TAGS };
-      if (userId) {
-        params.FilterExpression = '#userId = :userId';
-        params.ExpressionAttributeNames = { '#userId': 'userId' };
-        params.ExpressionAttributeValues = { ':userId': userId };
+    const userId = searchParams.get('userId') || undefined;
+    const tableName = process.env.AWS_DYNAMODB_TAGS_TABLE || 'tags';
+    const r = await brmhExecute<{ items?: Record<string, unknown>[] }>({
+      executeType: 'crud',
+      crudOperation: 'get',
+      tableName,
+      pagination: 'true',
+      itemPerPage: 1000
+    });
+    // Normalize userId field for legacy rows that may use 'userid'
+    const normalized = (r.items || []).map((t) => {
+      if (typeof (t as Record<string, unknown>)['userId'] === 'string') return t;
+      const legacy = (t as Record<string, unknown>)['userid'];
+      if (typeof legacy === 'string') {
+        return { ...(t as Record<string, unknown>), userId: legacy } as Record<string, unknown>;
       }
-      
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const result = await docClient.send(new ScanCommand(params));
-      const tags = result.Items || [];
-      allTags.push(...tags);
-      
-      // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      
-      // Add a small delay to avoid overwhelming DynamoDB
-      if (hasMoreItems) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    
-    return NextResponse.json(allTags);
+      return t;
+    });
+    const filtered = userId ? normalized.filter(t => (t as Record<string, unknown>).userId === userId) : normalized;
+    return NextResponse.json(filtered);
   } catch (error) {
     console.error('Error fetching tags:', error);
     return NextResponse.json({ error: 'Failed to fetch tags' }, { status: 500 });
@@ -263,65 +250,29 @@ export async function GET(request: Request) {
 // POST /api/tags
 export async function POST(request: Request) {
   try {
-    const { name, color, userId } = await request.json();
-    if (!name || !userId) return NextResponse.json({ error: 'Tag name and userId required' }, { status: 400 });
-    
-    // Check if tag with same name already exists for this user (case-insensitive) with pagination
-    const existingTags: Record<string, unknown>[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
-    
-    while (hasMoreItems) {
-      const existingTagsParams: ScanCommandInput = {
-        TableName: TABLES.TAGS,
-        FilterExpression: '#userId = :userId',
-        ExpressionAttributeNames: { '#userId': 'userId' },
-        ExpressionAttributeValues: { ':userId': userId },
-      };
-      
-      if (lastEvaluatedKey) {
-        existingTagsParams.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const existingTagsResult = await docClient.send(new ScanCommand(existingTagsParams));
-      const batchTags = existingTagsResult.Items || [];
-      existingTags.push(...batchTags);
-      
-      // Check if there are more items to fetch
-      lastEvaluatedKey = existingTagsResult.LastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      
-      // Add a small delay to avoid overwhelming DynamoDB
-      if (hasMoreItems) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+    const item = await request.json();
+    if (!item?.name || !item?.userId) return NextResponse.json({ error: 'Tag name and userId required' }, { status: 400 });
+    // ensure color uniqueness roughly client-side using existing list
+    const tableName = process.env.AWS_DYNAMODB_TAGS_TABLE || 'tags';
+    const existing = await brmhExecute<{ items?: Record<string, unknown>[] }>({
+      executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 1000
+    });
+    const duplicates = (existing.items || []).some(t => {
+      const name = (t as Record<string, unknown>).name;
+      const uid = (t as Record<string, unknown>).userId ?? (t as Record<string, unknown>).userid;
+      return typeof name === 'string' && uid === item.userId && name.toLowerCase() === item.name.toLowerCase();
+    });
+    if (duplicates) return NextResponse.json({ error: 'Tag with this name already exists' }, { status: 409 });
+    if (!item.color) {
+      const color = getUniqueColor(getExistingColors(existing.items || []));
+      item.color = color;
     }
-    
-    // Check for case-insensitive duplicate
-    if (existingTags.length > 0) {
-      const existingTag = existingTags.find(tag => 
-        typeof tag.name === 'string' && tag.name.toLowerCase() === name.toLowerCase()
-      );
-      if (existingTag) {
-        return NextResponse.json({ error: 'Tag with this name already exists' }, { status: 409 });
-      }
+    // Ensure partition key is present for BRMH CRUD create
+    if (!item.id) {
+      item.id = uuidv4();
     }
-    
-    // Get existing colors to ensure uniqueness
-    const existingColors = getExistingColors(existingTags);
-    
-    // Generate unique color if not provided
-    const uniqueColor = color || getUniqueColor(existingColors);
-    
-    const tag = {
-      id: uuidv4(),
-      name,
-      color: uniqueColor,
-      userId,
-      createdAt: new Date().toISOString(),
-    };
-    await docClient.send(new PutCommand({ TableName: TABLES.TAGS, Item: tag }));
-    return NextResponse.json(tag);
+    const r = await brmhExecute({ executeType: 'crud', crudOperation: 'post', tableName, item });
+    return NextResponse.json(r);
   } catch (error) {
     console.error('Error creating tag:', error);
     return NextResponse.json({ error: 'Failed to create tag' }, { status: 500 });
@@ -346,14 +297,15 @@ export async function PUT(request: Request) {
       console.error('Error fetching tag before update:', error);
     }
     
-    // Update the tag in tags table
-    await docClient.send(new UpdateCommand({
-      TableName: TABLES.TAGS,
-      Key: { id },
-      UpdateExpression: 'SET #name = :name, #color = :color',
-      ExpressionAttributeNames: { '#name': 'name', '#color': 'color' },
-      ExpressionAttributeValues: { ':name': name, ':color': color },
-    }));
+    // Update the tag in tags table via BRMH
+    const tableName = process.env.AWS_DYNAMODB_TAGS_TABLE || 'tags';
+    await brmhExecute({
+      executeType: 'crud',
+      crudOperation: 'put',
+      tableName,
+      key: { id },
+      updates: { name, color }
+    });
     
     // Update tags summary and cashflow reports in brmh-fintech-user-reports table (async)
     if (typeof tagUserId === 'string' && tagUserId.length > 0 && oldTagName && oldTagName !== name) {
@@ -409,8 +361,9 @@ export async function DELETE(request: Request) {
       tagName = typeof tagItem?.name === 'string' ? tagItem.name : undefined;
     } catch {}
 
-    // 1. Delete the tag itself
-    await docClient.send(new DeleteCommand({ TableName: TABLES.TAGS, Key: { id } }));
+    // 1. Delete the tag itself via BRMH
+    const tableName = process.env.AWS_DYNAMODB_TAGS_TABLE || 'tags';
+    await brmhExecute({ executeType: 'crud', crudOperation: 'delete', tableName, id });
 
     // 2. OPTIMIZED: Only remove tag from transactions that actually have this tag
     // This is much faster than scanning all transactions
@@ -421,7 +374,7 @@ export async function DELETE(request: Request) {
         FilterExpression: '#userId = :userId',
         ExpressionAttributeNames: { '#userId': 'userId' },
         ExpressionAttributeValues: { ':userId': tagUserId }
-      }));
+      })) as unknown as { Items?: Array<Record<string, unknown>> };
       
       const userBanks = userBanksResult.Items || [];
       
@@ -437,7 +390,7 @@ export async function DELETE(request: Request) {
             FilterExpression: '#userId = :userId',
             ExpressionAttributeNames: { '#userId': 'userId' },
             ExpressionAttributeValues: { ':userId': tagUserId }
-          }));
+          })) as unknown as { Items?: Array<Record<string, unknown>> };
           
           const transactionsToUpdate = transactionsWithTag.Items || [];
           
@@ -447,7 +400,8 @@ export async function DELETE(request: Request) {
             for (let i = 0; i < transactionsToUpdate.length; i += batchSize) {
               const batch = transactionsToUpdate.slice(i, i + batchSize);
               
-              const updatePromises = batch.map(async (tx) => {
+              type TxWithTags = { id?: string; tags?: unknown[] };
+              const updatePromises = batch.map(async (tx: TxWithTags) => {
                 if (!Array.isArray(tx.tags) || tx.tags.length === 0) return;
                 let changed = false;
                 let newTags: unknown[] = [];

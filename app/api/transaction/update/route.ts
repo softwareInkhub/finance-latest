@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { getBankTransactionTable } from '../../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 import { recomputeAndSaveTagsSummary } from '../../reports/tags-summary/aggregate';
 
 export const runtime = 'nodejs';
@@ -16,36 +16,27 @@ export async function POST(request: Request) {
     // Get bank-specific table name
     const tableName = getBankTransactionTable(bankName);
     
-    // Build the update expression dynamically
-    const updateFields = [];
-    const exprAttrNames: Record<string, string> = {};
-    const exprAttrValues: Record<string, string | number | string[]> = {};
+    // Build updates object dynamically
+    const updatesObject: Record<string, string | number | string[]> = {};
     if (transactionData) {
       for (const f of Object.keys(transactionData)) {
-        updateFields.push(f);
-        exprAttrNames[`#${f}`] = f;
-        exprAttrValues[`:${f}`] = transactionData[f];
+        updatesObject[f] = transactionData[f] as string | number | string[];
       }
     }
     if (tags) {
-      // Extract only tag IDs from the tags array
-      const tagIds = Array.isArray(tags) 
-        ? tags.map(tag => typeof tag === 'string' ? tag : tag.id).filter(Boolean)
+      const tagIds = Array.isArray(tags)
+        ? (tags.map(tag => (typeof tag === 'string' ? tag : tag.id)).filter(Boolean) as string[])
         : [];
-      updateFields.push('tags');
-      exprAttrNames['#tags'] = 'tags';
-      exprAttrValues[':tags'] = tagIds;
+      updatesObject['tags'] = tagIds;
     }
-    const updateExpr = 'SET ' + updateFields.map(f => `#${f} = :${f}`).join(', ');
-    await docClient.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: { id: transactionId },
-        UpdateExpression: updateExpr,
-        ExpressionAttributeNames: exprAttrNames,
-        ExpressionAttributeValues: exprAttrValues,
-      })
-    );
+    // Forward update to BRMH execute (crud put)
+    await brmhExecute({
+      executeType: 'crud',
+      crudOperation: 'put',
+      tableName,
+      key: { id: transactionId },
+      updates: updatesObject
+    });
     // Fire-and-forget recompute of user tag summary if userId is present in transactionData
     try {
       const userId = (transactionData && (transactionData as Record<string, unknown>).userId) as string | undefined;

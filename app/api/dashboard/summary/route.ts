@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { getBankTransactionTable } from '../../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
+
+type BankRow = { id?: string; bankName?: string; userId?: string; createdAt?: string };
+type AccountRow = { id?: string; bankId?: string; userId?: string; accountHolderName?: string; accountNumber?: string; createdAt?: string };
+type StatementRow = { id?: string; accountId?: string; userId?: string; fileName?: string; createdAt?: string };
+type TxRow = { id?: string; userId?: string; transactionDate?: string; date?: string; [key: string]: unknown };
 
 // GET /api/dashboard/summary?userId=xxx
 export async function GET(request: Request) {
@@ -12,65 +17,33 @@ export async function GET(request: Request) {
   }
   
   try {
-    // Get all banks
-    const banksResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'banks',
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId }
-      })
-    );
-    const banks = banksResult.Items || [];
-    
-    // Get all accounts
-    const accountsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'accounts',
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId }
-      })
-    );
-    const accounts = accountsResult.Items || [];
-    
-    // Get all statements
-    const statementsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'statements',
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId }
-      })
-    );
-    const statements = statementsResult.Items || [];
+    // Get all banks/accounts/statements via BRMH and filter for user
+    const banksRes = await brmhExecute<{ items?: BankRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName: 'banks', pagination: 'true', itemPerPage: 1000 });
+    const banks = (banksRes.items || []).filter(b => b.userId === userId);
+
+    const accountsRes = await brmhExecute<{ items?: AccountRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName: 'accounts', pagination: 'true', itemPerPage: 1000 });
+    const accounts = (accountsRes.items || []).filter(a => a.userId === userId);
+
+    const statementsRes = await brmhExecute<{ items?: StatementRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName: 'bank-statements', pagination: 'true', itemPerPage: 1000 });
+    const statements = (statementsRes.items || []).filter(s => s.userId === userId);
     
     // Get transaction counts and recent transactions (limited to 50 for dashboard)
     let totalTransactions = 0;
     const recentTransactions: Record<string, unknown>[] = [];
     
     for (const bank of banks) {
-      const tableName = getBankTransactionTable(bank.bankName);
+      const tableName = getBankTransactionTable(String(bank.bankName || ''));
       
       try {
         // Get transaction count for this bank
-        const countParams: ScanCommandInput = {
-          TableName: tableName,
-          FilterExpression: 'userId = :userId',
-          ExpressionAttributeValues: { ':userId': userId },
-          Select: 'COUNT'
-        };
-        
-        const countResult = await docClient.send(new ScanCommand(countParams));
-        totalTransactions += countResult.Count || 0;
+        // BRMH execute doesn't support COUNT; approximate by fetching a page and counting
+        const pageRes = await brmhExecute<{ items?: TxRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 1000 });
+        const pageItems = (pageRes.items || []).filter(t => t.userId === userId);
+        totalTransactions += pageItems.length;
         
         // Get recent transactions for this bank (limit 10 per bank)
-        const recentParams: ScanCommandInput = {
-          TableName: tableName,
-          FilterExpression: 'userId = :userId',
-          ExpressionAttributeValues: { ':userId': userId },
-          Limit: 10
-        };
-        
-        const recentResult = await docClient.send(new ScanCommand(recentParams));
-        const bankRecentTransactions = recentResult.Items || [];
+        const recentRes = await brmhExecute<{ items?: TxRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 50 });
+        const bankRecentTransactions = (recentRes.items || []).filter(t => t.userId === userId).slice(0, 10);
         
         // Add bank name to each transaction for context
         const transactionsWithBank = bankRecentTransactions.map(transaction => ({

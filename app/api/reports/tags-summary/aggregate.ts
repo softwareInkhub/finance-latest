@@ -177,8 +177,9 @@ export async function recomputeAndSaveTagsSummary(userId: string): Promise<void>
     while (hasMoreItems) {
       const params: ScanCommandInput = {
         TableName: TABLES.TAGS,
-        FilterExpression: '#userId = :userId',
-        ExpressionAttributeNames: { '#userId': 'userId' },
+        // Support both 'userId' and legacy 'userid'
+        FilterExpression: '(#userId = :userId) OR (#userid = :userId)',
+        ExpressionAttributeNames: { '#userId': 'userId', '#userid': 'userid' },
         ExpressionAttributeValues: { ':userId': userId },
       };
       if (lastEvaluatedKey) params.ExclusiveStartKey = lastEvaluatedKey;

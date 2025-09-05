@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { getBankTransactionTable } from '../../../config/database';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 
 
@@ -13,77 +13,56 @@ export async function GET(request: Request) {
   
   try {
     // First, get all banks to know which tables to scan
-    const banksResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'banks',
-      })
-    );
-    const banks = banksResult.Items || [];
+    type BankRow = { bankName?: string };
+    const banksRes = await brmhExecute<{ items?: BankRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName: 'banks', pagination: 'true', itemPerPage: 1000 });
+    const banks = banksRes.items || [];
     
     // Fetch all tags to populate tag data
-    const tagsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'tags',
-      })
-    );
-    const allTags = tagsResult.Items || [];
-    const tagsMap = new Map(allTags.map(tag => [tag.id, tag]));
+    const tagsTable = process.env.AWS_DYNAMODB_TAGS_TABLE || 'tags';
+    type TagRow = { id?: string } & Record<string, unknown>;
+    const tagsRes = await brmhExecute<{ items?: TagRow[] }>({ executeType: 'crud', crudOperation: 'get', tableName: tagsTable, pagination: 'true', itemPerPage: 1000 });
+    const allTags = tagsRes.items || [];
+    const tagsMap = new Map<string, TagRow>(allTags.filter(t => typeof t.id === 'string').map(tag => [tag.id as string, tag]));
     
 
     // Fetch transactions from all bank tables with pagination
     const allTransactions: Record<string, unknown>[] = [];
     
     for (const bank of banks) {
-      const tableName = getBankTransactionTable(bank.bankName);
+      const tableName = getBankTransactionTable(String(bank.bankName || ''));
       
       try {
-        let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-        let hasMoreItems = true;
         let bankTransactionCount = 0;
         
         console.log(`Fetching transactions from bank: ${bank.bankName} (table: ${tableName})`);
         
-        while (hasMoreItems && allTransactions.length < limit) {
-          const params: ScanCommandInput = {
-            TableName: tableName,
-            // Increase batch size to reduce round trips
-            Limit: Math.min(250, limit - allTransactions.length),
-          };
-          
-          if (userId) {
-            params.FilterExpression = 'userId = :userId';
-            params.ExpressionAttributeValues = { ':userId': userId };
-          }
-          
-          if (lastEvaluatedKey) {
-            params.ExclusiveStartKey = lastEvaluatedKey;
-          }
-          
-          const result = await docClient.send(new ScanCommand(params));
-          const transactions = result.Items || [];
+        if (allTransactions.length < limit) {
+          // Pull a page client-side; BRMH get is scan-based; filter by userId locally
+          const pageRes = await brmhExecute<{ items?: Record<string, unknown>[] }>({
+            executeType: 'crud', crudOperation: 'get', tableName: tableName, pagination: 'true', itemPerPage: Math.min(250, limit - allTransactions.length)
+          });
+          const transactions = pageRes.items || [];
           
           // Populate tag data for each transaction
-          const transactionsWithTags = transactions.map(transaction => {
-            if (Array.isArray(transaction.tags)) {
-              transaction.tags = transaction.tags
-                .map(tag => typeof tag === 'string' ? tagsMap.get(tag) : tag)
+          const transactionsWithTags = transactions.map((transaction: Record<string, unknown>) => {
+            const maybeTags = transaction.tags as unknown;
+            if (Array.isArray(maybeTags)) {
+              const mapped = (maybeTags as unknown[])
+                .map((tag: unknown) => (typeof tag === 'string' ? tagsMap.get(tag) : tag))
                 .filter(Boolean);
+              transaction.tags = mapped as unknown[];
             }
             return transaction;
           });
           
-          allTransactions.push(...transactionsWithTags);
-          bankTransactionCount += transactionsWithTags.length;
+          const filtered = userId ? transactionsWithTags.filter(t => t.userId === userId) : transactionsWithTags;
+          allTransactions.push(...filtered);
+          bankTransactionCount += filtered.length;
           
           console.log(`Fetched ${transactionsWithTags.length} transactions from ${bank.bankName} (total from this bank: ${bankTransactionCount}, overall total: ${allTransactions.length})`);
           
-          // Check if we've reached the limit or if there are more items to fetch
           if (allTransactions.length >= limit) {
-            hasMoreItems = false;
             console.log(`Reached limit of ${limit} transactions, stopping fetch`);
-          } else {
-            lastEvaluatedKey = result.LastEvaluatedKey;
-            hasMoreItems = !!lastEvaluatedKey;
           }
           
           // Remove artificial delay; rely on SDK retry/backoff
