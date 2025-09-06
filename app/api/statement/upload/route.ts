@@ -1,16 +1,10 @@
 import { NextResponse } from 'next/server';
-import { PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { PutCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, s3, TABLES, S3_BUCKET } from '../../aws-client';
+import { docClient, TABLES } from '../../aws-client';
 import { v4 as uuidv4 } from 'uuid';
+import { uploadToBrmhDrive, buildPublicS3Url } from '../../drive/brmh-drive';
 
 export const runtime = 'nodejs'; // Required for file uploads in Next.js API routes
-
-function getFileNameParts(fileName: string) {
-  const dotIdx = fileName.lastIndexOf('.');
-  if (dotIdx === -1) return { base: fileName, ext: '' };
-  return { base: fileName.slice(0, dotIdx), ext: fileName.slice(dotIdx) };
-}
 
 export async function POST(request: Request) {
   try {
@@ -37,41 +31,18 @@ export async function POST(request: Request) {
     let baseFileName = typeof fileName === 'string' && fileName.trim() ? fileName.trim() : `${statementId}.csv`;
     if (!baseFileName.endsWith('.csv')) baseFileName += '.csv';
     
-    // Ensure unique file name for this user
-    const folderPrefix = `users/${userId}/statements/`;
-    let uniqueFileName = baseFileName;
-    let key = folderPrefix + uniqueFileName;
-    let suffix = 1;
-    
-    // List all files in the user's folder to check for duplicates
-    let exists = true;
-    while (exists) {
-      const listRes = await s3.send(new ListObjectsV2Command({
-        Bucket: S3_BUCKET,
-        Prefix: key,
-        MaxKeys: 1
-      }));
-      exists = !!(listRes.Contents && listRes.Contents.length > 0);
-      if (exists) {
-        // Add/increment suffix
-        const { base, ext } = getFileNameParts(baseFileName);
-        uniqueFileName = `${base} (${suffix})${ext}`;
-        key = folderPrefix + uniqueFileName;
-        suffix++;
-      }
-    }
-    
-    // Upload file to S3
+    // Upload file to BRMH Drive under statements path
     const arrayBuffer = await file.arrayBuffer();
-    await s3.send(new PutObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: key,
-      Body: Buffer.from(arrayBuffer),
-      ContentType: 'text/csv',
-    }));
+    const uploadResult = await uploadToBrmhDrive(String(userId), {
+      name: baseFileName,
+      mimeType: 'text/csv',
+      size: (file as File).size,
+      content: Buffer.from(arrayBuffer),
+      tags: ['statement', String(bankName || ''), String(accountId || '')],
+      filePath: 'statements'
+    }, 'ROOT');
     
-    // Save metadata to DynamoDB
-    const s3FileUrl = `https://${S3_BUCKET}.s3.amazonaws.com/${key}`;
+    const s3FileUrl = buildPublicS3Url(uploadResult.bucket, uploadResult.s3Key);
     const statement = {
       id: statementId,
       bankId,
@@ -80,7 +51,7 @@ export async function POST(request: Request) {
       accountName: accountName || '',
       accountNumber: accountNumber || '',
       s3FileUrl,
-      fileName: uniqueFileName,
+      fileName: uploadResult.name,
       userId: userId,
       fileType: fileType || '',
       createdAt: new Date().toISOString(),
@@ -94,7 +65,7 @@ export async function POST(request: Request) {
       })
     );
     
-    return NextResponse.json(statement);
+    return NextResponse.json({ ...statement, brmhFileId: uploadResult.fileId, brmhS3Key: uploadResult.s3Key });
   } catch (error) {
     console.error('Error uploading statement:', error);
     return NextResponse.json({ error: 'Failed to upload statement' }, { status: 500 });
