@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     const fileName = formData.get('fileName');
     const userId = formData.get('userId');
     const fileType = formData.get('fileType');
+    const entityName = formData.get('entityName');
     
     if (!file || typeof file === 'string' || !bankId || !bankName || !accountId) {
       return NextResponse.json({ error: 'Missing file, bankId, bankName, or accountId' }, { status: 400 });
@@ -38,8 +39,10 @@ export async function POST(request: Request) {
       mimeType: 'text/csv',
       size: (file as File).size,
       content: Buffer.from(arrayBuffer),
-      tags: ['statement', String(bankName || ''), String(accountId || '')],
-      filePath: 'statements'
+      tags: ['statement', String(bankName || ''), String(accountId || ''), entityName ? String(entityName) : ''],
+      filePath: entityName && typeof entityName === 'string' && entityName.trim() 
+        ? `entities/${entityName}/statements`
+        : 'statements'
     }, 'ROOT');
     
     const s3FileUrl = buildPublicS3Url(uploadResult.bucket, uploadResult.s3Key);

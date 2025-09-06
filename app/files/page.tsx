@@ -44,7 +44,7 @@ interface UploadedFile {
 
 
 
-function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose: () => void; onSuccess: (file: UploadedFile) => void }) {
+function UploadModal({ isOpen, onClose, onSuccess, selectedFileId }: { isOpen: boolean; onClose: () => void; onSuccess: (file: UploadedFile) => void, selectedFileId?: string | null }) {
 
   const [fileName, setFileName] = useState('');
 
@@ -165,6 +165,14 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
     
     
     formData.append('userId', userId || '');
+    // Optional entity
+    try {
+      const active = selectedFileId;
+      if (active && typeof active === 'string' && active.startsWith('entity:')) {
+        const entityName = active.split(':', 2)[1];
+        if (entityName) formData.append('entityName', entityName);
+      }
+    } catch {}
 
     try {
 
@@ -5812,7 +5820,7 @@ const FilesPage: React.FC = () => {
 
         
         
-        <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} onSuccess={refreshFiles} />
+        <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} onSuccess={refreshFiles} selectedFileId={selectedFileId} />
 
         <EditFileModal isOpen={editModalOpen} file={editFile} onClose={() => setEditModalOpen(false)} onSave={handleEditSave} />
 
