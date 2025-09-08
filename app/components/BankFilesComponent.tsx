@@ -255,6 +255,8 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
   const [isBatchSaving, setIsBatchSaving] = useState(false);
   const [allDuplicatesSelected, setAllDuplicatesSelected] = useState(false);
   const [selectedFields, setSelectedFields] = useState<string[]>(initialSelectedFields);
+  const [workingSlice, setWorkingSlice] = useState<string[][]>(sliceData);
+  const [hasSerial, setHasSerial] = useState<boolean>(() => sliceData[0]?.[0]?.toLowerCase().includes('sl') || false);
 
   // Column resize logic - added for SlicePreviewComponent
   const resizingCol = useRef<number | null>(null);
@@ -286,6 +288,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
 
   // Update selectedFields when sliceData changes
   useEffect(() => {
+    setWorkingSlice(sliceData);
     if (sliceData.length > 0) {
       const currentHeaders = sliceData[0];
       const currentFieldNames = currentHeaders.map((header, idx) => `${header}-${idx}`);
@@ -300,7 +303,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
     setAllDuplicatesSelected(allDupSelected);
   }, [selectedRows, duplicateRows]);
 
-  if (!sliceData || !sliceData.length) return <div>No data to display.</div>;
+  if (!workingSlice || !workingSlice.length) return <div>No data to display.</div>;
 
   // Duplicate check handler
   const handleCheckDuplicates = async () => {
@@ -326,9 +329,9 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
       const currentDataDups = new Set<number>();
       const currentDataDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
       
-      sliceData.slice(1).forEach((row, i) => {
+      workingSlice.slice(1).forEach((row, i) => {
         const rowObj: Record<string, string> = {};
-        sliceData[0].forEach((header, j) => { rowObj[header] = row[j]; });
+        workingSlice[0].forEach((header, j) => { rowObj[header] = row[j]; });
         const key = uniqueFields.map(f => {
           let value = (rowObj[f] || '').toString().trim().toLowerCase();
           if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
@@ -390,9 +393,9 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
       const dbDupRows = new Set<number>();
       const dbDupInfo: Array<{ row: number; key: string; fields: string; type: string }> = [];
       
-      sliceData.slice(1).forEach((row, i) => {
+      workingSlice.slice(1).forEach((row, i) => {
         const rowObj: Record<string, string> = {};
-        sliceData[0].forEach((header, j) => { rowObj[header] = row[j]; });
+        workingSlice[0].forEach((header, j) => { rowObj[header] = row[j]; });
         const key = uniqueFields.map(f => {
           let value = (rowObj[f] || '').toString().trim().toLowerCase();
           if (f.toLowerCase().includes('amount') || f.toLowerCase().includes('balance')) {
@@ -464,7 +467,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
     setIsBatchSaving(true);
     try {
       // Only include selected rows
-      const selectedData = [sliceData[0], ...sliceData.slice(1).filter((_, i) => selectedRows.has(i + 1))];
+      const selectedData = [workingSlice[0], ...workingSlice.slice(1).filter((_, i) => selectedRows.has(i + 1))];
       const header = selectedData[0];
       const rows = selectedData.slice(1);
       const batchSize = 25;
@@ -486,7 +489,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
           bankName: file.bankName || '',
           accountName: file.accountName || '',
           accountNumber: file.accountNumber || '',
-          duplicateCheckFields: selectedFields.map(f => f.split('-')[0]),
+          duplicateCheckFields: selectedFields.map(f => f.split('-')[0]).filter(n => n !== 'Sl. No.'),
           s3FileUrl: file.s3FileUrl || '',
         };
         const res = await fetch('/api/transaction/slice', {
@@ -515,6 +518,27 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
 
   return (
     <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw]">
+      {/* Quick Actions */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-semibold text-gray-700">Row Tools</div>
+        <div className="flex items-center gap-2">
+          <button
+            className="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition-all duration-200 text-xs font-medium disabled:opacity-50"
+            onClick={() => {
+              if (hasSerial) return;
+              const newSlice = workingSlice.map((row, i) => [i === 0 ? 'Sl. No.' : String(i), ...row]);
+              setWorkingSlice(newSlice);
+              setHasSerial(true);
+              setColWidths([80, ...colWidths]);
+              setSelectedFields(prev => ['Sl. No.-0', ...prev.map((f, idx) => `${f.split('-')[0]}-${idx + 1}`)]);
+            }}
+            disabled={hasSerial}
+            title="Add a serial number column to the sliced data"
+          >
+            Add Sl. No.
+          </button>
+        </div>
+      </div>
       {/* Duplicate check field selection UI */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3">
         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -525,7 +549,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
         </h3>
         
         <div className="grid grid-cols-10 gap-2 mb-4">
-          {sliceData[0]?.filter(header => header && header.trim() !== '').map((header, idx) => (
+          {workingSlice[0]?.filter(header => header && header.trim() !== '').map((header, idx) => (
             <label key={idx} className="flex items-center space-x-1 p-2 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors cursor-pointer">
               <input
                 type="checkbox"
@@ -548,9 +572,9 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
 
         <div className="flex flex-wrap gap-2 items-center">
           <button
-            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded hover:from-green-600 hover:to-green-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium"
             onClick={handleCheckDuplicates}
-            disabled={checkingDuplicates || sliceData.length === 0}
+            disabled={checkingDuplicates || workingSlice.length === 0}
             title="Check for duplicate transactions in database"
           >
             {checkingDuplicates ? (
@@ -585,7 +609,7 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
       <div className="overflow-auto" style={{ maxHeight: '45vh', minHeight: '300px' }}>
         <table ref={tableRef} className="border-collapse min-w-full text-xs select-none" style={{ tableLayout: 'fixed' }}>
           <tbody>
-            {sliceData.map((row, i) => {
+            {workingSlice.map((row, i) => {
               const isHeader = i === 0;
               return (
                 <tr
@@ -612,10 +636,10 @@ function SlicePreviewComponent({ sliceData, file, selectedFields: initialSelecte
                     {isHeader ? (
                       <input 
                         type="checkbox" 
-                        checked={selectedRows.size === sliceData.slice(1).length && selectedRows.size > 0}
+                        checked={selectedRows.size === workingSlice.slice(1).length && selectedRows.size > 0}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedRows(new Set(sliceData.slice(1).map((_, i) => i + 1)));
+                            setSelectedRows(new Set(workingSlice.slice(1).map((_, i) => i + 1)));
                           } else {
                             setSelectedRows(new Set());
                           }

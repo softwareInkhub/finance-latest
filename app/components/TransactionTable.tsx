@@ -69,6 +69,18 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   availableBanks = [],
   availableAccounts = [],
 }) => {
+  // Helper: detect 'Sl. No.' headers in various formats
+  const isSlNoHeader = (h: string) => {
+    const key = h.toLowerCase().trim();
+    return (
+      key === 'sl. no.' || key === 'sl no.' || key === 'sl no' || key === 'sl.' ||
+      key === 'slno' || key === 'si. no.' || key === 'si no.' || key === 'si no' || key === 'si.'
+    );
+  };
+
+  // Build display headers excluding any native 'Sl. No.' column to avoid duplication
+  const tableHeaders = headers.filter(h => !isSlNoHeader(h));
+
   // Column widths state
   const [columnWidths, setColumnWidths] = useState<{ [header: string]: number }>(
     () => Object.fromEntries(headers.map(h => [h, DEFAULT_WIDTH]))
@@ -185,7 +197,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
 
 
   return (
-    <div className="flex flex-col h-[65vh]" style={{ minHeight: '500px' }}>
+    <div className="flex flex-col h-[75vh]" style={{ minHeight: '500px' }}>
       {/* Table container with vertical scroll only */}
              <div ref={tableScrollRef} className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded">
       {loading ? (
@@ -223,13 +235,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           <colgroup>
             <col style={{ width: 40 }} />
             <col style={{ width: 40 }} />
-            {headers.map(h => (
+            {tableHeaders.map(h => (
               <col key={h} style={{ width: columnWidths[h] || DEFAULT_WIDTH }} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-20 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <thead className="sticky top-0 z-[200] bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
             <tr>
-              <th className="px-2 py-2 text-left border-r border-gray-200" style={{ width: 40 }} title="Select all transactions">
+              <th className="px-2 py-1 text-left border-r border-gray-200 sticky left-0 top-0 z-[300] bg-gray-50 dark:bg-gray-800" style={{ width: 40 }} title="Select all transactions">
                 <input 
                   type="checkbox" 
                   checked={selectAll} 
@@ -237,11 +249,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                   className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
                 />
               </th>
-              <th className="px-2 py-2 text-left font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700" style={{ width: 40 }} title="Row number">#</th>
-              {headers.map((sh, index) => (
+              <th className="px-2 py-1 text-center font-medium text-gray-700 dark:text-gray-300 border-r border-gray-200 dark:border-gray-700 sticky left-10 top-0 z-[300] bg-gray-50 dark:bg-gray-800" style={{ width: 40 }} title="Serial number">Sl. No.</th>
+              {tableHeaders.map((sh, index) => (
                 <th
                   key={sh}
-                  className={`px-2 py-2 text-left font-medium text-gray-700 dark:text-gray-300 group relative select-none whitespace-nowrap text-ellipsis ${index === headers.length - 1 ? '' : 'border-r border-gray-200 dark:border-gray-700'}`}
+                  className={`px-2 py-1 text-left font-medium text-gray-700 dark:text-gray-300 group relative select-none whitespace-nowrap text-ellipsis ${index === headers.length - 1 ? '' : 'border-r border-gray-200 dark:border-gray-700'}`}
                   style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}
                   draggable
                   onDragStart={() => handleDragStart(sh)}
@@ -314,7 +326,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       )}
 
                       {/* Date filter dropdown */}
-                      {(sh.toLowerCase() === 'date') && onDateFilter && (
+                      {(sh.toLowerCase().includes('date')) && onDateFilter && (
                         <div className="relative sort-dropdown">
                           <button
                             type="button"
@@ -555,7 +567,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
           <tbody>
             {enableVirtualization && topSpacerHeight > 0 && (
               <tr style={{ height: topSpacerHeight }}>
-                <td colSpan={2 + headers.length} />
+                <td colSpan={2 + tableHeaders.length} />
               </tr>
             )}
             {rows.slice(startIndex, endIndex).map((row, idxLocal) => {
@@ -566,8 +578,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
               const rowBackgroundClass = 'hover:bg-gray-100 dark:hover:bg-gray-700';
               
               return (
-                <tr key={idx} data-row-idx={idx} data-transaction-id={row.id} className={`${rowBackgroundClass} transition-colors duration-150`}>
-                  <td className="border px-2 py-1 text-center border-r border-gray-200 dark:border-gray-700" style={{ width: 40 }}>
+                <tr key={idx} data-row-idx={idx} data-transaction-id={row.id} className={`${idx % 2 === 1 ? 'bg-gray-50 dark:bg-gray-800/30' : ''} ${rowBackgroundClass} transition-colors duration-150`}>
+                  <td className="border px-2 py-1 text-center border-r border-gray-200 dark:border-gray-700 sticky left-0 top-0 z-20 bg-white dark:bg-gray-900" style={{ width: 40 }}>
                     <input
                       type="checkbox"
                       checked={selectedRows.has(idx)}
@@ -575,9 +587,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                       className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
                     />
                   </td>
-                  <td className="border px-2 py-1 text-center border-r border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100" style={{ width: 40 }}>{idx + 1}</td>
-                  {headers.map((sh, index) => (
-                                         <td key={sh} className={`border border-gray-200 dark:border-gray-700 px-2 py-1 whitespace-nowrap overflow-hidden text-ellipsis text-gray-900 dark:text-gray-100 ${index === headers.length - 1 ? '' : 'border-r border-gray-200 dark:border-gray-700'}`} style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}>
+                  <td className="border px-2 py-1 text-center border-r border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 sticky left-10 top-0 z-20 bg-white dark:bg-gray-900" style={{ width: 40 }}>{idx + 1}</td>
+                  {tableHeaders.map((sh, index) => (
+                     <td key={sh} className={`border border-gray-200 dark:border-gray-700 px-2 py-1 whitespace-nowrap overflow-hidden text-ellipsis text-gray-900 dark:text-gray-100 ${index === headers.length - 1 ? '' : 'border-r border-gray-200 dark:border-gray-700'}`} style={{ width: columnWidths[sh] || DEFAULT_WIDTH, minWidth: 60, maxWidth: columnWidths[sh] || DEFAULT_WIDTH }}>
                       {(sh.toLowerCase() === 'tags' || sh === 'Tags') && Array.isArray(row[sh]) ? (
                         <div className="flex gap-1">
                           {(row[sh] as Tag[]).map((tag, tagIdx: number) => (
@@ -644,7 +656,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             })}
             {enableVirtualization && bottomSpacerHeight > 0 && (
               <tr style={{ height: bottomSpacerHeight }}>
-                <td colSpan={2 + headers.length} />
+                <td colSpan={2 + tableHeaders.length} />
               </tr>
             )}
           </tbody>

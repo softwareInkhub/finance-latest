@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { RiMenuFoldLine, RiMenuUnfoldLine, RiAddLine, RiEdit2Line, RiDeleteBin6Line, RiCheckLine, RiCloseLine } from 'react-icons/ri';
+import ConfirmEntityDeleteModal from './Modals/ConfirmEntityDeleteModal';
 
 interface FileItem {
   id: string;
@@ -35,6 +36,9 @@ export default function FilesSidebar({ files, selectedFileId, onFileClick, state
   const [newEntityName, setNewEntityName] = useState('');
   const [editingEntity, setEditingEntity] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -317,18 +321,10 @@ export default function FilesSidebar({ files, selectedFileId, onFileClick, state
                             <span
                               className="p-1 rounded hover:bg-red-100 text-red-600 dark:hover:bg-red-900/40"
                               title="Delete"
-                              onClick={async (e) => {
+                              onClick={(e) => {
                                 e.stopPropagation();
-                                if (!confirm(`Delete entity "${entity}"?`)) return;
-                                const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') || '' : '';
-                                try {
-                                  await fetch('/api/entities/delete', {
-                                    method: 'DELETE',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ userId, entityName: entity })
-                                  });
-                                } catch {}
-                                setEntities(prev => prev.filter(x => x !== entity));
+                                setPendingDelete(entity);
+                                setDeleteModalOpen(true);
                               }}
                             >
                               <RiDeleteBin6Line className="w-4 h-4" />
@@ -344,6 +340,33 @@ export default function FilesSidebar({ files, selectedFileId, onFileClick, state
           </div>
         </div>
       </nav>
+
+      {/* Confirm Entity Delete Modal */}
+      <ConfirmEntityDeleteModal
+        isOpen={deleteModalOpen}
+        entityName={pendingDelete || ''}
+        onCancel={() => { setDeleteModalOpen(false); setPendingDelete(null); }}
+        deleting={deleting}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') || '' : '';
+          try {
+            setDeleting(true);
+            await fetch('/api/entities/delete', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, entityName: pendingDelete })
+            });
+            setEntities(prev => prev.filter(x => x !== pendingDelete));
+          } catch {
+            // no-op
+          } finally {
+            setDeleting(false);
+            setDeleteModalOpen(false);
+            setPendingDelete(null);
+          }
+        }}
+      />
 
       {/* Sidebar Footer */}
       {!isCollapsed && (

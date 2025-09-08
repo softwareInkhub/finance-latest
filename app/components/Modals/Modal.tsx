@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   isOpen: boolean;
@@ -10,8 +11,8 @@ interface ModalProps {
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidthClass = 'max-w-4xl' }) => {
   if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
+  const content = (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black bg-opacity-30 p-4">
       <div className={`bg-white rounded-lg shadow-lg w-full ${maxWidthClass} mx-auto relative max-h-[90vh] flex flex-col`}>
         {title ? (
         <div className="flex justify-between items-center border-b px-4 md:px-6 py-3 md:py-4">
@@ -37,6 +38,10 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, maxWidt
       </div>
     </div>
   );
+  if (typeof document !== 'undefined') {
+    return createPortal(content, document.body);
+  }
+  return content;
 };
 
 export default Modal; 

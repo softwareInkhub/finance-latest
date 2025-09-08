@@ -12,20 +12,33 @@ export async function POST(request: Request) {
     if (!csv || !statementId || startRow == null || endRow == null || !bankId || !accountId || !bankName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
-    
-    // Get bank-specific table name
+
     const tableName = getBankTransactionTable(bankName);
-    
+    if (!tableName || typeof tableName !== 'string') {
+      return NextResponse.json({ error: 'Invalid bankName for transaction table' }, { status: 400 });
+    }
+
     // Parse CSV to array of objects
-    const parsed = Papa.parse(csv, { header: true });
-    const rows = parsed.data as Record<string, string>[];
+    const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
+    if (parsed.errors && parsed.errors.length > 0) {
+      return NextResponse.json({ error: 'CSV parse error', details: parsed.errors.map(e => e.message || String(e)) }, { status: 400 });
+    }
+    const rows = (parsed.data as Record<string, string>[]) || [];
+    if (rows.length === 0) {
+      return NextResponse.json({ error: 'No rows to save after parsing CSV' }, { status: 400 });
+    }
+
     const now = new Date().toISOString();
 
     // Fetch existing transactions for this accountId from the bank-specific table with pagination
     type TxRecord = Record<string, unknown>;
     const existing: TxRecord[] = [];
-    const existingRes = await brmhExecute<{ items?: TxRecord[] }>({ executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 1000 });
-    existing.push(...((existingRes.items || []).filter((t: TxRecord & { accountId?: string }) => t.accountId === accountId)));
+    try {
+      const existingRes = await brmhExecute<{ items?: TxRecord[] }>({ executeType: 'crud', crudOperation: 'get', tableName, pagination: 'true', itemPerPage: 1000 });
+      existing.push(...((existingRes.items || []).filter((t: TxRecord & { accountId?: string }) => t.accountId === accountId)));
+    } catch (e) {
+      console.warn('Failed to fetch existing transactions; proceeding without duplicate DB check:', e);
+    }
 
     // Use provided fields for duplicate check
     const uniqueFields = Array.isArray(duplicateCheckFields) && duplicateCheckFields.length > 0 ? duplicateCheckFields : null;
@@ -39,17 +52,17 @@ export async function POST(request: Request) {
         }
         newDataKeys.add(key);
       }
-      
+
       // Check for duplicates against existing database data
-    const existingSet = new Set(
-      existing.map(tx => uniqueFields.map(f => String((tx as Record<string, unknown>)[f] ?? '').trim().toLowerCase()).join('|'))
-    );
-      
-    for (const row of rows) {
-      const key = uniqueFields.map(f => (row[f] || '').toString().trim().toLowerCase()).join('|');
+      const existingSet = new Set(
+        existing.map(tx => uniqueFields.map(f => String((tx as Record<string, unknown>)[f] ?? '').trim().toLowerCase()).join('|'))
+      );
+
+      for (const row of rows) {
+        const key = uniqueFields.map(f => (row[f] || '').toString().trim().toLowerCase()).join('|');
         if (existingSet.has(key)) {
           return NextResponse.json({ error: 'Duplicate transaction(s) exist in database. No transactions were saved.' }, { status: 400 });
-      }
+        }
       }
     }
 
@@ -78,7 +91,6 @@ export async function POST(request: Request) {
         return brmhExecute({ executeType: 'crud', crudOperation: 'post', tableName, item: cleaned });
       });
       await Promise.all(batch);
-      // Small breather to avoid overwhelming backend on very large files
       if (rows.length > 200 && i + MAX_CONCURRENCY < rows.length) {
         await new Promise((r) => setTimeout(r, 25));
       }
@@ -87,6 +99,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, count: rows.length });
   } catch (error) {
     console.error('Error saving transaction slice:', error);
-    return NextResponse.json({ error: 'Failed to save transaction slice' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: 'Failed to save transaction slice', details: message }, { status: 500 });
   }
 } 

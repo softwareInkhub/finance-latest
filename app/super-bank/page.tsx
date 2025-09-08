@@ -3106,7 +3106,78 @@ export default function SuperBankPage() {
       })
     : baseFilteredRows;
 
+  // Build rows for summary: respect all filters EXCEPT the date range
+  const rowsForSummary = useMemo(() => {
+    const rows = mappedRowsWithConditions.filter((row) => {
+      // Search
+      const searchMatch =
+        !search ||
+        (searchField === 'all'
+          ? Object.values(row).some((val) => {
+              if (typeof val === 'string' || typeof val === 'number') {
+                return String(val).toLowerCase().includes(search.toLowerCase());
+              } else if (Array.isArray(val)) {
+                return val
+                  .map((v) => (typeof v === 'object' && v !== null && 'name' in v ? (v as Tag).name : String(v)))
+                  .join(', ')
+                  .toLowerCase()
+                  .includes(search.toLowerCase());
+              }
+              return false;
+            })
+          : String(row[searchField === 'Bank Name' ? 'bankName' : searchField] || '')
+              .toLowerCase()
+              .includes(search.toLowerCase()));
 
+      // Bank filter
+      let bankMatch = true;
+      if (bankFilter) {
+        const bankId = row.bankId;
+        const bankDisplayName = bankIdNameMap[bankId];
+        bankMatch = bankDisplayName === bankFilter;
+      }
+
+      // Dr./Cr. filter
+      let drCrMatch = true;
+      if (drCrFilter) {
+        const drCrValue = (row as Record<string, unknown>)['Dr./Cr.'] || (row as Record<string, unknown>)['Dr. Cr.'] || (row as Record<string, unknown>)['Dr/Cr'];
+        drCrMatch = drCrValue === drCrFilter;
+      }
+
+      // Account filter
+      let accountMatch = true;
+      if (accountFilter) {
+        const enriched = (row as Record<string, unknown>).accountNumber || (row as Record<string, unknown>).AccountNumber;
+        let val: string | undefined = typeof enriched === 'string' ? enriched : undefined;
+        if (!val) {
+          const accountHeader = superHeader.find(h => h.toLowerCase().includes('account'));
+          if (accountHeader) {
+            const rv = (row as Record<string, unknown>)[accountHeader as keyof typeof row];
+            if (typeof rv === 'string' || typeof rv === 'number') {
+              val = String(rv);
+              if (val.includes(' - ')) val = val.split(' - ')[0];
+            }
+          }
+        }
+        if (!val && (row as Record<string, unknown>).accountId) {
+          val = String((row as Record<string, unknown>).accountId);
+        }
+        accountMatch = val ? String(val) === accountFilter : false;
+      }
+
+      return searchMatch && bankMatch && drCrMatch && accountMatch;
+    });
+
+    // Apply tag OR filter at the end to mirror UI
+    if (tagFilters.length > 0) {
+      return rows.filter(row => {
+        const tags = (row as Record<string, unknown>).tags as Tag[] | undefined;
+        if (!Array.isArray(tags)) return false;
+        return tags.some(t => t && t.name && tagFilters.includes(t.name));
+      });
+    }
+    return rows;
+  }, [mappedRowsWithConditions, search, searchField, bankFilter, drCrFilter, accountFilter, superHeader, bankIdNameMap, tagFilters]);
 
   // Calculate stats from filtered transactions
   const stats = useMemo(() => {
@@ -4080,7 +4151,9 @@ export default function SuperBankPage() {
             totalBanks={totalBanks}
             totalAccounts={totalAccounts}
             showBalance={true}
-            transactions={sortedAndFilteredRows}
+            transactions={rowsForSummary}
+            dateRange={dateRange}
+            visibleBankIds={[...new Set(filteredRows.map(r => r.bankId as string))]}
           />
         )}
 

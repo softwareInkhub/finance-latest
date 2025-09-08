@@ -336,7 +336,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="h-full bg-gray-50 overflow-y-auto">
+    <div className="min-h-full bg-gradient-to-br from-slate-50 via-white to-indigo-50 overflow-y-auto">
       {/* Dashboard Content */}
       <div className="p-6 min-h-full">
         {/* Loading State */}
@@ -363,17 +363,17 @@ export default function DashboardPage() {
             )}
 
             {/* Dashboard Header */}
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between mb-10">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
             <p className="text-gray-600 mt-1">Welcome back! Here&apos;s what&apos;s happening with your finances.</p>
           </div>
           <div className="flex space-x-3">
-            <button className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <button className="flex items-center space-x-2 px-4 py-2 bg-white/70 backdrop-blur border border-gray-200 rounded-lg hover:bg-white hover:shadow-sm transition">
               <RiBarChartLine size={16} />
               <span className="text-sm font-medium">Export Report</span>
             </button>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg shadow-sm hover:shadow-md transition">
               <RiArrowUpLine size={16} />
               <span className="text-sm font-medium">View Analytics</span>
             </button>
@@ -383,59 +383,63 @@ export default function DashboardPage() {
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Banks */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="relative overflow-hidden bg-white/80 backdrop-blur rounded-xl shadow-sm border border-gray-200 p-6 transition hover:shadow-md">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Banks</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalBanks}</p>
-                <p className="text-xs text-green-600 mt-1">↑ +0% from last month</p>
+                <span className="inline-flex items-center mt-2 px-2 py-0.5 text-xs font-medium rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20">↑ +0% from last month</span>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <RiBankLine className="text-blue-600" size={24} />
               </div>
             </div>
+            <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-blue-200/40 blur-2xl"></div>
           </div>
 
           {/* Total Accounts */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="relative overflow-hidden bg-white/80 backdrop-blur rounded-xl shadow-sm border border-gray-200 p-6 transition hover:shadow-md">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Accounts</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalAccounts}</p>
-                <p className="text-xs text-green-600 mt-1">↑ +0% from last month</p>
+                <span className="inline-flex items-center mt-2 px-2 py-0.5 text-xs font-medium rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20">↑ +0% from last month</span>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <RiAccountPinCircleLine className="text-green-600" size={24} />
               </div>
             </div>
+            <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-emerald-200/40 blur-2xl"></div>
           </div>
 
           {/* Total Statements */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="relative overflow-hidden bg-white/80 backdrop-blur rounded-xl shadow-sm border border-gray-200 p-6 transition hover:shadow-md">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Statements</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalStatements}</p>
-                <p className="text-xs text-green-600 mt-1">↑ +0% from last month</p>
+                <span className="inline-flex items-center mt-2 px-2 py-0.5 text-xs font-medium rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20">↑ +0% from last month</span>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <RiFileList3Line className="text-purple-600" size={24} />
               </div>
             </div>
+            <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-purple-200/40 blur-2xl"></div>
           </div>
 
           {/* Total Transactions */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="relative overflow-hidden bg-white/80 backdrop-blur rounded-xl shadow-sm border border-gray-200 p-6 transition hover:shadow-md">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Transactions</p>
                 <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalTransactions}</p>
-                <p className="text-xs text-green-600 mt-1">↑ +0% from last month</p>
+                <span className="inline-flex items-center mt-2 px-2 py-0.5 text-xs font-medium rounded-full bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20">↑ +0% from last month</span>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
                 <RiTimeLine className="text-orange-600" size={24} />
               </div>
             </div>
+            <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-orange-200/40 blur-2xl"></div>
           </div>
         </div>
 
@@ -504,7 +508,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="bg-white/80 backdrop-blur rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center space-x-3 mb-6">
               <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                 <RiAddLine className="text-green-600" size={20} />
@@ -514,8 +518,8 @@ export default function DashboardPage() {
                 <p className="text-sm text-gray-500">Common tasks and shortcuts</p>
               </div>
             </div>
-            <div className="space-y-4">
-              <Link href="/banks" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Link href="/banks" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 hover:shadow-sm transition">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
                   <RiBankLine className="text-blue-600" size={20} />
                 </div>
@@ -525,7 +529,7 @@ export default function DashboardPage() {
                 </div>
               </Link>
               
-              <Link href="/files" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <Link href="/files" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 hover:shadow-sm transition">
                 <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
                   <RiUploadLine className="text-green-600" size={20} />
                 </div>
@@ -535,7 +539,7 @@ export default function DashboardPage() {
                 </div>
               </Link>
               
-              <Link href="/tags" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <Link href="/tags" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 hover:shadow-sm transition">
                 <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
                   <RiPriceTag3Line className="text-purple-600" size={20} />
                 </div>
@@ -545,7 +549,7 @@ export default function DashboardPage() {
                 </div>
               </Link>
               
-              <Link href="/reports" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <Link href="/reports" className="flex items-center space-x-4 p-4 rounded-lg border border-gray-200 hover:bg-gray-50 hover:shadow-sm transition">
                 <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
                   <RiBarChartLine className="text-orange-600" size={20} />
                 </div>

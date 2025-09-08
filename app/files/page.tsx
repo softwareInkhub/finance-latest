@@ -4157,6 +4157,34 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
               </button>
 
+              <button
+
+                className="flex items-center gap-1 px-2 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+
+                onClick={() => {
+
+                  if (!Array.isArray(previewData) || previewData.length === 0) return;
+
+                  const hasSerial = previewData[0][0] && String(previewData[0][0]).toLowerCase().includes('sl');
+
+                  if (hasSerial) return;
+
+                  const updated = previewData.map((row, idx) => [idx === 0 ? 'Sl. No.' : String(idx), ...row]);
+
+                  setPreviewData(updated);
+
+                }}
+
+                disabled={previewData.length === 0}
+
+                title="Add a serial number column to the sliced data"
+
+              >
+
+                Add Sl. No.
+
+              </button>
+
             </div>
 
             
@@ -4561,7 +4589,7 @@ const FilesPage: React.FC = () => {
 
 
 
-  const [banks, setBanks] = useState<{ id: string; fileName: string; versions: unknown[] }[]>([]);
+  const [banks, setBanks] = useState<{ id: string; fileName: string; bankName: string; versions: unknown[] }[]>([]);
 
   const [files, setFiles] = useState<FileData[]>([]);
 
@@ -4610,7 +4638,7 @@ const FilesPage: React.FC = () => {
 
       const banksData = await banksRes.json();
 
-      setBanks(Array.isArray(banksData) ? banksData.map((b: Record<string, unknown>) => ({ id: b.id as string, fileName: b.bankName as string, versions: [] })) : []);
+      setBanks(Array.isArray(banksData) ? banksData.map((b: Record<string, unknown>) => ({ id: b.id as string, fileName: b.bankName as string, bankName: b.bankName as string, versions: [] })) : []);
 
       let allAccounts: Record<string, unknown>[] = [];
 
@@ -5011,6 +5039,8 @@ const FilesPage: React.FC = () => {
 
     const userId = localStorage.getItem('userId') || '';
 
+    const selectedBankName = banks.find(b => b.id === newBankId)?.bankName || editFile.bankName || '';
+
     try {
 
       await fetch('/api/statement/update', {
@@ -5027,7 +5057,9 @@ const FilesPage: React.FC = () => {
 
           fileName: newName,
 
-          bankName: newBankId,
+          bankId: newBankId,
+
+          bankName: selectedBankName,
 
           fileType: newFileType,
 
@@ -5628,6 +5660,23 @@ const FilesPage: React.FC = () => {
 
   } else {
 
+    // If active tab corresponds to an entity selection (entity:<name>)
+    if (activeTabId.startsWith('entity:')) {
+      const entityName = activeTabId.split(':', 2)[1];
+      mainContent = (
+        <div className="p-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-blue-800">{entityName} Files</h2>
+            <div className="flex gap-2">
+              <button className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm" onClick={() => setShowCreateFolderModal(true)}>New Folder</button>
+              <button className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" onClick={() => setShowUploadModal(true)}>Upload File</button>
+            </div>
+          </div>
+          <div className="text-sm text-gray-600">Create folders inside this entity and upload files. Drag and drop is supported in the list view using the existing folder drop zones.</div>
+        </div>
+      );
+    } else {
+
     // Check if activeTabId is a bank id
 
     const bank = banks.find(b => b.id === activeTabId);
@@ -5731,6 +5780,8 @@ const FilesPage: React.FC = () => {
       }
 
     }
+
+  }
 
   }
 

@@ -52,6 +52,12 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
   const [searchField, setSearchField] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | 'tagged' | 'untagged'>('desc');
   const [applyingBulkTag, setApplyingBulkTag] = useState(false);
+  // Header filter/sort state for TransactionTable
+  const [tableSortColumn, setTableSortColumn] = useState<string | null>(null);
+  const [tableSortDirection, setTableSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [bankFilter, setBankFilter] = useState<string | null>(null);
+  const [accountFilter, setAccountFilter] = useState<string | null>(null);
+  const [drCrFilter, setDrCrFilter] = useState<'DR' | 'CR' | null>(null);
 
   useEffect(() => {
     // Add a small delay to prevent rapid retries
@@ -203,6 +209,25 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
         if (dateRange.to && d > dateRange.to) return false;
       }
     }
+    // Bank filter
+    if (bankFilter) {
+      const bn = String((tx as Record<string, unknown>)['Bank Name'] || tx.bankName || '').trim();
+      if (!bn || bn !== bankFilter) return false;
+    }
+    // Account filter
+    if (accountFilter) {
+      const acc = String((tx as Record<string, unknown>)['Account No.'] || (tx as Record<string, unknown>)['Account No'] || (tx as Record<string, unknown>)['accountNumber'] || '').trim();
+      if (!acc || acc !== accountFilter) return false;
+    }
+    // Dr/Cr filter
+    if (drCrFilter) {
+      const primary = (tx['Dr./Cr.'] ?? tx['Dr/Cr'] ?? tx['DR/CR'] ?? tx['dr/cr'] ?? tx['Dr / Cr'] ?? '').toString().trim().toUpperCase();
+      const secondary = (tx['Dr / Cr_1'] ?? tx['DR / CR_1'] ?? '').toString().trim().toUpperCase();
+      const reversed = (tx['Cr./Dr.'] ?? tx['Cr/Dr'] ?? tx['CR/DR'] ?? tx['cr/dr'] ?? tx['Cr / Dr'] ?? tx['CR / DR'] ?? '').toString().trim().toUpperCase();
+      const generic = (tx['Type'] ?? tx['type'] ?? '').toString().trim().toUpperCase();
+      const value = primary || reversed || secondary || generic;
+      if (!value || value !== drCrFilter) return false;
+    }
     return true;
   });
 
@@ -305,6 +330,20 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
 
   // Sort filtered transactions
   const sortedAndFilteredTransactions = [...filteredTransactions].sort((a, b) => {
+    // Header Amount sort override
+    if (tableSortColumn === 'Amount') {
+      const parseAmt = (obj: Record<string, unknown>) => {
+        const raw = (obj['AmountRaw'] ?? obj['Amount'] ?? obj['amount'] ?? '').toString().replace(/,/g, '');
+        const num = parseFloat(raw);
+        if (!isNaN(num)) return num;
+        const creditCol = parseFloat((obj['Credit'] as string) || '0') || 0;
+        const debitCol = parseFloat((obj['Debit'] as string) || '0') || 0;
+        return Math.abs(creditCol) - Math.abs(debitCol);
+      };
+      const av = parseAmt(a as unknown as Record<string, unknown>);
+      const bv = parseAmt(b as unknown as Record<string, unknown>);
+      return tableSortDirection === 'asc' ? av - bv : bv - av;
+    }
     // Handle tagged/untagged sorting
     if (sortOrder === 'tagged' || sortOrder === 'untagged') {
       const tagsA = Array.isArray(a.tags) ? a.tags : [];
@@ -378,6 +417,50 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
     }
     return stats;
   }, [filteredTransactions]);
+
+  // Available filters for header dropdowns
+  const availableBanks = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const tx of filteredTransactions) {
+      const bn = String((tx as Record<string, unknown>)['Bank Name'] || tx.bankName || '').trim();
+      if (bn) set.add(bn);
+    }
+    return Array.from(set);
+  }, [filteredTransactions]);
+
+  const availableAccounts = React.useMemo(() => {
+    const map = new Map<string, { bankName: string; accountNumber: string; count: number }>();
+    for (const tx of filteredTransactions) {
+      const bn = String((tx as Record<string, unknown>)['Bank Name'] || tx.bankName || '').trim();
+      const acc = String((tx as Record<string, unknown>)['Account No.'] || (tx as Record<string, unknown>)['Account No'] || (tx as Record<string, unknown>)['accountNumber'] || '').trim();
+      if (!acc) continue;
+      const key = `${bn}::${acc}`;
+      const prev = map.get(key) || { bankName: bn || bankName, accountNumber: acc, count: 0 };
+      prev.count += 1;
+      map.set(key, prev);
+    }
+    return Array.from(map.values());
+  }, [filteredTransactions, bankName]);
+
+  // Header filter handlers
+  const handleTableSort = (column: string, direction: 'asc' | 'desc') => {
+    setTableSortColumn(column);
+    setTableSortDirection(direction);
+  };
+  const handleDateFilter = (direction: 'newest' | 'oldest' | 'clear') => {
+    if (direction === 'newest') setSortOrder('desc');
+    else if (direction === 'oldest') setSortOrder('asc');
+    else setSortOrder('desc');
+  };
+  const handleBankFilter = (bn: string | 'clear') => {
+    setBankFilter(bn === 'clear' ? null : bn);
+  };
+  const handleDrCrFilter = (type: 'DR' | 'CR' | 'clear') => {
+    setDrCrFilter(type === 'clear' ? null : type);
+  };
+  const handleAccountFilter = (acc: string | 'clear') => {
+    setAccountFilter(acc === 'clear' ? null : acc);
+  };
 
   // Handler to remove a tag from a transaction
   const handleRemoveTag = async (rowIdx: number, tagId: string) => {
@@ -664,7 +747,8 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
                   totalBanks={allBankIds.size}
                   totalAccounts={allAccountIds.size}
                   showBalance={true}
-                  transactions={sortedAndFilteredTransactions as unknown as Array<Record<string, unknown>>}
+                  transactions={transactions as unknown as Array<Record<string, unknown>>}
+                  dateRange={dateRange}
                 />
               );
             })()}
@@ -740,6 +824,15 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
                     error={transactionsError}
                     onReorderHeaders={handleReorderHeaders}
                     onRemoveTag={handleRemoveTag}
+                    onSort={handleTableSort}
+                    sortColumn={tableSortColumn || undefined}
+                    sortDirection={tableSortDirection}
+                    onDateFilter={handleDateFilter}
+                    onBankFilter={handleBankFilter}
+                    onDrCrFilter={handleDrCrFilter}
+                    onAccountFilter={handleAccountFilter}
+                    availableBanks={availableBanks}
+                    availableAccounts={availableAccounts}
                   />
                 </div>
               )}

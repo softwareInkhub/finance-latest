@@ -11,6 +11,7 @@ interface AnalyticsSummaryProps {
   tagsSummary?: Record<string, unknown>; // Add tagsSummary prop
   transactions?: Array<Record<string, unknown>>; // Use provided rows for breakdowns when available
   dateRange?: { from: string; to: string }; // Add dateRange prop for opening balance calculation
+  visibleBankIds?: string[]; // restrict breakdown to these bankIds if provided
 }
 
 interface ModalProps {
@@ -52,6 +53,8 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   showBalance = false,
   tagsSummary,
   transactions,
+  dateRange,
+  visibleBankIds,
 }) => {
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -190,8 +193,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   
   const balance = safeTotalCredit - safeTotalDebit;
 
-
-
   // Robust extractor for Dr/Cr when multiple columns exist
   const extractCrDr = (tx: Record<string, unknown>, rawAmount: number): 'CR' | 'DR' | '' => {
     const candidates = [
@@ -204,18 +205,108 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
 
     if (candidates.length === 0) return '';
 
-    // If there is a conflict, prefer the value that matches the numeric sign
     const first = candidates[0];
     if (candidates.some(v => v !== first)) {
       const signMatchesCR = rawAmount > 0 && candidates.includes('CR');
       const signMatchesDR = rawAmount < 0 && candidates.includes('DR');
       if (signMatchesCR && !signMatchesDR) return 'CR';
       if (signMatchesDR && !signMatchesCR) return 'DR';
-      // fallback to last non-empty when still ambiguous
       return candidates[candidates.length - 1] as 'CR' | 'DR';
     }
     return first as 'CR' | 'DR';
   };
+
+  // Helpers for opening/closing balance
+  function parseDate(dateStr: string): Date {
+    if (!dateStr || typeof dateStr !== 'string') return new Date('1970-01-01');
+    const match = dateStr.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+    if (match) {
+      const day = match[1];
+      const month = match[2];
+      let year = match[3];
+      if (year.length === 2) year = '20' + year;
+      return new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+    }
+    const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch;
+      return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) return d;
+    return new Date('1970-01-01');
+  }
+
+  function getDateField(obj: Record<string, unknown>) {
+    if ('Date' in obj) return 'Date';
+    if ('Transaction Date' in obj) return 'Transaction Date';
+    const key = Object.keys(obj).find(k => k.toLowerCase() === 'date' || k.toLowerCase() === 'transaction date');
+    if (key) return key;
+    return Object.keys(obj).find(k => k.toLowerCase().includes('date'));
+  }
+
+  // Resolve an account grouping key, display label, and bank name from a transaction row
+  function getAccountIdentity(tx: Record<string, unknown>) {
+    const rawAccountId = (tx.accountId as string) || '';
+    let key = rawAccountId;
+    let accountLabel = '';
+    let bankName = (tx.bankName as string) || '';
+
+    // Prefer enriched account info when available
+    if (rawAccountId && accountInfoMap[rawAccountId]) {
+      const info = accountInfoMap[rawAccountId];
+      accountLabel = info.accountNumber || `****${rawAccountId.slice(-4)}`;
+      bankName = info.bankName || bankName || 'Unknown Bank';
+    }
+
+    // Fallback to accountNumber attached on row
+    if (!key) {
+      const accNum = (tx as Record<string, unknown>).accountNumber as string | undefined;
+      if (typeof accNum === 'string' && accNum.trim()) {
+        key = `acc:${accNum}`;
+        accountLabel = accNum;
+      }
+    }
+
+    // Last resort: find any header containing 'account'
+    if (!key) {
+      const accHeader = Object.keys(tx).find(k => k.toLowerCase().includes('account'));
+      const value = accHeader ? String((tx as Record<string, unknown>)[accHeader as keyof typeof tx] || '') : '';
+      if (value) {
+        // If value like "xxxx - BANK", take left side as number
+        const normalized = value.includes(' - ') ? value.split(' - ')[0] : value;
+        key = `acc:${normalized}`;
+        accountLabel = normalized;
+      }
+    }
+
+    if (!accountLabel) {
+      accountLabel = rawAccountId ? `****${rawAccountId.slice(-4)}` : 'N/A';
+    }
+    if (!bankName) bankName = 'Unknown Bank';
+    return { key, accountLabel, bankName };
+  }
+
+  const openingClosing = React.useMemo(() => {
+    if (!Array.isArray(allTransactions) || !dateRange?.from || !dateRange?.to) {
+      return { opening: 0, closing: balance };
+    }
+    const fromD = parseDate(dateRange.from);
+    const toD = parseDate(dateRange.to);
+    let opening = 0;
+    let periodSum = 0;
+    for (const tx of allTransactions as Array<Record<string, unknown>>) {
+      const dateKey = getDateField(tx) as string | undefined;
+      if (!dateKey) continue;
+      const d = parseDate(String(tx[dateKey] || ''));
+      const rawAmount = parseFloat((tx['AmountRaw'] as string) || (tx['Amount'] as string) || (tx['amount'] as string) || '0') || 0;
+      const crdr = extractCrDr(tx, rawAmount);
+      const signed = crdr === 'CR' ? Math.abs(rawAmount) : crdr === 'DR' ? -Math.abs(rawAmount) : rawAmount;
+      if (d < fromD) opening += signed;
+      else if (d >= fromD && d <= toD) periodSum += signed;
+    }
+    return { opening, closing: opening + periodSum };
+  }, [allTransactions, dateRange, balance]);
 
   const closeModal = () => {
     setModalState({
@@ -439,77 +530,59 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     return result.sort((a, b) => b.debit - a.debit);
   };
 
-  // Function to get balance breakdown by bank
-  const getBalanceBreakdownByBank = () => {
-    const bankBalances = new Map<string, { balance: number; accounts: Map<string, number> }>();
-    
+  // Opening balance breakdown by account
+  const getOpeningBreakdownByAccount = () => {
+    const fromD = dateRange?.from ? parseDate(dateRange.from) : new Date('0001-01-01');
+    const accountMap = new Map<string, { account: string; bankName: string; balance: number }>();
     allTransactions.forEach((tx: Record<string, unknown>) => {
-      const accountId = (tx.accountId as string) || '';
-      let bankName = (tx.bankName as string) || (accountId && accountInfoMap[accountId]?.bankName) || 'Unknown Bank';
-      
-      // If bank name is still unknown, try to extract from tags
-      if (bankName === 'Unknown Bank' && tx.tags && Array.isArray(tx.tags)) {
-        const tagNames = (tx.tags as Array<Record<string, unknown>>).map((tag: Record<string, unknown>) => {
-          if (typeof tag === 'string') return tag;
-          return (tag.name as string) || '';
-        }).join(' ').toLowerCase();
-        if (tagNames.includes('hdfc')) {
-          bankName = 'HDFC';
-        } else if (tagNames.includes('kotak')) {
-          bankName = 'Kotak';
-        } else if (tagNames.includes('yesb')) {
-          bankName = 'YESB';
-        }
+      const dateKey = getDateField(tx) as string | undefined;
+      if (!dateKey) return;
+      const d = parseDate(String(tx[dateKey] || ''));
+      if (!(d < fromD)) return;
+      if (visibleBankIds && visibleBankIds.length > 0) {
+        const bankId = (tx.bankId as string) || '';
+        if (bankId && !visibleBankIds.includes(bankId)) return;
       }
-      // Determine signed amount using Dr/Cr where available
+      const { key, accountLabel, bankName } = getAccountIdentity(tx);
+      if (!key) return;
       const rawAmount = parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0') || 0;
       const crdrField = extractCrDr(tx, rawAmount);
       let amount = rawAmount;
-      if (crdrField === 'CR') {
-        amount = Math.abs(rawAmount);
-      } else if (crdrField === 'DR') {
-        amount = -Math.abs(rawAmount);
-      }
-      
-      if (!bankBalances.has(bankName)) {
-        bankBalances.set(bankName, { balance: 0, accounts: new Map<string, number>() });
-      }
-      
-      const bankBalance = bankBalances.get(bankName)!;
-      bankBalance.balance += amount; // signed value
-      
-      if (accountId) {
-        const currentAccountBalance = bankBalance.accounts.get(accountId) || 0;
-        bankBalance.accounts.set(accountId, currentAccountBalance + amount);
-      }
+      if (crdrField === 'CR') amount = Math.abs(rawAmount);
+      else if (crdrField === 'DR') amount = -Math.abs(rawAmount);
+      if (!accountMap.has(key)) accountMap.set(key, { account: accountLabel, bankName, balance: 0 });
+      const entry = accountMap.get(key)!;
+      entry.balance += amount;
     });
-    
-    const result: Array<{ name: string; balance: number; accounts: Array<{ account: string; balance: number }> }> = [];
-    
-    bankBalances.forEach((data, bankName) => {
-      const accountDetails = Array.from(data.accounts.entries()).map(([accountId, balance]) => {
-        const accountInfo = accountInfoMap[accountId];
-        // Show account number if available, otherwise show a masked version of the UUID
-        const displayAccount = isLoadingAccounts ? 'Loading...' : 
-          (accountInfo?.accountNumber || 
-          (accountId ? `****${accountId.slice(-4)}` : 'N/A'));
-        
-        return {
-          account: displayAccount,
-          balance
-        };
-      });
-      
-      result.push({
-        name: bankName,
-        balance: data.balance,
-        accounts: accountDetails
-      });
-    });
-    
-    return result.sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+    return Array.from(accountMap.values()).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
   };
 
+  // Closing balance breakdown by account
+  const getClosingBreakdownByAccount = () => {
+    const toD = dateRange?.to ? parseDate(dateRange.to) : new Date('9999-12-31');
+    const accountMap = new Map<string, { account: string; bankName: string; balance: number }>();
+    allTransactions.forEach((tx: Record<string, unknown>) => {
+      const dateKey = getDateField(tx) as string | undefined;
+      if (!dateKey) return;
+      const d = parseDate(String(tx[dateKey] || ''));
+      if (!(d <= toD)) return;
+      if (visibleBankIds && visibleBankIds.length > 0) {
+        const bankId = (tx.bankId as string) || '';
+        if (bankId && !visibleBankIds.includes(bankId)) return;
+      }
+      const { key, accountLabel, bankName } = getAccountIdentity(tx);
+      if (!key) return;
+      const rawAmount = parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0') || 0;
+      const crdrField = extractCrDr(tx, rawAmount);
+      let amount = rawAmount;
+      if (crdrField === 'CR') amount = Math.abs(rawAmount);
+      else if (crdrField === 'DR') amount = -Math.abs(rawAmount);
+      if (!accountMap.has(key)) accountMap.set(key, { account: accountLabel, bankName, balance: 0 });
+      const entry = accountMap.get(key)!;
+      entry.balance += amount;
+    });
+    return Array.from(accountMap.values()).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance));
+  };
 
 
   return (
@@ -560,6 +633,55 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                 </div>
           </div>
         </div>
+
+            {showBalance && (
+              <div className="relative group">
+                <div className="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-lg text-sm font-semibold shadow-md">
+                  Opening: ₹{openingClosing.opening.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
+                  <div className="text-sm font-semibold text-gray-800 mb-3">Opening by Account</div>
+                  {getOpeningBreakdownByAccount().length > 0 ? (
+                    <div className="space-y-1">
+                      {getOpeningBreakdownByAccount().map((acc, index) => (
+                        <div key={index} className="flex justify-between items-center text-sm">
+                          <span className="text-gray-700 font-medium">{acc.account} <span className="text-gray-400">({acc.bankName})</span></span>
+                          <span className={`${acc.balance >= 0 ? 'text-green-600' : 'text-red-600'} font-semibold`}>
+                            ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">No data</div>
+                  )}
+                </div>
+              </div>
+            )}
+            {showBalance && (
+              <div className="relative group">
+                <div className="px-3 py-1.5 bg-gradient-to-r from-sky-500 to-sky-600 text-white rounded-lg text-sm font-semibold shadow-md">
+                  Closing: ₹{openingClosing.closing.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
+                  <div className="text-sm font-semibold text-gray-800 mb-3">Closing by Account</div>
+                  {getClosingBreakdownByAccount().length > 0 ? (
+                    <div className="space-y-1">
+                      {getClosingBreakdownByAccount().map((acc, index) => (
+                        <div key={index} className="flex justify-between items-center text-sm">
+                          <span className="text-gray-700 font-medium">{acc.account} <span className="text-gray-400">({acc.bankName})</span></span>
+                          <span className={`${acc.balance >= 0 ? 'text-green-600' : 'text-red-600'} font-semibold`}>
+                            ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">No data</div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="relative group">
               <button
@@ -647,52 +769,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
         </div>
         {showBalance && (
               <div className="relative group">
-                <button
-                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold hover:transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg bg-gradient-to-r from-teal-500 to-teal-600 text-white hover:from-teal-600 hover:to-teal-700`}
-                  title="Click to view detailed balance analysis and financial health"
-                >
-                  Bal.: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </button>
-                {/* Balance Breakdown by Bank Tooltip */}
-                <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
-                  <div className="text-sm font-semibold text-gray-800 mb-3">Balance Breakdown by Bank</div>
-                  {getBalanceBreakdownByBank().length > 0 ? (
-                    <div className="space-y-2">
-                      {getBalanceBreakdownByBank().map((bank, index) => (
-                        <div key={index} className="text-sm mb-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-700 font-medium">{bank.name}</span>
-                            <span className={`font-bold ${bank.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              ₹{bank.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                          {bank.accounts && bank.accounts.length > 0 && (
-                            <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
-                              {bank.accounts.map((acc, accIndex) => (
-                                <div key={accIndex} className="flex justify-between">
-                                  <span>{acc.account}:</span>
-                                  <span className={`font-medium ${acc.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-500">No bank data available</div>
-                  )}
-                  <div className="mt-3 pt-2 border-t border-gray-200">
-                    <div className="flex justify-between items-center text-sm font-semibold">
-                      <span className="text-gray-800">Total</span>
-                      <span className={`${balance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                        ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                {/* Balance chip removed per request */}
               </div>
             )}
             <div className="relative group">
