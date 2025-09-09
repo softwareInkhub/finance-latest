@@ -11,6 +11,7 @@ interface AnalyticsSummaryProps {
   tagsSummary?: Record<string, unknown>; // Add tagsSummary prop
   transactions?: Array<Record<string, unknown>>; // Use provided rows for breakdowns when available
   dateRange?: { from: string; to: string }; // Add dateRange prop for opening balance calculation
+  allTransactions?: Array<Record<string, unknown>>; // All transactions for opening balance calculation
 }
 
 interface ModalProps {
@@ -52,6 +53,8 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   showBalance = false,
   tagsSummary,
   transactions,
+  dateRange,
+  allTransactions: allTransactionsProp,
 }) => {
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -190,8 +193,6 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
   
   const balance = safeTotalCredit - safeTotalDebit;
 
-
-
   // Robust extractor for Dr/Cr when multiple columns exist
   const extractCrDr = (tx: Record<string, unknown>, rawAmount: number): 'CR' | 'DR' | '' => {
     const candidates = [
@@ -216,6 +217,117 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     }
     return first as 'CR' | 'DR';
   };
+
+  // Helper function to convert date to ISO format for comparison
+  const convertToISOFormat = (dateStr: string): string => {
+    if (!dateStr) return '';
+    
+    // Handle various date formats
+    const formats = [
+      /^(\d{4})-(\d{2})-(\d{2})$/, // YYYY-MM-DD
+      /^(\d{2})\/(\d{2})\/(\d{4})$/, // DD/MM/YYYY
+      /^(\d{2})-(\d{2})-(\d{4})$/, // DD-MM-YYYY
+      /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // D/M/YYYY
+    ];
+    
+    for (const format of formats) {
+      const match = dateStr.match(format);
+      if (match) {
+        if (format.source.includes('YYYY')) {
+          // YYYY-MM-DD format
+          return dateStr;
+        } else {
+          // DD/MM/YYYY or DD-MM-YYYY format
+          const [, day, month, year] = match;
+          return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+      }
+    }
+    
+    // Try to parse as Date object
+    const parsedDate = new Date(dateStr);
+    if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1970) {
+      const year = parsedDate.getFullYear();
+      const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(parsedDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    return '';
+  };
+
+  // Calculate opening balance (closing balance of previous month)
+  const calculateOpeningBalance = (): number => {
+    if (!allTransactionsProp || allTransactionsProp.length === 0) {
+      return 0;
+    }
+
+    // If no date range is set, calculate opening balance from all transactions before the earliest visible transaction
+    let cutoffDate: string;
+    
+    if (dateRange?.from) {
+      // Use the start date of the current period
+      cutoffDate = dateRange.from;
+    } else if (transactions && transactions.length > 0) {
+      // Find the earliest date from visible transactions
+      const dates: string[] = [];
+      transactions.forEach((tx: Record<string, unknown>) => {
+        const dateCol = Object.keys(tx).find(key => key.toLowerCase().includes('date'));
+        if (dateCol && tx[dateCol]) {
+          const isoDate = convertToISOFormat(tx[dateCol] as string);
+          if (isoDate) dates.push(isoDate);
+        }
+      });
+      
+      if (dates.length > 0) {
+        cutoffDate = dates.sort()[0]; // Earliest date
+      } else {
+        return 0;
+      }
+    } else {
+      return 0;
+    }
+
+    let openingBalance = 0;
+
+    // Sum all transactions before the current period
+    allTransactionsProp.forEach((tx: Record<string, unknown>) => {
+      const dateCol = Object.keys(tx).find(key => key.toLowerCase().includes('date'));
+      if (!dateCol) return;
+
+      const txDate = tx[dateCol] as string;
+      if (!txDate) return;
+
+      const isoDate = convertToISOFormat(txDate);
+      if (!isoDate) return;
+
+      // Only include transactions before the cutoff date
+      if (isoDate < cutoffDate) {
+        const amount = parseFloat((tx.AmountRaw as string) || (tx.Amount as string) || (tx.amount as string) || '0') || 0;
+        const crdrField = extractCrDr(tx, amount);
+        
+        if (crdrField === 'CR') {
+          openingBalance += Math.abs(amount);
+        } else if (crdrField === 'DR') {
+          openingBalance -= Math.abs(amount);
+        } else {
+          // If no Dr/Cr field, use amount sign
+          openingBalance += amount;
+        }
+      }
+    });
+
+    return openingBalance;
+  };
+
+  // Calculate closing balance (opening balance + current period transactions)
+  const calculateClosingBalance = (): number => {
+    const openingBalance = calculateOpeningBalance();
+    return openingBalance + balance;
+  };
+
+  const openingBalance = calculateOpeningBalance();
+  const closingBalance = calculateClosingBalance();
 
   const closeModal = () => {
     setModalState({
@@ -689,6 +801,67 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                       <span className="text-gray-800">Total</span>
                       <span className={`${balance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
                         ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Opening Balance Chip */}
+            {allTransactionsProp && allTransactionsProp.length > 0 && (
+              <div className="relative group">
+                <button
+                  className="px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-lg text-sm font-semibold hover:from-indigo-600 hover:to-indigo-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
+                  title="Opening balance from previous month"
+                >
+                  Opening: ₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </button>
+                {/* Opening Balance Tooltip */}
+                <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
+                  <div className="text-sm font-semibold text-gray-800 mb-3">Opening Balance Details</div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    This is the balance from all transactions before the current period.
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    <strong>Period:</strong> Before {dateRange?.from ? new Date(dateRange.from).toLocaleDateString('en-IN') : 'current view'}
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-gray-200">
+                    <div className="flex justify-between items-center text-sm font-semibold">
+                      <span className="text-gray-800">Opening Balance</span>
+                      <span className={`${openingBalance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                        ₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Closing Balance Chip */}
+            {allTransactionsProp && allTransactionsProp.length > 0 && (
+              <div className="relative group">
+                <button
+                  className="px-3 py-1.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg text-sm font-semibold hover:from-orange-600 hover:to-orange-700 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
+                  title="Closing balance including current period transactions"
+                >
+                  Closing: ₹{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </button>
+                {/* Closing Balance Tooltip */}
+                <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[9999] pointer-events-none">
+                  <div className="text-sm font-semibold text-gray-800 mb-3">Closing Balance Details</div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    This is the final balance after including all transactions in the current period.
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    <strong>Calculation:</strong> Opening Balance + Current Period Net
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    <strong>Period:</strong> {dateRange?.from ? new Date(dateRange.from).toLocaleDateString('en-IN') : 'Start'} to {dateRange?.to ? new Date(dateRange.to).toLocaleDateString('en-IN') : 'Present'}
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-gray-200">
+                    <div className="flex justify-between items-center text-sm font-semibold">
+                      <span className="text-gray-800">Closing Balance</span>
+                      <span className={`${closingBalance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                        ₹{closingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>

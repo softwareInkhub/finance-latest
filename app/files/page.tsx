@@ -2603,6 +2603,11 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
   const [allDuplicatesSelected, setAllDuplicatesSelected] = useState(false);
 
+  // Serial number generation state
+  const [originalData, setOriginalData] = useState<string[][]>([]);
+  const [serialNumbersGenerated, setSerialNumbersGenerated] = useState(false);
+
+
 
 
   // Column resize logic - added for SlicePreviewComponent
@@ -3853,6 +3858,55 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
   };
 
+  // Serial number generation function
+  const handleGenerateSerialNumbers = () => {
+    if (previewData.length === 0) return;
+
+    // Store original data before making changes
+    setOriginalData([...previewData]);
+    setSerialNumbersGenerated(true);
+
+    const newData = [...previewData];
+    
+    // Check if serial number column already exists
+    const headerRow = newData[0];
+    const serialColIndex = headerRow.findIndex(col => 
+      col.toLowerCase().includes('serial') || 
+      col.toLowerCase().includes('sr') || 
+      col.toLowerCase().includes('s.no') ||
+      col.toLowerCase().includes('sl no') ||
+      col.toLowerCase().includes('s.no.')
+    );
+
+    if (serialColIndex !== -1) {
+      // Serial column exists, update it
+      for (let i = 1; i < newData.length; i++) {
+        newData[i][serialColIndex] = i.toString();
+      }
+    } else {
+      // Add new serial number column at the beginning
+      const newHeader = ['S.No.', ...headerRow];
+      const newRows = newData.slice(1).map((row, index) => [
+        (index + 1).toString(),
+        ...row
+      ]);
+      
+      setPreviewData([newHeader, ...newRows]);
+      return;
+    }
+
+    setPreviewData(newData);
+  };
+
+  // Cancel serial number generation
+  const handleCancelSerialNumbers = () => {
+    if (originalData.length > 0) {
+      setPreviewData([...originalData]);
+      setSerialNumbersGenerated(false);
+      setOriginalData([]);
+    }
+  };
+
 
 
   // Save handler
@@ -4150,6 +4204,35 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
               </button>
 
             </div>
+
+            
+
+            {/* Serial Number Generation Buttons */}
+
+            {!serialNumbersGenerated ? (
+              <button
+                className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded hover:from-cyan-600 hover:to-cyan-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleGenerateSerialNumbers}
+                disabled={previewData.length === 0}
+                title="Generate or update serial numbers for transactions"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                </svg>
+                Generate Serial No.
+              </button>
+            ) : (
+              <button
+                className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 text-white rounded hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-sm hover:shadow text-xs font-medium"
+                onClick={handleCancelSerialNumbers}
+                title="Cancel and revert serial number changes"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Cancel
+              </button>
+            )}
 
             
             

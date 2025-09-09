@@ -4097,6 +4097,8 @@ export default function SuperBankPage() {
             totalAccounts={totalAccounts}
             showBalance={true}
             transactions={sortedAndFilteredRows}
+            dateRange={dateRange}
+            allTransactions={mappedRowsWithConditions}
           />
         )}
 

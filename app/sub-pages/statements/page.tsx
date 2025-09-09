@@ -663,13 +663,13 @@ function StatementsContent() {
   };
 
   return (
-    <div className="min-h-screen overflow-y-auto py-4 sm:py-6 lg:py-10 px-2 sm:px-4 lg:px-6 space-y-4 sm:space-y-6 lg:space-y-8">
+    <div className="min-h-screen overflow-y-auto py-2 sm:py-4 lg:py-6 px-2 sm:px-4 lg:px-6 space-y-2 sm:space-y-3 lg:space-y-4">
       <Toaster position="top-center" />
      
-      <div className="w-full max-w-7xl mx-auto space-y-3 sm:space-y-4 lg:space-y-6">
+      <div className="w-full max-w-7xl mx-auto space-y-2 sm:space-y-3 lg:space-y-4">
         {/* File Migration Banner removed */}
         
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4 mb-2">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4 mb-1">
           <div className="flex items-center gap-2">
             <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-lg sm:text-xl lg:text-2xl shadow">
               <RiFileList3Line />
@@ -683,7 +683,7 @@ function StatementsContent() {
 
 
 
-          <div className="space-y-6">
+          <div className="space-y-2 sm:space-y-3">
             {/* Transaction Filters */}
             <TransactionFilterBar
               search={search}
