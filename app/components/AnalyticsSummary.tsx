@@ -292,6 +292,143 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     return { opening, closing: opening + periodSum };
   }, [allTransactionsProp, dateRange, balance]);
 
+  // Calculate opening balance by bank
+  const getOpeningBalanceByBank = React.useMemo(() => {
+    if (!Array.isArray(allTransactionsProp) || allTransactionsProp.length === 0) {
+      return [];
+    }
+
+    // Use dateRange.from if available, otherwise find the earliest transaction date
+    let fromD: Date;
+    if (dateRange?.from) {
+      fromD = parseDate(dateRange.from);
+    } else {
+      const dates: Date[] = [];
+      for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
+        const dateKey = getDateField(tx) as string | undefined;
+        if (dateKey) {
+          const d = parseDate(String(tx[dateKey] || ''));
+          if (d.getTime() > 0) dates.push(d);
+        }
+      }
+      fromD = dates.length > 0 ? new Date(Math.min(...dates.map(d => d.getTime()))) : new Date();
+    }
+    
+    const bankBalances = new Map<string, { balance: number; accounts: Map<string, { balance: number; count: number }> }>();
+    
+    for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
+      const dateKey = getDateField(tx) as string | undefined;
+      if (!dateKey) continue;
+      
+      const d = parseDate(String(tx[dateKey] || ''));
+      if (d >= fromD) continue; // Skip transactions in or after the period
+      
+      const rawAmount = parseFloat((tx['AmountRaw'] as string) || (tx['Amount'] as string) || (tx['amount'] as string) || '0') || 0;
+      const crdr = extractCrDr(tx, rawAmount);
+      const signed = crdr === 'CR' ? Math.abs(rawAmount) : crdr === 'DR' ? -Math.abs(rawAmount) : rawAmount;
+      
+      const bankName = (tx.bankName as string) || 'Unknown Bank';
+      const accountId = (tx.accountId as string) || 'Unknown Account';
+
+      if (!bankBalances.has(bankName)) {
+        bankBalances.set(bankName, { balance: 0, accounts: new Map() });
+      }
+
+      const bankData = bankBalances.get(bankName)!;
+      bankData.balance += signed;
+
+      if (!bankData.accounts.has(accountId)) {
+        bankData.accounts.set(accountId, { balance: 0, count: 0 });
+      }
+
+      const accountData = bankData.accounts.get(accountId)!;
+      accountData.balance += signed;
+      accountData.count += 1;
+    }
+
+    return Array.from(bankBalances.entries()).map(([name, data]) => ({
+      name,
+      balance: data.balance,
+      accounts: Array.from(data.accounts.entries()).map(([accountId, accountData]) => ({
+        account: accountInfoMap[accountId]?.accountNumber || `****${accountId.slice(-4)}`,
+        balance: accountData.balance,
+        count: accountData.count
+      }))
+    }));
+  }, [allTransactionsProp, dateRange, accountInfoMap]);
+
+  // Calculate closing balance by bank
+  const getClosingBalanceByBank = React.useMemo(() => {
+    if (!Array.isArray(allTransactionsProp) || allTransactionsProp.length === 0) {
+      return [];
+    }
+
+    // Use dateRange if available, otherwise use all transactions
+    let fromD: Date, toD: Date;
+    if (dateRange?.from && dateRange?.to) {
+      fromD = parseDate(dateRange.from);
+      toD = parseDate(dateRange.to);
+    } else {
+      const dates: Date[] = [];
+      for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
+        const dateKey = getDateField(tx) as string | undefined;
+        if (dateKey) {
+          const d = parseDate(String(tx[dateKey] || ''));
+          if (d.getTime() > 0) dates.push(d);
+        }
+      }
+      if (dates.length > 0) {
+        fromD = new Date(Math.min(...dates.map(d => d.getTime())));
+        toD = new Date(Math.max(...dates.map(d => d.getTime())));
+      } else {
+        fromD = new Date();
+        toD = new Date();
+      }
+    }
+    
+    const bankBalances = new Map<string, { balance: number; accounts: Map<string, { balance: number; count: number }> }>();
+    
+    for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
+      const dateKey = getDateField(tx) as string | undefined;
+      if (!dateKey) continue;
+      
+      const d = parseDate(String(tx[dateKey] || ''));
+      if (d < fromD || d > toD) continue; // Skip transactions outside the period
+      
+      const rawAmount = parseFloat((tx['AmountRaw'] as string) || (tx['Amount'] as string) || (tx['amount'] as string) || '0') || 0;
+      const crdr = extractCrDr(tx, rawAmount);
+      const signed = crdr === 'CR' ? Math.abs(rawAmount) : crdr === 'DR' ? -Math.abs(rawAmount) : rawAmount;
+      
+      const bankName = (tx.bankName as string) || 'Unknown Bank';
+      const accountId = (tx.accountId as string) || 'Unknown Account';
+
+      if (!bankBalances.has(bankName)) {
+        bankBalances.set(bankName, { balance: 0, accounts: new Map() });
+      }
+
+      const bankData = bankBalances.get(bankName)!;
+      bankData.balance += signed;
+
+      if (!bankData.accounts.has(accountId)) {
+        bankData.accounts.set(accountId, { balance: 0, count: 0 });
+      }
+
+      const accountData = bankData.accounts.get(accountId)!;
+      accountData.balance += signed;
+      accountData.count += 1;
+    }
+
+    return Array.from(bankBalances.entries()).map(([name, data]) => ({
+      name,
+      balance: data.balance,
+      accounts: Array.from(data.accounts.entries()).map(([accountId, accountData]) => ({
+        account: accountInfoMap[accountId]?.accountNumber || `****${accountId.slice(-4)}`,
+        balance: accountData.balance,
+        count: accountData.count
+      }))
+    }));
+  }, [allTransactionsProp, dateRange, accountInfoMap]);
+
   // Calculate opening balance (closing balance of previous month)
   const calculateOpeningBalance = (): number => {
     return openingClosing.opening;
@@ -804,115 +941,45 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                    </div>
                    
                    {/* Opening Balance by Bank */}
-                   {(() => {
-                     if (!Array.isArray(allTransactionsProp) || allTransactionsProp.length === 0) {
-                       return (
-                         <div className="mt-3 pt-2 border-t border-gray-200">
-                           <div className="text-sm text-gray-500">No transaction data available</div>
-                         </div>
-                       );
-                     }
-
-                     // Use dateRange.from if available, otherwise find the earliest transaction date
-                     let fromD: Date;
-                     if (dateRange?.from) {
-                       fromD = parseDate(dateRange.from);
-                     } else {
-                       // Find the earliest transaction date as fallback
-                       const dates: Date[] = [];
-                       for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
-                         const dateKey = getDateField(tx) as string | undefined;
-                         if (dateKey) {
-                           const d = parseDate(String(tx[dateKey] || ''));
-                           if (d.getTime() > 0) dates.push(d);
-                         }
-                       }
-                       fromD = dates.length > 0 ? new Date(Math.min(...dates.map(d => d.getTime()))) : new Date();
-                     }
-                     const bankBalances = new Map<string, { balance: number; accounts: Map<string, { balance: number; count: number }> }>();
-                     
-                     for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
-                       const dateKey = getDateField(tx) as string | undefined;
-                       if (!dateKey) continue;
-                       
-                       const d = parseDate(String(tx[dateKey] || ''));
-                       if (d >= fromD) continue; // Skip transactions in or after the period
-                       
-                       const rawAmount = parseFloat((tx['AmountRaw'] as string) || (tx['Amount'] as string) || (tx['amount'] as string) || '0') || 0;
-                       const crdr = extractCrDr(tx, rawAmount);
-                       const signed = crdr === 'CR' ? Math.abs(rawAmount) : crdr === 'DR' ? -Math.abs(rawAmount) : rawAmount;
-                       
-                       const bankName = (tx.bankName as string) || 'Unknown Bank';
-                       const accountId = (tx.accountId as string) || 'Unknown Account';
-
-                       if (!bankBalances.has(bankName)) {
-                         bankBalances.set(bankName, { balance: 0, accounts: new Map() });
-                       }
-
-                       const bankData = bankBalances.get(bankName)!;
-                       bankData.balance += signed;
-
-                       if (!bankData.accounts.has(accountId)) {
-                         bankData.accounts.set(accountId, { balance: 0, count: 0 });
-                       }
-
-                       const accountData = bankData.accounts.get(accountId)!;
-                       accountData.balance += signed;
-                       accountData.count += 1;
-                     }
-
-                     const bankArray = Array.from(bankBalances.entries()).map(([name, data]) => ({
-                       name,
-                       balance: data.balance,
-                       accounts: Array.from(data.accounts.entries()).map(([accountId, accountData]) => ({
-                         account: accountInfoMap[accountId]?.accountNumber || `****${accountId.slice(-4)}`,
-                         balance: accountData.balance,
-                         count: accountData.count
-                       }))
-                     }));
-
-                     return (
-                       <div className="mt-3 pt-2 border-t border-gray-200">
-                         <div className="text-xs text-gray-500 mb-2">Breakdown by Bank:</div>
-                         {bankArray.length > 0 ? (
-                           <div className="space-y-2 max-h-32 overflow-y-auto">
-                             {bankArray.map((bank, index) => (
-                               <div key={index} className="text-sm">
-                                 <div className="flex justify-between items-center">
-                                   <span className="text-gray-700 font-medium">{bank.name}</span>
-                                   <span className={`font-bold ${bank.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                     ₹{bank.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                   </span>
-                                 </div>
-                                 {bank.accounts && bank.accounts.length > 0 && (
-                                   <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
-                                     {bank.accounts.map((acc, accIndex) => (
-                                       <div key={accIndex} className="flex justify-between">
-                                         <span>{acc.account} ({acc.count} txns)</span>
-                                         <span className={`${acc.balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                           ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                         </span>
-                                       </div>
-                                     ))}
+                   <div className="mt-3 pt-2 border-t border-gray-200">
+                     <div className="text-xs text-gray-500 mb-2">Breakdown by Bank:</div>
+                     {getOpeningBalanceByBank.length > 0 ? (
+                       <div className="space-y-2 max-h-48 overflow-y-auto">
+                         {getOpeningBalanceByBank.map((bank, index) => (
+                           <div key={index} className="text-sm">
+                             <div className="flex justify-between items-center">
+                               <span className="text-gray-700 font-medium">{bank.name}</span>
+                               <span className={`font-bold ${bank.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                 ₹{bank.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                               </span>
+                             </div>
+                             {bank.accounts && bank.accounts.length > 0 && (
+                               <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
+                                 {bank.accounts.map((acc, accIndex) => (
+                                   <div key={accIndex} className="flex justify-between">
+                                     <span>{acc.account} ({acc.count} txns)</span>
+                                     <span className={`${acc.balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                       ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                     </span>
                                    </div>
-                                 )}
+                                 ))}
                                </div>
-                             ))}
+                             )}
                            </div>
-                         ) : (
-                           <div className="text-sm text-gray-500">No opening balance data</div>
-                         )}
-                         <div className="mt-3 pt-2 border-t border-gray-200">
-                           <div className="flex justify-between items-center text-sm font-semibold">
-                             <span className="text-gray-800">Total Opening Balance</span>
-                             <span className={`${openingBalance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
-                               ₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                             </span>
-                           </div>
-                         </div>
+                         ))}
                        </div>
-                     );
-                   })()}
+                     ) : (
+                       <div className="text-sm text-gray-500">No opening balance data</div>
+                     )}
+                     <div className="mt-3 pt-2 border-t border-gray-200">
+                       <div className="flex justify-between items-center text-sm font-semibold">
+                         <span className="text-gray-800">Total Opening Balance</span>
+                         <span className={`${openingBalance >= 0 ? 'text-green-800' : 'text-red-800'}`}>
+                           ₹{openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                         </span>
+                       </div>
+                     </div>
+                   </div>
                  </div>
               </div>
             )}
@@ -933,105 +1000,34 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                    {/* Current Period by Bank */}
                    <div className="mt-3 pt-2">
                      <div className="text-xs text-gray-500 mb-2">Current Period by Bank:</div>
-                     {(() => {
-                       if (!Array.isArray(allTransactionsProp) || allTransactionsProp.length === 0) {
-                         return <div className="text-sm text-gray-500">No transaction data available</div>;
-                       }
-
-                       // Use dateRange if available, otherwise use all transactions
-                       let fromD: Date, toD: Date;
-                       if (dateRange?.from && dateRange?.to) {
-                         fromD = parseDate(dateRange.from);
-                         toD = parseDate(dateRange.to);
-                       } else {
-                         // Find the date range from all transactions
-                         const dates: Date[] = [];
-                         for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
-                           const dateKey = getDateField(tx) as string | undefined;
-                           if (dateKey) {
-                             const d = parseDate(String(tx[dateKey] || ''));
-                             if (d.getTime() > 0) dates.push(d);
-                           }
-                         }
-                         if (dates.length > 0) {
-                           fromD = new Date(Math.min(...dates.map(d => d.getTime())));
-                           toD = new Date(Math.max(...dates.map(d => d.getTime())));
-                         } else {
-                           fromD = new Date();
-                           toD = new Date();
-                         }
-                       }
-                       const bankBalances = new Map<string, { balance: number; accounts: Map<string, { balance: number; count: number }> }>();
-                       
-                       for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
-                         const dateKey = getDateField(tx) as string | undefined;
-                         if (!dateKey) continue;
-                         
-                         const d = parseDate(String(tx[dateKey] || ''));
-                         if (d < fromD || d > toD) continue; // Skip transactions outside the period
-                         
-                         const rawAmount = parseFloat((tx['AmountRaw'] as string) || (tx['Amount'] as string) || (tx['amount'] as string) || '0') || 0;
-                         const crdr = extractCrDr(tx, rawAmount);
-                         const signed = crdr === 'CR' ? Math.abs(rawAmount) : crdr === 'DR' ? -Math.abs(rawAmount) : rawAmount;
-                         
-                         const bankName = (tx.bankName as string) || 'Unknown Bank';
-                         const accountId = (tx.accountId as string) || 'Unknown Account';
-
-                         if (!bankBalances.has(bankName)) {
-                           bankBalances.set(bankName, { balance: 0, accounts: new Map() });
-                         }
-
-                         const bankData = bankBalances.get(bankName)!;
-                         bankData.balance += signed;
-
-                         if (!bankData.accounts.has(accountId)) {
-                           bankData.accounts.set(accountId, { balance: 0, count: 0 });
-                         }
-
-                         const accountData = bankData.accounts.get(accountId)!;
-                         accountData.balance += signed;
-                         accountData.count += 1;
-                       }
-
-                       const bankArray = Array.from(bankBalances.entries()).map(([name, data]) => ({
-                         name,
-                         balance: data.balance,
-                         accounts: Array.from(data.accounts.entries()).map(([accountId, accountData]) => ({
-                           account: accountInfoMap[accountId]?.accountNumber || `****${accountId.slice(-4)}`,
-                           balance: accountData.balance,
-                           count: accountData.count
-                         }))
-                       }));
-
-                       return bankArray.length > 0 ? (
-                         <div className="space-y-2 max-h-32 overflow-y-auto">
-                           {bankArray.map((bank, index) => (
-                             <div key={index} className="text-sm">
-                               <div className="flex justify-between items-center">
-                                 <span className="text-gray-700 font-medium">{bank.name}</span>
-                                 <span className={`font-bold ${bank.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                   ₹{bank.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                 </span>
-                               </div>
-                               {bank.accounts && bank.accounts.length > 0 && (
-                                 <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
-                                   {bank.accounts.map((acc, accIndex) => (
-                                     <div key={accIndex} className="flex justify-between">
-                                       <span>{acc.account} ({acc.count} txns)</span>
-                                       <span className={`${acc.balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                         ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                       </span>
-                                     </div>
-                                   ))}
-                                 </div>
-                               )}
+                     {getClosingBalanceByBank.length > 0 ? (
+                       <div className="space-y-2 max-h-48 overflow-y-auto">
+                         {getClosingBalanceByBank.map((bank, index) => (
+                           <div key={index} className="text-sm">
+                             <div className="flex justify-between items-center">
+                               <span className="text-gray-700 font-medium">{bank.name}</span>
+                               <span className={`font-bold ${bank.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                 ₹{bank.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                               </span>
                              </div>
-                           ))}
-                         </div>
-                       ) : (
-                         <div className="text-sm text-gray-500">No current period data</div>
-                       );
-                     })()}
+                             {bank.accounts && bank.accounts.length > 0 && (
+                               <div className="text-xs text-gray-500 mt-1 ml-2 space-y-1">
+                                 {bank.accounts.map((acc, accIndex) => (
+                                   <div key={accIndex} className="flex justify-between">
+                                     <span>{acc.account} ({acc.count} txns)</span>
+                                     <span className={`${acc.balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                       ₹{acc.balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                     </span>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ))}
+                       </div>
+                     ) : (
+                       <div className="text-sm text-gray-500">No current period data</div>
+                     )}
                    </div>
 
                    <div className="mt-3 pt-2 border-t border-gray-200">
