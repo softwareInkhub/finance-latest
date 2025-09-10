@@ -292,7 +292,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     return { opening, closing: opening + periodSum };
   }, [allTransactionsProp, dateRange, balance]);
 
-  // Calculate opening balance by bank
+  // Calculate individual bank opening balances (actual opening balance for each bank)
   const getOpeningBalanceByBank = React.useMemo(() => {
     if (!Array.isArray(allTransactionsProp) || allTransactionsProp.length === 0) {
       return [];
@@ -316,6 +316,7 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
     
     const bankBalances = new Map<string, { balance: number; accounts: Map<string, { balance: number; count: number }> }>();
     
+    // Calculate opening balance for each bank (sum of all transactions before the period)
     for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
       const dateKey = getDateField(tx) as string | undefined;
       if (!dateKey) continue;
@@ -348,16 +349,16 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
 
     return Array.from(bankBalances.entries()).map(([name, data]) => ({
       name,
-      balance: data.balance,
+      balance: data.balance, // This is the actual opening balance for this bank
       accounts: Array.from(data.accounts.entries()).map(([accountId, accountData]) => ({
         account: accountInfoMap[accountId]?.accountNumber || `****${accountId.slice(-4)}`,
-        balance: accountData.balance,
+        balance: accountData.balance, // This is the actual opening balance for this account
         count: accountData.count
       }))
     }));
   }, [allTransactionsProp, dateRange, accountInfoMap]);
 
-  // Calculate closing balance by bank
+  // Calculate individual bank closing balances (opening balance + current period transactions)
   const getClosingBalanceByBank = React.useMemo(() => {
     if (!Array.isArray(allTransactionsProp) || allTransactionsProp.length === 0) {
       return [];
@@ -386,8 +387,59 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       }
     }
     
-    const bankBalances = new Map<string, { balance: number; accounts: Map<string, { balance: number; count: number }> }>();
+    const bankBalances = new Map<string, { 
+      openingBalance: number; 
+      currentPeriodBalance: number; 
+      closingBalance: number;
+      accounts: Map<string, { 
+        openingBalance: number; 
+        currentPeriodBalance: number; 
+        closingBalance: number; 
+        count: number 
+      }> 
+    }>();
     
+    // First pass: Calculate opening balances (transactions before the period)
+    for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
+      const dateKey = getDateField(tx) as string | undefined;
+      if (!dateKey) continue;
+      
+      const d = parseDate(String(tx[dateKey] || ''));
+      if (d >= fromD) continue; // Skip transactions in or after the period
+      
+      const rawAmount = parseFloat((tx['AmountRaw'] as string) || (tx['Amount'] as string) || (tx['amount'] as string) || '0') || 0;
+      const crdr = extractCrDr(tx, rawAmount);
+      const signed = crdr === 'CR' ? Math.abs(rawAmount) : crdr === 'DR' ? -Math.abs(rawAmount) : rawAmount;
+      
+      const bankName = (tx.bankName as string) || 'Unknown Bank';
+      const accountId = (tx.accountId as string) || 'Unknown Account';
+
+      if (!bankBalances.has(bankName)) {
+        bankBalances.set(bankName, { 
+          openingBalance: 0, 
+          currentPeriodBalance: 0, 
+          closingBalance: 0,
+          accounts: new Map() 
+        });
+      }
+
+      const bankData = bankBalances.get(bankName)!;
+      bankData.openingBalance += signed;
+
+      if (!bankData.accounts.has(accountId)) {
+        bankData.accounts.set(accountId, { 
+          openingBalance: 0, 
+          currentPeriodBalance: 0, 
+          closingBalance: 0, 
+          count: 0 
+        });
+      }
+
+      const accountData = bankData.accounts.get(accountId)!;
+      accountData.openingBalance += signed;
+    }
+    
+    // Second pass: Calculate current period balances (transactions within the period)
     for (const tx of allTransactionsProp as Array<Record<string, unknown>>) {
       const dateKey = getDateField(tx) as string | undefined;
       if (!dateKey) continue;
@@ -403,27 +455,45 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
       const accountId = (tx.accountId as string) || 'Unknown Account';
 
       if (!bankBalances.has(bankName)) {
-        bankBalances.set(bankName, { balance: 0, accounts: new Map() });
+        bankBalances.set(bankName, { 
+          openingBalance: 0, 
+          currentPeriodBalance: 0, 
+          closingBalance: 0,
+          accounts: new Map() 
+        });
       }
 
       const bankData = bankBalances.get(bankName)!;
-      bankData.balance += signed;
+      bankData.currentPeriodBalance += signed;
 
       if (!bankData.accounts.has(accountId)) {
-        bankData.accounts.set(accountId, { balance: 0, count: 0 });
+        bankData.accounts.set(accountId, { 
+          openingBalance: 0, 
+          currentPeriodBalance: 0, 
+          closingBalance: 0, 
+          count: 0 
+        });
       }
 
       const accountData = bankData.accounts.get(accountId)!;
-      accountData.balance += signed;
+      accountData.currentPeriodBalance += signed;
       accountData.count += 1;
     }
+    
+    // Calculate closing balances (opening + current period)
+    bankBalances.forEach((bankData) => {
+      bankData.closingBalance = bankData.openingBalance + bankData.currentPeriodBalance;
+      bankData.accounts.forEach((accountData) => {
+        accountData.closingBalance = accountData.openingBalance + accountData.currentPeriodBalance;
+      });
+    });
 
     return Array.from(bankBalances.entries()).map(([name, data]) => ({
       name,
-      balance: data.balance,
+      balance: data.closingBalance, // This is the actual closing balance for this bank
       accounts: Array.from(data.accounts.entries()).map(([accountId, accountData]) => ({
         account: accountInfoMap[accountId]?.accountNumber || `****${accountId.slice(-4)}`,
-        balance: accountData.balance,
+        balance: accountData.closingBalance, // This is the actual closing balance for this account
         count: accountData.count
       }))
     }));
@@ -942,9 +1012,9 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                    
                    {/* Opening Balance by Bank */}
                    <div className="mt-3 pt-2 border-t border-gray-200">
-                     <div className="text-xs text-gray-500 mb-2">Breakdown by Bank:</div>
+                     <div className="text-xs text-gray-500 mb-2">Individual Bank Opening Balances:</div>
                      {getOpeningBalanceByBank.length > 0 ? (
-                       <div className="space-y-2 max-h-48 overflow-y-auto">
+                       <div className="space-y-2">
                          {getOpeningBalanceByBank.map((bank, index) => (
                            <div key={index} className="text-sm">
                              <div className="flex justify-between items-center">
@@ -997,11 +1067,11 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
                    <div className="text-sm font-semibold text-gray-800 mb-3">Closing Balance Breakdown</div>
                    
 
-                   {/* Current Period by Bank */}
+                   {/* Individual Bank Closing Balances */}
                    <div className="mt-3 pt-2">
-                     <div className="text-xs text-gray-500 mb-2">Current Period by Bank:</div>
+                     <div className="text-xs text-gray-500 mb-2">Individual Bank Closing Balances:</div>
                      {getClosingBalanceByBank.length > 0 ? (
-                       <div className="space-y-2 max-h-48 overflow-y-auto">
+                       <div className="space-y-2">
                          {getClosingBalanceByBank.map((bank, index) => (
                            <div key={index} className="text-sm">
                              <div className="flex justify-between items-center">

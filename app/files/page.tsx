@@ -56,6 +56,8 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
 
   const [showSuccess, setShowSuccess] = useState(false);
 
+  const [countdown, setCountdown] = useState(2);
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const [banks, setBanks] = useState<{ id: string; bankName: string }[]>([]);
@@ -194,6 +196,20 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
 
       onSuccess(await res.json());
 
+      // Start countdown and auto-close modal
+      let remaining = 2;
+      setCountdown(remaining);
+      
+      const countdownInterval = setInterval(() => {
+        remaining--;
+        setCountdown(remaining);
+        
+        if (remaining <= 0) {
+          clearInterval(countdownInterval);
+          onClose();
+        }
+      }, 1000);
+
     } catch {
 
       setError('Failed to upload file');
@@ -219,6 +235,8 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
       setBankAccount('');
 
       setShowSuccess(false);
+
+      setCountdown(2);
 
       setSelectedFile(null);
 
@@ -342,7 +360,14 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
 
         {showSuccess && (
 
-          <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded text-green-700 font-semibold">File uploaded successfully!</div>
+          <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg text-green-700 dark:text-green-300 font-semibold">
+
+            <div className="flex items-center gap-2">
+              <span className="text-lg">✅</span>
+              <span>File uploaded successfully! Closing in {countdown} second{countdown !== 1 ? 's' : ''}...</span>
+            </div>
+
+          </div>
 
         )}
 
@@ -583,11 +608,25 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
   return (
 
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw]">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-blue-100 dark:border-gray-700 p-4 mt-4 w-[70vw]">
 
       {isStatement && (
 
-        <div className="mb-4 flex items-center gap-4">
+        <div className="mb-4">
+          {/* Range Selection Summary */}
+          {showRange && headerRow !== null && startRow !== null && endRow !== null && (
+            <div className="mb-3 p-3 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-600 rounded-lg">
+              <div className="flex items-center gap-2 text-sm font-semibold text-blue-800 dark:text-blue-200">
+                <span className="text-lg">📊</span>
+                <span>Selected Range: {endRow - startRow + 1} transactions (Rows {startRow + 1} to {endRow + 1})</span>
+                <span className="px-2 py-1 bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-full text-xs">
+                  Header: Row {headerRow + 1}
+                </span>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex items-center gap-4">
 
           <button
 
@@ -641,13 +680,14 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
           </button>
 
+          </div>
         </div>
 
       )}
 
       <div className="overflow-auto" style={{ maxHeight: 600 }}>
 
-      <table ref={tableRef} className="border-collapse min-w-full text-xs select-none" style={{ tableLayout: 'fixed' }}>
+      <table ref={tableRef} className="border-collapse min-w-full text-xs select-none bg-white dark:bg-gray-800" style={{ tableLayout: 'fixed' }}>
 
         <tbody>
 
@@ -673,23 +713,23 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
                     isFirstRow
 
-                      ? 'bg-blue-50 border-b-2 border-blue-300 sticky top-0 z-20'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-300 dark:border-blue-600 sticky top-0 z-20'
 
                       : isHeader
 
-                    ? 'bg-purple-100 border-l-4 border-purple-500'
+                    ? 'bg-purple-200 dark:bg-purple-800/60 border-l-4 border-purple-600 dark:border-purple-400 shadow-lg'
 
                     : isStart
 
-                    ? 'bg-green-100 border-l-4 border-green-500'
+                    ? 'bg-green-200 dark:bg-green-800/60 border-l-4 border-green-600 dark:border-green-400 shadow-lg'
 
                     : isEnd
 
-                    ? 'bg-yellow-100 border-r-4 border-yellow-500'
+                    ? 'bg-yellow-200 dark:bg-yellow-800/60 border-r-4 border-yellow-600 dark:border-yellow-400 shadow-lg'
 
                     : isInSlice
 
-                    ? 'bg-blue-100'
+                    ? 'bg-blue-200 dark:bg-blue-800/50 border-l-4 border-r-4 border-blue-400 dark:border-blue-500'
 
                     : ''
 
@@ -707,7 +747,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
                     key={j}
 
-                      className={`border border-blue-200 px-2 py-1 truncate relative ${isFirstRow ? 'font-semibold text-blue-900 bg-blue-50 group hover:bg-blue-100' : ''}`}
+                      className={`border border-blue-200 dark:border-gray-600 px-2 py-1 truncate relative text-black dark:text-white bg-white dark:bg-gray-800 ${isFirstRow ? 'font-semibold text-blue-900 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 group hover:bg-blue-100 dark:hover:bg-blue-900/30' : ''} ${isInSlice ? 'font-medium' : ''} ${isHeader || isStart || isEnd ? 'font-bold' : ''}`}
 
                     style={{ width: colWidths[j] || 160, minWidth: 60, maxWidth: 600 }}
 
@@ -721,7 +761,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
                           <span
 
-                            className="absolute right-0 top-0 h-full w-1 bg-gray-300 opacity-60"
+                            className="absolute right-0 top-0 h-full w-1 bg-gray-300 dark:bg-gray-600 opacity-60"
 
                             style={{ userSelect: 'none' }}
 
@@ -729,7 +769,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
                           <span
 
-                            className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-20 bg-blue-300 opacity-0 hover:opacity-100 transition-opacity"
+                            className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-20 bg-blue-300 dark:bg-blue-600 opacity-0 hover:opacity-100 transition-opacity"
 
                             onMouseDown={e => handleMouseDown(e, j)}
 
@@ -769,19 +809,19 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
                     {allowRangeSelection && isHeader && j === 0 && (
 
-                      <span className="ml-2 px-2 py-1 bg-purple-500 text-white rounded text-xs">Header</span>
+                      <span className="ml-2 px-3 py-1 bg-purple-600 text-white rounded-full text-xs font-bold shadow-lg animate-pulse">📋 Header</span>
 
                     )}
 
                     {allowRangeSelection && isStart && j === 0 && (
 
-                      <span className="ml-2 px-2 py-1 bg-green-500 text-white rounded text-xs">Start</span>
+                      <span className="ml-2 px-3 py-1 bg-green-600 text-white rounded-full text-xs font-bold shadow-lg animate-pulse">▶️ Start</span>
 
                     )}
 
                     {allowRangeSelection && isEnd && j === 0 && (
 
-                      <span className="ml-2 px-2 py-1 bg-yellow-500 text-white rounded text-xs">End</span>
+                      <span className="ml-2 px-3 py-1 bg-yellow-600 text-white rounded-full text-xs font-bold shadow-lg animate-pulse">⏹️ End</span>
 
                     )}
 
@@ -2571,6 +2611,8 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [saveCancelled, setSaveCancelled] = useState(false);
+
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
 
   const [duplicateRows, setDuplicateRows] = useState<Set<number>>(new Set());
@@ -3909,6 +3951,16 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
 
 
+  // Cancel save handler
+  const handleCancelSave = () => {
+    setSaving(false);
+    setSaveCancelled(true);
+    setIsBatchSaving(false);
+    setSaveProgress(0);
+    setSaveTotal(0);
+    setSaveError(null);
+  };
+
   // Save handler
 
   const handleSave = async () => {
@@ -3918,6 +3970,8 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
     setSaveError(null);
 
     setSaveSuccess(false);
+
+    setSaveCancelled(false);
 
     setDuplicateChecked(false); // Reset before saving
 
@@ -3940,6 +3994,11 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
       setSaveProgress(0);
 
       for (let i = 0; i < rows.length; i += batchSize) {
+
+        // Check if save was cancelled
+        if (saveCancelled) {
+          break;
+        }
 
         const batchRows = rows.slice(i, i + batchSize);
 
@@ -4005,7 +4064,9 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
       }
 
-      setSaveSuccess(true);
+      if (!saveCancelled) {
+        setSaveSuccess(true);
+      }
 
     } catch (err: unknown) {
 
@@ -4027,11 +4088,11 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
   return (
 
-    <div className="bg-white rounded-xl border border-blue-100 p-4 mt-4 w-[70vw] h-[73vh] overflow-y-auto">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-blue-100 dark:border-gray-700 p-4 mt-4 w-[70vw] h-[73vh] overflow-y-auto">
 
       {/* Duplicate check field selection UI */}
 
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-3 ">
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-3 ">
 
         <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-3 flex items-center gap-2">
 
@@ -4258,19 +4319,40 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
           
           
-          <button
+          <div className="flex gap-2">
+            <button
 
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
 
-            onClick={handleSave}
+              onClick={handleSave}
 
-            disabled={saving || selectedRows.size === 0}
+              disabled={saving || selectedRows.size === 0}
 
-          >
+            >
 
-            {saving ? 'Saving...' : `Save ${selectedRows.size} row(s)`}
+              {saving ? 'Saving...' : `Save ${selectedRows.size} row(s)`}
 
-          </button>
+            </button>
+
+            {saving && (
+
+              <button
+
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+
+                onClick={handleCancelSave}
+
+                title="Cancel the saving process"
+
+              >
+
+                Cancel
+
+              </button>
+
+            )}
+
+          </div>
 
         </div>
 
@@ -4278,7 +4360,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
       <div className="overflow-auto h-[45vh]" >
 
-        <table ref={tableRef} className="border-collapse min-w-full text-xs select-none " style={{ tableLayout: 'fixed' }}>
+        <table ref={tableRef} className="border-collapse min-w-full text-xs select-none bg-white dark:bg-gray-800" style={{ tableLayout: 'fixed' }}>
 
           <tbody>
 
@@ -4298,15 +4380,15 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                     isHeader
 
-                      ? 'bg-blue-50 border-b-2 border-blue-300'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-300 dark:border-blue-600'
 
                       : duplicateRows.has(i)
 
-                      ? 'bg-red-200 border-2 border-red-600'
+                      ? 'bg-red-100 dark:bg-red-900/30 border-l-4 border-red-400 dark:border-red-500'
 
                       : selectedRows.has(i)
 
-                      ? 'bg-blue-50'
+                      ? 'bg-blue-50 dark:bg-blue-900/20'
 
                       : ''
 
@@ -4328,7 +4410,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                 >
 
-                  <td className="px-2 py-1 border border-blue-200 text-center">
+                  <td className="px-2 py-1 border border-blue-200 dark:border-gray-600 text-center bg-white dark:bg-gray-800">
 
                     {isHeader ? (
 
@@ -4352,7 +4434,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                         }} 
 
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2" 
+                        className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2" 
 
                       />
 
@@ -4378,7 +4460,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                         }
 
-                      }} className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2" />
+                      }} className="w-4 h-4 text-blue-600 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-blue-500 focus:ring-2" />
 
                     )}
 
@@ -4390,7 +4472,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                       key={j} 
 
-                      className={`border border-blue-200 px-2 py-1 truncate relative text-black dark:text-black ${isHeader ? 'font-semibold text-blue-900 dark:text-blue-900' : ''}`} 
+                      className={`border border-blue-200 dark:border-gray-600 px-2 py-1 truncate relative text-black dark:text-white bg-white dark:bg-gray-800 ${isHeader ? 'font-semibold text-blue-900 dark:text-blue-300' : ''} ${duplicateRows.has(i) ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200' : ''}`} 
 
                       style={{ width: colWidths[j] || 160, minWidth: 60, maxWidth: 600 }}
 
@@ -4404,7 +4486,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                           <span
 
-                            className="absolute right-0 top-0 h-full w-1 bg-gray-300 opacity-60"
+                            className="absolute right-0 top-0 h-full w-1 bg-gray-300 dark:bg-gray-600 opacity-60"
 
                             style={{ userSelect: 'none' }}
 
@@ -4412,7 +4494,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
                           <span
 
-                            className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-20 bg-blue-300 opacity-0 hover:opacity-100 transition-opacity"
+                            className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-20 bg-blue-300 dark:bg-blue-600 opacity-0 hover:opacity-100 transition-opacity"
 
                             onMouseDown={e => handleMouseDown(e, j)}
 
@@ -4442,9 +4524,12 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
       {duplicateChecked && duplicateRows.size > 0 && (
 
-        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-red-700 dark:text-red-300 text-sm">
 
-          ⚠️ {duplicateRows.size} duplicate row(s) found - highlighted in red and will be skipped
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <span className="font-medium">{duplicateRows.size} duplicate row(s) found - highlighted in light red and will be skipped</span>
+          </div>
 
         </div>
 
@@ -4452,9 +4537,12 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
       {duplicateChecked && duplicateRows.size === 0 && (
 
-        <div className="mt-2 text-green-700 text-sm font-semibold">
+        <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg text-green-700 dark:text-green-300 text-sm font-semibold">
 
-          ✅ No duplicate rows found
+          <div className="flex items-center gap-2">
+            <span className="text-lg">✅</span>
+            <span>No duplicate rows found</span>
+          </div>
 
         </div>
 
@@ -4487,6 +4575,19 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
       {saveError && <div className="mt-2 text-red-600 text-sm">{saveError}</div>}
 
       {saveSuccess && <div className="mt-2 text-green-600 text-sm">Saved successfully!</div>}
+
+      {saveCancelled && (
+
+        <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg text-yellow-700 dark:text-yellow-300 text-sm">
+
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⏹️</span>
+            <span className="font-medium">Save process cancelled</span>
+          </div>
+
+        </div>
+
+      )}
 
       
       
