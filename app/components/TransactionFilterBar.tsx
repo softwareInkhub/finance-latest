@@ -254,7 +254,7 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
           {/* Available date span now sits inside the button */}
 
           {showDatePicker && (
-            <div ref={datePopoverRef} className="absolute top-full right-0 z-50 mt-3 bg-white border border-gray-200 rounded shadow-lg p-2 w-[590px] max-h-[70vh] overflow-auto">
+            <div ref={datePopoverRef} className="absolute top-full right-0 z-[400] mt-3 bg-white border border-gray-200 rounded shadow-lg p-2 w-[590px] max-h-[70vh] overflow-auto">
               <div className="flex">
                 {/* Months list */}
                 <div className="w-40 border-r pr-2 mr-2">

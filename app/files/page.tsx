@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 import FilesSidebar from '../components/FilesSidebar';
 
-import { RiCloseLine, RiAddLine } from 'react-icons/ri';
+import { RiCloseLine } from 'react-icons/ri';
 
 import Papa from 'papaparse';
 
@@ -1778,7 +1778,7 @@ function EmptyState({ onUpload }: { onUpload: () => void }) {
 
 
 
-function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMode, setViewMode, folders, onMoveFileToFolder, selectedFolder, onCreateFolder, onBackToAllFiles }: { 
+function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMode, setViewMode, folders, selectedFolder, onBackToAllFiles }: { 
   files: FileData[]; 
   onUpload: () => void; 
   onEdit: (file: FileData) => void; 
@@ -1787,9 +1787,7 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
   viewMode: 'grid' | 'row'; 
   setViewMode: (mode: 'grid' | 'row') => void;
   folders: Folder[];
-  onMoveFileToFolder: (fileId: string, folderId: string | null) => void;
   selectedFolder: string | null;
-  onCreateFolder: () => void;
   onBackToAllFiles: () => void;
 }) {
 
@@ -1807,7 +1805,8 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
 
   const [draggedFileId, setDraggedFileId] = React.useState<string | null>(null);
 
-  const [dragOverFolderId, setDragOverFolderId] = React.useState<string | null>(null);
+  // Drag-over state not currently used in UI; keep for future UX highlight if needed
+  // const [dragOverFolderId, setDragOverFolderId] = React.useState<string | null>(null);
 
   
   
@@ -1832,22 +1831,21 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
 
   const handleDragEnd = () => {
     setDraggedFileId(null);
-    setDragOverFolderId(null);
+    // setDragOverFolderId(null);
   };
-
-  const handleDragOver = (e: React.DragEvent, folderId: string | null) => {
-    e.preventDefault();
-    setDragOverFolderId(folderId);
-  };
-
-  const handleDrop = (e: React.DragEvent, folderId: string | null) => {
-    e.preventDefault();
-    if (draggedFileId) {
-      onMoveFileToFolder(draggedFileId, folderId);
-    }
-    setDraggedFileId(null);
-    setDragOverFolderId(null);
-  };
+  // Drag over / drop handlers not used since folder UI is removed
+  // const handleDragOver = (e: React.DragEvent, folderId: string | null) => {
+  //   e.preventDefault();
+  //   setDragOverFolderId(folderId);
+  // };
+  // const handleDrop = (e: React.DragEvent, folderId: string | null) => {
+  //   e.preventDefault();
+  //   if (draggedFileId) {
+  //     onMoveFileToFolder(draggedFileId, folderId);
+  //   }
+  //   setDraggedFileId(null);
+  //   setDragOverFolderId(null);
+  // };
 
   // Filter and sort files
 
@@ -2067,59 +2065,7 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
 
         </div>
 
-        {/* Folder Drop Zones - Only show when in "All Files" view */}
-        {folders.length > 0 && selectedFolder === null && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-700">Drop files into folders:</h3>
-              <button
-                onClick={onCreateFolder}
-                className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
-              >
-                <RiAddLine className="w-4 h-4" />
-                Create Folder
-                  </button>
-                </div>
-            <div className="flex flex-wrap gap-3">
-              <div
-                className={`p-3 rounded-lg border-2 border-dashed transition-all ${
-                  dragOverFolderId === null 
-                    ? 'border-blue-400 bg-blue-50' 
-                    : 'border-gray-300 bg-gray-100'
-                }`}
-                onDragOver={(e) => handleDragOver(e, null)}
-                onDrop={(e) => handleDrop(e, null)}
-              >
-                <div className="text-center">
-                  <FiFolder className="w-6 h-6 text-gray-400 mx-auto mb-1" />
-                  <div className="text-sm font-medium text-gray-700">Root</div>
-                  <div className="text-xs text-gray-500">Move to root</div>
-                </div>
-              </div>
-              {folders.map((folder) => (
-                <div
-                  key={folder.id}
-                  className={`p-3 rounded-lg border-2 border-dashed transition-all ${
-                    dragOverFolderId === folder.id 
-                      ? 'border-blue-400 bg-blue-50' 
-                      : 'border-gray-300 bg-gray-100'
-                  }`}
-                  onDragOver={(e) => handleDragOver(e, folder.id)}
-                  onDrop={(e) => handleDrop(e, folder.id)}
-                >
-                  <div className="text-center">
-                    <FiFolder 
-                      className="w-6 h-6 mx-auto mb-1" 
-                      style={{ color: folder.color || '#6b7280' }}
-                    />
-                    <div className="text-sm font-medium text-gray-700">{folder.name}</div>
-                    <div className="text-xs text-gray-500">Drop here</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Folder Drop Zones removed per request */}
 
         {/* Back to All Files button - Show when inside a folder */}
         {selectedFolder !== null && (
@@ -2514,6 +2460,7 @@ function DeleteFileModal({ isOpen, file, onClose, onDelete, loading, deleteProgr
 
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CreateFolderModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (name: string) => void }) {
   const [folderName, setFolderName] = useState('');
 
@@ -2558,6 +2505,687 @@ function CreateFolderModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onC
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function EntityFilesGrid({ entityName, refreshKey, onOpenPreview }: { entityName: string; refreshKey?: string; onOpenPreview: (data: { open: boolean; headers: string[]; rows: Array<Record<string, string>>; fileId: string; name: string }) => void }) {
+  const [files, setFiles] = useState<Array<{ id: string; name: string; createdAt?: string; s3Key?: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const refreshFiles = useCallback(async () => {
+    const userId = localStorage.getItem('userId') || '';
+    if (!userId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/entity-files?userId=${encodeURIComponent(userId)}&entityName=${encodeURIComponent(entityName)}`, { cache: 'no-store' });
+      const data = await res.json();
+      setFiles(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Failed to refresh entity files:', error);
+      setFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [entityName]);
+
+  useEffect(() => {
+    refreshFiles();
+  }, [refreshFiles, refreshKey]);
+
+  // Listen for entity file deletion events
+  useEffect(() => {
+    const handleEntityFileDeleted = () => {
+      refreshFiles();
+    };
+    
+    window.addEventListener('entityFileDeleted', handleEntityFileDeleted);
+    return () => window.removeEventListener('entityFileDeleted', handleEntityFileDeleted);
+  }, [refreshFiles]);
+
+  if (loading) {
+    return (
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Files</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm animate-pulse">
+              <div className="h-10 w-10 rounded-full bg-blue-100 mb-3" />
+              <div className="h-3 w-3/4 bg-gray-200 rounded mb-2" />
+              <div className="h-3 w-1/2 bg-gray-100 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (!files.length) return null;
+  return (
+    <div className="mb-6">
+      <h3 className="text-sm font-semibold text-gray-700 mb-3">Files</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        {files.map(f => {
+          const ext = (f.name?.split('.').pop() || '').toUpperCase();
+          return (
+          <div
+            key={f.id}
+            className="group relative rounded-xl border border-blue-100 bg-white p-5 md:p-6 shadow-sm transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-blue-300 w-full min-h-[180px] flex flex-col justify-between"
+            onClick={async () => {
+              try {
+                const res = await fetch(`/api/entity-files/preview?s3Key=${encodeURIComponent(String(f.s3Key||''))}`, { cache: 'no-store' });
+                if (!res.ok) throw new Error('preview failed');
+                const data: { headers: string[]; rows: Array<Record<string, string>> } = await res.json();
+                onOpenPreview({ open: true, headers: data.headers || [], rows: data.rows || [], fileId: f.id, name: f.name });
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+          >
+            {/* Folded-corner effect */}
+            <div className="absolute -top-px -right-px w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-tr-xl clip-path-file-corner" style={{clipPath:'polygon(0 0, 100% 0, 100% 100%)'}}></div>
+            <div className="absolute top-3 right-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  className="p-1.5 rounded hover:bg-gray-100"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === f.id ? null : f.id); }}
+                  aria-label="More options"
+                >
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="4" cy="10" r="2" fill="#4B5563"/><circle cx="10" cy="10" r="2" fill="#4B5563"/><circle cx="16" cy="10" r="2" fill="#4B5563"/></svg>
+                </button>
+                {menuOpenId === f.id && (
+                  <div className="absolute right-0 mt-1 w-36 rounded-md border border-gray-200 bg-white shadow-lg z-10" onMouseLeave={() => setMenuOpenId(null)}>
+                    <button className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50" onClick={(e) => { e.stopPropagation(); setMenuOpenId(null); setRenamingId(f.id); setNewName(f.name); }}>Rename</button>
+                    <button className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50" onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpenId(null);
+                      const dialog = document.getElementById('entityDelConfirm') as HTMLDialogElement | null;
+                      if (dialog) {
+                        (dialog.dataset as DOMStringMap)['id'] = f.id;
+                        (dialog.dataset as DOMStringMap)['s3key'] = String(f.s3Key || '');
+                        (dialog as HTMLDialogElement).showModal();
+                      }
+                    }}>Delete</button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* File illustration */}
+            <div className="flex items-start gap-4 mb-3">
+              <div className="relative shrink-0">
+                <svg width="48" height="56" viewBox="0 0 40 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M6 2h17l11 11v33a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="#F5F8FF" stroke="#C7D2FE"/>
+                  <path d="M23 2v9a2 2 0 0 0 2 2h9" fill="#E0E7FF"/>
+                  <path d="M11 28h18M11 34h18M11 22h10" stroke="#6366F1" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-blue-600 text-white shadow">{ext || 'CSV'}</span>
+              </div>
+              {renamingId === f.id ? (
+                <form className="w-full" onSubmit={async (e) => {
+                  e.preventDefault();
+                  const body = { id: f.id, newName, s3Key: f.s3Key };
+                  const res = await fetch('/api/entity-files', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                  if (res.ok) {
+                    setFiles(prev => prev.map(x => x.id === f.id ? { ...x, name: newName } : x));
+                    setRenamingId(null);
+                  } else {
+                    alert('Failed to rename');
+                  }
+                }}>
+                  <input 
+                    value={newName} 
+                    onChange={(e) => setNewName(e.target.value)} 
+                    onBlur={() => setRenamingId(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setRenamingId(null);
+                      }
+                    }}
+                    className="w-full text-sm border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  />
+                </form>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm md:text-base font-semibold text-blue-900 truncate" title={f.name}>{f.name}</div>
+                </div>
+              )}
+            </div>
+            {f.createdAt && (
+              <div className="text-xs text-gray-500 mt-1">{new Date(f.createdAt).toLocaleString()}</div>
+            )}
+          </div>
+        );})}
+      </div>
+    </div>
+  );
+}
+
+function EntityDeleteConfirm() {
+  return (
+    <dialog id="entityDelConfirm" className="rounded-xl shadow-xl p-0 w-96">
+      <div className="p-5">
+        <h3 className="text-lg font-bold mb-2">Delete file?</h3>
+        <p className="text-sm text-gray-600 mb-4">This will remove the file from S3 and your drive.</p>
+        <div className="flex justify-end gap-2">
+          <button className="px-3 py-1.5 rounded bg-gray-100" onClick={(e) => (e.currentTarget.closest('dialog') as HTMLDialogElement).close()}>Cancel</button>
+          <button className="px-3 py-1.5 rounded bg-red-600 text-white" onClick={async (e) => {
+            const dialog = e.currentTarget.closest('dialog') as HTMLDialogElement | null;
+            const id = dialog?.dataset?.id;
+            const s3Key = dialog?.dataset?.s3key;
+            if (!id) { dialog?.close(); return; }
+            const params = new URLSearchParams({ id, s3Key: String(s3Key || '') });
+            const res = await fetch(`/api/entity-files?${params.toString()}`, { method: 'DELETE' });
+            dialog?.close();
+            if (res.ok) {
+              // Dispatch event to refresh UI
+              window.dispatchEvent(new CustomEvent('entityFileDeleted'));
+            } else {
+              alert('Failed to delete file');
+            }
+          }}>Delete</button>
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+function EntityCsvPreviewModal({ preview, onClose }: { preview: { open: boolean; headers: string[]; rows: Array<Record<string, string>> } | null; onClose: () => void }) {
+  if (!preview?.open) return null;
+  const headers = preview.headers || [];
+  const rows = preview.rows || [];
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-2xl w-[90vw] h-[80vh] max-w-6xl p-4 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-bold">Preview</h3>
+          <button className="px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200" onClick={onClose}>Close</button>
+        </div>
+        <div className="flex-1 overflow-auto border rounded">
+          <ResizableTable headers={headers} rows={rows} />
+        </div>
+        <div className="text-xs text-gray-500 mt-2">Showing {rows.length} rows (preview)</div>
+      </div>
+    </div>
+  );
+}
+
+// Lightweight resizable table with sticky header and compact cells
+function ResizableTable({ headers, rows }: { headers: string[]; rows: Array<Record<string, string>> }) {
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const colWidthsRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    colWidthsRef.current = headers.map((_, i) => colWidthsRef.current[i] || 160);
+    if (tableRef.current) {
+      const cols = tableRef.current.querySelectorAll('col');
+      cols.forEach((c, i) => (c as HTMLTableColElement).style.width = `${colWidthsRef.current[i]}px`);
+    }
+  }, [headers]);
+
+  const startResize = (index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = colWidthsRef.current[index] || 160;
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const next = Math.max(60, startWidth + delta);
+      colWidthsRef.current[index] = next;
+      if (tableRef.current) {
+        const colgroup = tableRef.current.querySelectorAll('col');
+        const colEl = colgroup[index] as HTMLTableColElement | undefined;
+        if (colEl) colEl.style.width = `${next}px`;
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  return (
+    <table ref={tableRef} className="min-w-full text-[12.5px]" style={{ tableLayout: 'fixed' }}>
+      <colgroup>
+        {headers.map((_, i) => (
+          <col key={i} style={{ width: `${colWidthsRef.current[i] || 160}px` }} />
+        ))}
+      </colgroup>
+      <thead className="bg-gray-50 sticky top-0 z-10">
+        <tr>
+          {headers.map((h, i) => (
+            <th key={h} className="px-2 py-1.5 text-left font-semibold border-b relative select-none whitespace-nowrap overflow-hidden text-ellipsis">
+              {h}
+              <span
+                onMouseDown={(e) => startResize(i, e)}
+                className="absolute right-0 top-0 h-full w-3 cursor-col-resize"
+                style={{ background: 'transparent', pointerEvents: 'auto' }}
+                title="Drag to resize"
+              />
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, idx) => (
+          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+            {headers.map((h) => (
+              <td key={h} className="px-2 py-1 border-b align-top whitespace-nowrap overflow-hidden text-ellipsis">
+                {String(r[h] ?? '')}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function EntityUploadModal({ isOpen, onClose, entityName, onSuccess }: { isOpen: boolean; onClose: () => void; entityName: string; onSuccess: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const userId = localStorage.getItem('userId') || '';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('userId', userId);
+      form.append('entityName', entityName);
+      form.append('fileName', file.name);
+      const res = await fetch('/api/entity-transactions/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || 'Upload failed');
+      }
+      onSuccess();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isOpen ? 'block' : 'hidden'}`}>
+      <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
+        <h2 className="text-xl font-bold mb-4">Upload Entity CSV</h2>
+        <form onSubmit={handleUpload}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">CSV File</label>
+            <input type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          </div>
+          {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Cancel</button>
+            <button type="submit" disabled={!file || loading} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50">
+              {loading ? 'Uploading...' : 'Upload'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function UnifiedUploadModal({ isOpen, onClose, entityName, onSuccess }: { isOpen: boolean; onClose: () => void; entityName: string; onSuccess: () => void }) {
+  const [tab, setTab] = useState<'bank' | 'entity'>('entity');
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [customName, setCustomName] = useState<string>('');
+  const [show, setShow] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Defer to next frame for smooth transition in
+      requestAnimationFrame(() => setShow(true));
+      // Reset state on open so previous data doesn't persist
+      setTab('entity');
+      setFile(null);
+      setCustomName('');
+      setError(null);
+      setDragActive(false);
+      setUploadProgress(0);
+    } else {
+      setShow(false);
+    }
+  }, [isOpen]);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.type === 'text/csv' || droppedFile.name.endsWith('.csv')) {
+        setFile(droppedFile);
+        setCustomName(droppedFile.name || '');
+      } else {
+        setError('Please select a CSV file');
+      }
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className={`fixed inset-0 z-50 p-4 flex items-center justify-center transition-opacity duration-200 ease-out ${show ? 'bg-black/50 backdrop-blur-sm opacity-100' : 'bg-black/50 backdrop-blur-sm opacity-0'}` }>
+      <div className={`bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl sm:max-w-lg max-h-[90vh] overflow-hidden transition-all duration-200 ease-out transform ${show ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-1'}` }>
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Upload File</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Upload files for {entityName}</p>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="px-6 pt-4">
+          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+            <button 
+              onClick={() => setTab('bank')} 
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                tab === 'bank' 
+                  ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                Bank Statement
+              </div>
+            </button>
+            <button 
+              onClick={() => setTab('entity')} 
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                tab === 'entity' 
+                  ? 'bg-white dark:bg-gray-600 text-purple-600 dark:text-purple-400 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Entity CSV
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          {tab === 'bank' ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Bank Statement Upload</h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">Use the standard bank upload flow for better organization and processing.</p>
+              <button 
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                onClick={() => { 
+                  onClose(); 
+                  setTimeout(() => { 
+                    (document.querySelector('#openBankUpload') as HTMLButtonElement)?.click(); 
+                  }, 50); 
+                }}
+              >
+                Open Bank Upload
+              </button>
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!file) return;
+                setLoading(true);
+                setError(null);
+                setUploadProgress(0);
+                try {
+                  const userId = localStorage.getItem('userId') || '';
+                  const form = new FormData();
+                  form.append('file', file);
+                  form.append('userId', userId);
+                  form.append('entityName', entityName);
+                  const nameToUse = (customName && customName.trim()) ? customName.trim() : (file.name || 'upload.csv');
+                  form.append('fileName', nameToUse.endsWith('.csv') ? nameToUse : `${nameToUse}.csv`);
+                  // Use XMLHttpRequest to get upload progress events
+                  await new Promise<void>((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/api/entity-transactions/upload', true);
+                    xhr.upload.onprogress = (evt) => {
+                      if (evt.lengthComputable) {
+                        const percent = Math.round((evt.loaded / evt.total) * 100);
+                        // Phase 1: network upload contributes up to 50%
+                        const scaled = Math.max(1, Math.min(50, Math.round(percent * 0.5)));
+                        setUploadProgress(scaled);
+                      }
+                    };
+                    xhr.onreadystatechange = () => {
+                      if (xhr.readyState === 4) {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                          try {
+                            const res = JSON.parse(xhr.responseText || '{}');
+                            const jid = res.jobId as string | undefined;
+                            // Poll server progress for transactions if jobId present
+                            if (jid) {
+                              const poll = async () => {
+                                try {
+                                  const r = await fetch(`/api/entity-transactions/progress?jobId=${encodeURIComponent(jid)}`, { cache: 'no-store' });
+                                  const d = await r.json();
+                                  if (typeof d.processed === 'number' && typeof d.total === 'number' && d.total > 0) {
+                                    // Phase 2: processing contributes remaining 50%
+                                    const phase2 = Math.round((d.processed / d.total) * 50);
+                                    const combined = Math.min(99, 50 + phase2);
+                                    setUploadProgress(combined);
+                                  }
+                                  if (!d.done) {
+                                    setTimeout(poll, 250);
+                                  } else {
+                                    setUploadProgress(100);
+                                    resolve();
+                                  }
+                                } catch {
+                                  setUploadProgress(100);
+                                  resolve();
+                                }
+                              };
+                              poll();
+                            } else {
+                              setUploadProgress(100);
+                              resolve();
+                            }
+                          } catch {
+                            setUploadProgress(100);
+                            resolve();
+                          }
+                        } else {
+                          reject(new Error(xhr.responseText || 'Upload failed'));
+                        }
+                      }
+                    };
+                    xhr.onerror = () => reject(new Error('Network error'));
+                    xhr.send(form);
+                  });
+                  onSuccess();
+                  onClose();
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Upload failed');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              {/* File Upload Area */}
+              <div 
+                className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+                  dragActive 
+                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' 
+                    : 'border-gray-300 dark:border-gray-600 hover:border-purple-400 dark:hover:border-purple-500'
+                }`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                
+                {file ? (
+                  <div className="space-y-3">
+                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
+                      <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{file.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFile(null)}
+                      className="text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    >
+                      Remove file
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto">
+                      <svg className="w-6 h-6 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        Drop your CSV file here, or <span className="text-purple-600 dark:text-purple-400">browse</span>
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Supports CSV files up to 100MB
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Custom Name Input */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">File name</label>
+                <input
+                  type="text"
+                  placeholder={file?.name || 'my-entity-file.csv'}
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">We will append .csv if missing.</p>
+              </div>
+
+              {error && (
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <div className="flex items-center">
+                    <svg className="w-4 h-4 text-red-600 dark:text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Progress bar */}
+              {loading && (
+                <div className="mt-4">
+                  <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                    <div
+                      className="h-full bg-purple-600 dark:bg-purple-500 transition-all duration-150"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 text-right">{uploadProgress}%</div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 mt-6">
+                <button 
+                  type="button" 
+                  onClick={onClose} 
+                  className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={!file || loading} 
+                  className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      Upload
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -4581,6 +5209,9 @@ const FilesPage: React.FC = () => {
 
   const [openSliceTabs, setOpenSliceTabs] = useState<{ id: string; name: string; sliceData: string[][]; file: FileData; selectedFields: string[] }[]>([]);
 
+  const [openEntityTabs, setOpenEntityTabs] = useState<{ id: string; name: string; headers: string[]; rows: Array<Record<string, string>> }[]>([]);
+  const [entityRefreshNonce, setEntityRefreshNonce] = useState<number>(0);
+
   const [activeTabId, setActiveTabId] = useState<string>('all');
 
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
@@ -4616,8 +5247,18 @@ const FilesPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'row'>('grid');
   const [folders, setFolders] = useState<Folder[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
-  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
+  // const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  // const [showEntityUploadModal, setShowEntityUploadModal] = useState(false);
+  const [showChooseUploadModal, setShowChooseUploadModal] = useState(false);
+  const [preview, setPreview] = useState<{ open: boolean; headers: string[]; rows: Array<Record<string, string>> } | null>(null);
+
+  const openEntityPreviewTab = (payload: { open: boolean; headers: string[]; rows: Array<Record<string,string>>; fileId: string; name: string }) => {
+    if (!payload?.fileId) return;
+    const tabId = `entity:${payload.fileId}`;
+    setOpenEntityTabs(prev => prev.find(t => t.id === tabId) ? prev : [...prev, { id: tabId, name: payload.name || 'Entity CSV', headers: payload.headers || [], rows: payload.rows || [] }]);
+    setActiveTabId(tabId);
+  };
 
 
 
@@ -4824,6 +5465,7 @@ const FilesPage: React.FC = () => {
   };
 
   // Folder functions
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const createFolder = async (name?: string) => {
     const folderName = name || newFolderName;
     if (!folderName.trim()) return;
@@ -4839,7 +5481,6 @@ const FilesPage: React.FC = () => {
     
     setFolders(prev => [...prev, newFolder]);
     setNewFolderName('');
-    setShowCreateFolderModal(false);
     
     // TODO: Save to backend
     try {
@@ -4853,22 +5494,7 @@ const FilesPage: React.FC = () => {
     }
   };
 
-  const moveFileToFolder = async (fileId: string, folderId: string | null) => {
-    setFiles(prev => prev.map(file => 
-      file.id === fileId ? { ...file, folderId } : file
-    ));
-    
-    // TODO: Save to backend
-    try {
-      await fetch(`/api/files/${fileId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId })
-      });
-    } catch (error) {
-      console.error('Error moving file:', error);
-    }
-  };
+  // Folder moving disabled (no folder UI)
 
   
 
@@ -4965,13 +5591,17 @@ const FilesPage: React.FC = () => {
 
     setOpenSliceTabs((prevTabs) => prevTabs.filter((tab) => tab.id !== tabId));
 
+    setOpenEntityTabs((prevTabs) => prevTabs.filter((tab) => tab.id !== tabId));
+
+    if (tabId.startsWith('entity:')) { setEntityRefreshNonce((n) => n + 1); }
+
     if (activeTabId === tabId) {
 
       setTimeout(() => {
 
         setOpenTabs((tabs) => {
 
-          const allTabs = [...tabs, ...openSliceTabs.filter(tab => tab.id !== tabId)];
+          const allTabs = [...tabs, ...openSliceTabs.filter(tab => tab.id !== tabId), ...openEntityTabs.filter(tab => tab.id !== tabId)];
 
           if (allTabs.length === 0) {
 
@@ -5592,9 +6222,7 @@ const FilesPage: React.FC = () => {
           viewMode={viewMode} 
           setViewMode={setViewMode}
           folders={folders}
-          onMoveFileToFolder={moveFileToFolder}
           selectedFolder={selectedFolder}
-          onCreateFolder={() => setShowCreateFolderModal(true)}
           onBackToAllFiles={() => setSelectedFolder(null)}
         />;
 
@@ -5660,21 +6288,32 @@ const FilesPage: React.FC = () => {
 
   } else {
 
-    // If active tab corresponds to an entity selection (entity:<name>)
+    // If active tab corresponds to an entity selection (entity:<...>)
     if (activeTabId.startsWith('entity:')) {
-      const entityName = activeTabId.split(':', 2)[1];
-      mainContent = (
-        <div className="p-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-blue-800">{entityName} Files</h2>
-            <div className="flex gap-2">
-              <button className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm" onClick={() => setShowCreateFolderModal(true)}>New Folder</button>
-              <button className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" onClick={() => setShowUploadModal(true)}>Upload File</button>
+      const entityTab = openEntityTabs.find(t => t.id === activeTabId);
+      if (entityTab) {
+        mainContent = (
+          <div className="p-8">
+            <h2 className="text-xl font-bold mb-4 text-blue-800">{entityTab.name}</h2>
+            <div className="border rounded bg-white overflow-auto" style={{ maxHeight: '70vh', maxWidth: '149vh'}}>
+              <ResizableTable headers={entityTab.headers} rows={entityTab.rows} />
             </div>
           </div>
-          <div className="text-sm text-gray-600">Create folders inside this entity and upload files. Drag and drop is supported in the list view using the existing folder drop zones.</div>
-        </div>
-      );
+        );
+      } else {
+        const entityName = activeTabId.split(':', 2)[1];
+        mainContent = (
+          <div className="p-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-blue-800">{entityName} Files</h2>
+              <div className="flex gap-2">
+                <button className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm" onClick={() => setShowChooseUploadModal(true)}>Upload</button>
+              </div>
+            </div>
+            <EntityFilesGrid entityName={entityName} refreshKey={`${activeTabId}-${showChooseUploadModal}-${entityRefreshNonce}`} onOpenPreview={(p) => openEntityPreviewTab(p)} />
+          </div>
+        );
+      }
     } else {
 
     // Check if activeTabId is a bank id
@@ -5807,13 +6446,13 @@ const FilesPage: React.FC = () => {
 
         {/* Only show tabs if there are multiple tabs or non-all tabs */}
 
-        {([...openTabs, ...openSliceTabs].length > 1 || activeTabId !== 'all') && (
+        {([...openTabs, ...openSliceTabs, ...openEntityTabs].length > 1 || activeTabId !== 'all') && (
 
           <div className="bg-white border-b border-gray-200">
 
             <div className="flex overflow-x-auto">
 
-              {[...openTabs, ...openSliceTabs.map(tab => ({ id: tab.id, name: tab.name }))].map((tab) => (
+              {[...openTabs, ...openSliceTabs.map(tab => ({ id: tab.id, name: tab.name })), ...openEntityTabs.map(tab => ({ id: tab.id, name: tab.name }))].map((tab) => (
 
                 <div
 
@@ -5871,6 +6510,8 @@ const FilesPage: React.FC = () => {
 
         
         
+        {/* Hidden trigger to open existing bank upload from unified modal */}
+        <button id="openBankUpload" className="hidden" onClick={() => setShowUploadModal(true)} />
         <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} onSuccess={refreshFiles} selectedFileId={selectedFileId} />
 
         <EditFileModal isOpen={editModalOpen} file={editFile} onClose={() => setEditModalOpen(false)} onSave={handleEditSave} />
@@ -5895,15 +6536,22 @@ const FilesPage: React.FC = () => {
 
         />
 
-        <CreateFolderModal 
+        {activeTabId.startsWith('entity:') && (
+          <UnifiedUploadModal 
+            isOpen={showChooseUploadModal} 
+            onClose={() => setShowChooseUploadModal(false)} 
+            entityName={activeTabId.split(':', 2)[1]} 
+            onSuccess={() => {
+              setShowChooseUploadModal(false);
+            }}
+          />
+        )}
 
-          isOpen={showCreateFolderModal} 
+        {/* Global lightweight confirm dialog for entity file deletions */}
+        <EntityDeleteConfirm />
 
-          onClose={() => setShowCreateFolderModal(false)} 
-
-          onCreate={createFolder} 
-
-        />
+        {/* CSV preview modal */}
+        <EntityCsvPreviewModal preview={preview} onClose={() => setPreview(null)} />
 
       </main>
 

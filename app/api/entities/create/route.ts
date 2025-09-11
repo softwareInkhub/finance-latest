@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 export async function POST(request: Request) {
   try {
@@ -13,35 +14,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid entityName' }, { status: 400 });
     }
 
-    const crudBase = process.env.BRMH_CRUD_API_BASE_URL || process.env.CRID_API_BASE_URL || process.env.CRUD_API_BASE_URL || 'http://localhost:5001';
     const folderId = `FOLDER_${cleaned.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
     const s3KeyBase = `brmh-drive/users/${userId}/entities/${cleaned}`;
     const now = new Date().toISOString();
 
     // Write folder metadata to BRMH drive files table
-    const metaRes = await fetch(`${crudBase}/crud?tableName=brmh-drive-files`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tableName: 'brmh-drive-files',
-        item: {
-          id: folderId,
-          name: cleaned,
-          type: 'folder',
-          parentId: 'ROOT',
-          path: `entities/${cleaned}`,
-          s3Key: s3KeyBase,
-          description: '',
-          createdAt: now,
-          updatedAt: now,
-          ownerId: userId
-        }
-      })
+    await brmhExecute({
+      executeType: 'crud',
+      crudOperation: 'post',
+      tableName: 'brmh-drive-files',
+      item: {
+        id: folderId,
+        name: cleaned,
+        type: 'folder',
+        parentId: 'ROOT',
+        path: `entities/${cleaned}`,
+        s3Key: s3KeyBase,
+        description: '',
+        createdAt: now,
+        updatedAt: now,
+        ownerId: userId
+      }
     });
-    if (!metaRes.ok) {
-      const text = await metaRes.text().catch(() => '');
-      return NextResponse.json({ error: `Failed to save entity metadata: ${text}` }, { status: 500 });
-    }
 
     // Create placeholder object in S3
     const region = process.env.AWS_REGION || 'us-east-1';
@@ -60,6 +54,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create entity' }, { status: 500 });
   }
 }
+
 
 
 

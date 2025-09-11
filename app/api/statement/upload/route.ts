@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../../aws-client';
+import { TABLES } from '../../aws-client';
 import { v4 as uuidv4 } from 'uuid';
 import { uploadToBrmhDrive, buildPublicS3Url } from '../../drive/brmh-drive';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 export const runtime = 'nodejs'; // Required for file uploads in Next.js API routes
 
@@ -61,12 +61,16 @@ export async function POST(request: Request) {
       updatedAt: new Date().toISOString(),
     };
     
-    await docClient.send(
-      new PutCommand({
-        TableName: TABLES.BANK_STATEMENTS,
-        Item: statement,
-      })
-    );
+    // Instead of Direct DynamoDB:
+    // await docClient.send(new PutCommand({...}));
+    
+    // Use BRMH Backend:
+    await brmhExecute({
+      executeType: 'crud',
+      crudOperation: 'post',
+      tableName: TABLES.BANK_STATEMENTS,
+      item: statement
+    });
     
     return NextResponse.json({ ...statement, brmhFileId: uploadResult.fileId, brmhS3Key: uploadResult.s3Key });
   } catch (error) {

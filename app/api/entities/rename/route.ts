@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { S3Client, ListObjectsV2Command, CopyObjectCommand, DeleteObjectCommand, type ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 // Types for CRUD items
 interface DriveItem {
@@ -51,7 +52,6 @@ export async function POST(request: Request) {
 
     const region = process.env.AWS_REGION || 'us-east-1';
     const bucket = process.env.BRMH_S3_BUCKET || process.env.AWS_S3_BUCKET || 'brmh';
-    const crudBase = process.env.BRMH_CRUD_API_BASE_URL || process.env.CRID_API_BASE_URL || process.env.CRUD_API_BASE_URL || 'http://localhost:5001';
 
     const oldPrefix = `brmh-drive/users/${userId}/entities/${cleanedOld}/`;
     const newPrefix = `brmh-drive/users/${userId}/entities/${cleanedNew}/`;
@@ -72,63 +72,86 @@ export async function POST(request: Request) {
     } while (token);
 
     // 2) Update drive metadata records
-    const listRes = await fetch(`${crudBase}/crud?tableName=brmh-drive-files&pagination=true&itemPerPage=1000`, { method: 'GET', cache: 'no-store' });
-    if (listRes.ok) {
-      const data = await listRes.json();
-      const items = (data?.items as DriveItem[] | undefined) || [];
-      const updates = items.filter((it) => isOwnedS3ItemForPrefix(it, userId, oldPrefix));
-      for (const it of updates) {
+    const data = await brmhExecute<{ items?: DriveItem[] }>({
+      executeType: 'crud',
+      crudOperation: 'get',
+      tableName: 'brmh-drive-files',
+      pagination: 'true',
+      itemPerPage: 1000
+    });
+    const items = data.items || [];
+    const updates = items.filter((it) => isOwnedS3ItemForPrefix(it, userId, oldPrefix));
+    
+    // Update all files in parallel
+    await Promise.all(updates.map(async (it) => {
+      try {
         const id = it.id as string;
         const s3Key = (it.s3Key as string).replace(oldPrefix, newPrefix);
         const path = typeof it.path === 'string' ? it.path.replace(`entities/${cleanedOld}`, `entities/${cleanedNew}`) : `entities/${cleanedNew}`;
-        await fetch(`${crudBase}/crud?tableName=brmh-drive-files`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tableName: 'brmh-drive-files',
-            key: { id },
-            updates: { s3Key, path, updatedAt: new Date().toISOString() }
-          })
+        await brmhExecute({
+          executeType: 'crud',
+          crudOperation: 'put',
+          tableName: 'brmh-drive-files',
+          key: { id },
+          updates: { s3Key, path, updatedAt: new Date().toISOString() }
         });
+      } catch (error) {
+        console.warn(`Failed to update drive item ${it.id}:`, error);
       }
-      // Update the folder record itself
-      const folder = items.find((it) => isEntityFolder(it, userId, `entities/${cleanedOld}`));
-      if (folder) {
-        await fetch(`${crudBase}/crud?tableName=brmh-drive-files`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tableName: 'brmh-drive-files',
-            key: { id: folder.id },
-            updates: {
-              name: cleanedNew,
-              path: `entities/${cleanedNew}`,
-              s3Key: `brmh-drive/users/${userId}/entities/${cleanedNew}`,
-              updatedAt: new Date().toISOString()
-            }
-          })
+    }));
+    
+    // Update the folder record itself
+    const folder = items.find((it) => isEntityFolder(it, userId, `entities/${cleanedOld}`));
+    if (folder) {
+      try {
+        await brmhExecute({
+          executeType: 'crud',
+          crudOperation: 'put',
+          tableName: 'brmh-drive-files',
+          key: { id: folder.id },
+          updates: {
+            name: cleanedNew,
+            path: `entities/${cleanedNew}`,
+            s3Key: `brmh-drive/users/${userId}/entities/${cleanedNew}`,
+            updatedAt: new Date().toISOString()
+          }
         });
+      } catch (error) {
+        console.warn(`Failed to update folder ${folder.id}:`, error);
       }
     }
 
     // 3) Update statement URLs that reference old prefix (best-effort)
     const statementsTable = process.env.AWS_DYNAMODB_STATEMENTS_TABLE || 'bank-statements';
-    const stmRes = await fetch(`${crudBase}/crud?tableName=${encodeURIComponent(statementsTable)}&pagination=true&itemPerPage=1000`, { method: 'GET', cache: 'no-store' });
-    if (stmRes.ok) {
-      const data = await stmRes.json();
-      const items = (data?.items as StatementItem[] | undefined) || [];
-      for (const it of items) {
-        if (!isStatement(it)) continue;
+    try {
+      const data = await brmhExecute<{ items?: StatementItem[] }>({
+        executeType: 'crud',
+        crudOperation: 'get',
+        tableName: statementsTable,
+        pagination: 'true',
+        itemPerPage: 1000
+      });
+      const items = data.items || [];
+      const updates = items.filter(isStatement).map(async (it) => {
         const { id, s3FileUrl } = it;
         const updated = s3FileUrl.replace(oldPrefix, newPrefix);
         if (updated !== s3FileUrl) {
-          await fetch(`${crudBase}/crud?tableName=${encodeURIComponent(statementsTable)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tableName: statementsTable, key: { id }, updates: { s3FileUrl: updated, updatedAt: new Date().toISOString() } })
-          });
+          try {
+            await brmhExecute({
+              executeType: 'crud',
+              crudOperation: 'put',
+              tableName: statementsTable,
+              key: { id },
+              updates: { s3FileUrl: updated, updatedAt: new Date().toISOString() }
+            });
+          } catch (error) {
+            console.warn(`Failed to update statement ${id}:`, error);
+          }
         }
-      }
+      });
+      await Promise.all(updates);
+    } catch (error) {
+      console.warn('Failed to update statement URLs:', error);
     }
 
     return NextResponse.json({ success: true });

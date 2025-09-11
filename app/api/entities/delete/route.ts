@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { S3Client, ListObjectsV2Command, DeleteObjectCommand, type ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
+import { brmhExecute } from '@/app/lib/brmhExecute';
 
 interface DriveItem {
   id?: unknown;
@@ -27,7 +28,6 @@ export async function DELETE(request: Request) {
 
     const region = process.env.AWS_REGION || 'us-east-1';
     const bucket = process.env.BRMH_S3_BUCKET || process.env.AWS_S3_BUCKET || 'brmh';
-    const crudBase = process.env.BRMH_CRUD_API_BASE_URL || process.env.CRID_API_BASE_URL || process.env.CRUD_API_BASE_URL || 'http://localhost:5001';
 
     const prefix = `brmh-drive/users/${userId}/entities/${String(entityName).trim()}/`;
 
@@ -45,19 +45,29 @@ export async function DELETE(request: Request) {
     } while (token);
 
     // 2) Delete drive metadata records
-    const listRes = await fetch(`${crudBase}/crud?tableName=brmh-drive-files&pagination=true&itemPerPage=1000`, { method: 'GET', cache: 'no-store' });
-    if (listRes.ok) {
-      const data = await listRes.json();
-      const items = (data?.items as DriveItem[] | undefined) || [];
-      const targets = items.filter((it) => isOwnedItemWithPrefix(it, userId, prefix) || (typeof it.path === 'string' && it.path === `entities/${entityName}`));
-      for (const it of targets) {
-        await fetch(`${crudBase}/crud?tableName=brmh-drive-files`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableName: 'brmh-drive-files', id: it.id })
+    const data = await brmhExecute<{ items?: DriveItem[] }>({
+      executeType: 'crud',
+      crudOperation: 'get',
+      tableName: 'brmh-drive-files',
+      pagination: 'true',
+      itemPerPage: 1000
+    });
+    const items = data.items || [];
+    const targets = items.filter((it) => isOwnedItemWithPrefix(it, userId, prefix) || (typeof it.path === 'string' && it.path === `entities/${entityName}`));
+    
+    // Delete all targets in parallel
+    await Promise.all(targets.map(async (it) => {
+      try {
+        await brmhExecute({
+          executeType: 'crud',
+          crudOperation: 'delete',
+          tableName: 'brmh-drive-files',
+          id: it.id
         });
+      } catch (error) {
+        console.warn(`Failed to delete drive item ${it.id}:`, error);
       }
-    }
+    }));
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -65,6 +75,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Failed to delete entity' }, { status: 500 });
   }
 }
+
 
 
 
