@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { RiMenuFoldLine, RiMenuUnfoldLine, RiAddLine, RiEdit2Line, RiDeleteBin6Line, RiCheckLine, RiCloseLine } from 'react-icons/ri';
 import ConfirmEntityDeleteModal from './Modals/ConfirmEntityDeleteModal';
+import { useEntities } from '../contexts/EntityContext';
+import { useGlobalTabs } from '../contexts/GlobalTabContext';
 
 interface FileItem {
   id: string;
@@ -32,6 +34,8 @@ interface FilesSidebarProps {
 export default function FilesSidebar({ files, selectedFileId, onFileClick, statements }: FilesSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [entities, setEntities] = useState<string[]>([]);
+  const { addEntity, removeEntity, refreshEntities } = useEntities();
+  const { closeEntityTabs } = useGlobalTabs();
   const [isInlineCreating, setIsInlineCreating] = useState(false);
   const [newEntityName, setNewEntityName] = useState('');
   const [editingEntity, setEditingEntity] = useState<string | null>(null);
@@ -179,6 +183,16 @@ export default function FilesSidebar({ files, selectedFileId, onFileClick, state
                           });
                           if (!res.ok) throw new Error('create failed');
                           setEntities(prev => Array.from(new Set([...prev, cleaned])));
+                          // Add to global entities for main sidebar immediately
+                          addEntity({
+                            name: cleaned,
+                            id: `entity-${cleaned}`,
+                            createdAt: new Date().toISOString()
+                          });
+                          // Refresh global entity context to ensure consistency
+                          refreshEntities();
+                          // Dispatch event to notify other components
+                          window.dispatchEvent(new CustomEvent('entityChanged'));
                         } catch {}
                         setIsInlineCreating(false);
                         setNewEntityName('');
@@ -352,14 +366,32 @@ export default function FilesSidebar({ files, selectedFileId, onFileClick, state
           const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') || '' : '';
           try {
             setDeleting(true);
-            await fetch('/api/entities/delete', {
+            console.log(`Deleting entity: "${pendingDelete}" for userId: "${userId}"`);
+            const response = await fetch('/api/entities/delete', {
               method: 'DELETE',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userId, entityName: pendingDelete })
             });
-            setEntities(prev => prev.filter(x => x !== pendingDelete));
-          } catch {
-            // no-op
+            
+            if (response.ok) {
+              // Remove from local state
+              setEntities(prev => prev.filter(x => x !== pendingDelete));
+              // Remove from global context
+              removeEntity(`entity-${pendingDelete}`);
+              // Close any open tabs for this entity
+              closeEntityTabs(pendingDelete);
+              // Refresh global entity context to ensure consistency
+              refreshEntities();
+              // Dispatch event to notify other components
+              window.dispatchEvent(new CustomEvent('entityChanged'));
+              console.log(`Successfully deleted entity: ${pendingDelete}`);
+            } else {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Failed to delete entity');
+            }
+          } catch (error) {
+            console.error('Failed to delete entity:', error);
+            alert(`Failed to delete entity: ${error instanceof Error ? error.message : 'Unknown error'}`);
           } finally {
             setDeleting(false);
             setDeleteModalOpen(false);

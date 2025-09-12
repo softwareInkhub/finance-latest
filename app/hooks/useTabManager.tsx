@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { useGlobalTabs, GlobalTab } from '../contexts/GlobalTabContext';
 import { 
   RiDashboardLine, 
@@ -8,7 +8,8 @@ import {
   RiPriceTag3Line,
   RiAccountPinCircleLine,
   RiFileListLine,
-  RiSettingsLine
+  RiSettingsLine,
+  RiBuildingLine
 } from 'react-icons/ri';
 
 // Import your real page components
@@ -18,6 +19,7 @@ import ReportsPage from '../reports/page';
 import FilesPage from '../files/page';
 import TagsPage from '../tags/page';
 import TransactionsPage from '../transactions/page';
+import EntityTabContent from '../components/EntityTabContent';
 
 export const useTabManager = () => {
   const { addTab, setActiveTab, closeTab } = useGlobalTabs();
@@ -40,6 +42,8 @@ export const useTabManager = () => {
         return <RiAccountPinCircleLine className="w-4 h-4" />;
       case 'statements':
         return <RiFileTextLine className="w-4 h-4" />;
+      case 'entity':
+        return <RiBuildingLine className="w-4 h-4" />;
       default:
         return <RiSettingsLine className="w-4 h-4" />;
     }
@@ -189,6 +193,20 @@ export const useTabManager = () => {
     });
   }, [openTab]);
 
+  const openEntityTab = useCallback((entityName: string) => {
+    const tabId = `entity-${entityName}`;
+    
+    openTab({
+      id: tabId,
+      title: entityName,
+      type: 'entity',
+      component: (
+        <EntityTabContent entityName={entityName} tabId={tabId} />
+      ),
+      data: { entityName }
+    });
+  }, [openTab]);
+
   return {
     openTab,
     openDashboard,
@@ -202,6 +220,7 @@ export const useTabManager = () => {
     openBankTab,
     openAccountTab,
     openTransactionTab,
+    openEntityTab,
     setActiveTab,
     closeTab
   };

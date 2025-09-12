@@ -10,18 +10,18 @@ const ThemeToggle: React.FC = () => {
   return (
     <button
       onClick={toggleTheme}
-      className="relative inline-flex h-10 w-20 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+      className="relative inline-flex h-7 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
     >
       <span
-        className={`inline-flex h-8 w-8 items-center justify-center rounded-full bg-white dark:bg-gray-900 shadow-lg transform transition-transform duration-300 ${
-          theme === 'dark' ? 'translate-x-10' : 'translate-x-1'
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-full bg-white dark:bg-gray-900 shadow-lg transform transition-transform duration-300 ${
+          theme === 'dark' ? 'translate-x-7' : 'translate-x-0.5'
         }`}
       >
         {theme === 'light' ? (
-          <RiSunLine className="h-5 w-5 text-yellow-500" />
+          <RiSunLine className="h-3 w-3 text-yellow-500" />
         ) : (
-          <RiMoonLine className="h-5 w-5 text-blue-400" />
+          <RiMoonLine className="h-3 w-3 text-blue-400" />
         )}
       </span>
     </button>

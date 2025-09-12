@@ -1949,15 +1949,15 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
 
       {/* Header */}
 
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-2">
 
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
 
           <div>
 
-            <h1 className="text-3xl font-bold text-gray-900">Files</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Files</h1>
 
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-600 mt-0.5">
 
               {filteredFiles.length} {filteredFiles.length === 1 ? 'file' : 'files'} total
 
@@ -2144,7 +2144,7 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
       
       {/* Content */}
 
-      <div className="p-6">
+      <div className="p-4">
 
         {loading ? (
 
@@ -2914,11 +2914,11 @@ function UnifiedUploadModal({ isOpen, onClose, entityName, onSuccess }: { isOpen
         </div>
 
         {/* Tabs */}
-        <div className="px-6 pt-4">
-          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+        <div className="px-4 pt-2">
+          <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
             <button 
               onClick={() => setTab('bank')} 
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                 tab === 'bank' 
                   ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm' 
                   : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -2933,7 +2933,7 @@ function UnifiedUploadModal({ isOpen, onClose, entityName, onSuccess }: { isOpen
             </button>
             <button 
               onClick={() => setTab('entity')} 
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
                 tab === 'entity' 
                   ? 'bg-white dark:bg-gray-600 text-purple-600 dark:text-purple-400 shadow-sm' 
                   : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -2950,7 +2950,7 @@ function UnifiedUploadModal({ isOpen, onClose, entityName, onSuccess }: { isOpen
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4">
           {tab === 'bank' ? (
             <div className="text-center py-8">
               <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -6458,7 +6458,7 @@ const FilesPage: React.FC = () => {
 
                   key={tab.id}
 
-                  className={`flex items-center px-6 py-3 cursor-pointer border-b-2 whitespace-nowrap ${
+                  className={`flex items-center px-4 py-2 cursor-pointer border-b-2 whitespace-nowrap ${
 
                     activeTabId === tab.id 
 

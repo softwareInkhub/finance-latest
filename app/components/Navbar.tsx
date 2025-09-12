@@ -26,7 +26,7 @@ export default function Navbar({ onMobileMenuToggle, title, brandTitle, brandIco
   };
 
   return (
-    <nav className="h-16 flex items-center px-4 md:px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm transition-all duration-300">
+    <nav className="h-12 flex items-center px-4 md:px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm transition-all duration-300">
       {/* Mobile Menu Button */}
       <button 
         onClick={onMobileMenuToggle}

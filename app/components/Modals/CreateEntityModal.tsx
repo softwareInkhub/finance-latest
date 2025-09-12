@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { useEntities } from '../../contexts/EntityContext';
 
 interface CreateEntityModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ export default function CreateEntityModal({ isOpen, onClose, onCreated }: Create
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { addEntity, refreshEntities } = useEntities();
 
   const handleCreate = async () => {
     setError(null);
@@ -31,6 +33,16 @@ export default function CreateEntityModal({ isOpen, onClose, onCreated }: Create
       });
       if (!res.ok) throw new Error('Failed to create entity');
       onCreated(cleaned);
+      // Add to global entities for main sidebar immediately
+      addEntity({
+        name: cleaned,
+        id: `entity-${cleaned}`,
+        createdAt: new Date().toISOString()
+      });
+      // Refresh global entity context to ensure consistency
+      refreshEntities();
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent('entityChanged'));
       setName('');
       onClose();
     } catch {

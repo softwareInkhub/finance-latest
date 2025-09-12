@@ -119,7 +119,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
   return (
     <div className={`bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 ${className}`} style={{ lineHeight: 1 }}>
       {/* Tab Bar */}
-      <div className="flex items-center bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-1">
+      <div className="flex items-center bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-0.5">
         <div className="flex-1 flex overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <div
@@ -131,7 +131,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
               onDragEnd={handleDragEnd}
               onDrop={(e) => handleDrop(e, tab.id)}
               className={`
-                flex items-center min-w-0 max-w-xs px-3 py-0.5 border-r border-gray-200 dark:border-gray-700 cursor-pointer
+                flex items-center min-w-0 max-w-xs px-2 py-0.5 border-r border-gray-200 dark:border-gray-700 cursor-pointer
                 transition-all duration-200 ease-in-out group relative
                 ${activeTabId === tab.id 
                   ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' 
@@ -151,7 +151,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
               )}
               
               {/* Tab Title */}
-              <span className="truncate text-xs font-medium flex-1">
+              <span className="truncate text-xs font-medium flex-1 leading-tight">
                 {tab.title}
               </span>
               
@@ -184,7 +184,7 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
         
         {/* Add Tab Button */}
         <button
-          className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
+          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200"
           title="Add new tab"
           onClick={() => {
             // This would typically open a new tab or show a tab creation dialog

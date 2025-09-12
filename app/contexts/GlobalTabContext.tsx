@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode, use
 export interface GlobalTab {
   id: string;
   title: string;
-  type: 'dashboard' | 'transactions' | 'reports' | 'files' | 'banks' | 'tags' | 'accounts' | 'statements' | 'custom';
+  type: 'dashboard' | 'transactions' | 'reports' | 'files' | 'banks' | 'tags' | 'accounts' | 'statements' | 'entity' | 'custom';
   component: ReactNode;
   closable?: boolean;
   data?: Record<string, unknown>; // Additional data for the tab
@@ -21,6 +21,7 @@ interface GlobalTabContextType {
   closeAllTabs: () => void;
   closeOtherTabs: (tabId: string) => void;
   closeTabsToRight: (tabId: string) => void;
+  closeEntityTabs: (entityName: string) => void;
   duplicateTab: (tabId: string) => void;
 }
 
@@ -112,6 +113,25 @@ export const GlobalTabProvider: React.FC<GlobalTabProviderProps> = ({ children }
     });
   }, []);
 
+  const closeEntityTabs = useCallback((entityName: string) => {
+    setTabs(prevTabs => {
+      const entityTabId = `entity-${entityName}`;
+      const newTabs = prevTabs.filter(tab => tab.id !== entityTabId);
+      
+      // If we're closing the active tab, switch to another tab
+      if (activeTabId === entityTabId) {
+        if (newTabs.length > 0) {
+          // Switch to the first available tab
+          setActiveTabId(newTabs[0]?.id || null);
+        } else {
+          setActiveTabId(null);
+        }
+      }
+      
+      return newTabs;
+    });
+  }, [activeTabId]);
+
   const duplicateTab = useCallback((tabId: string) => {
     setTabs(prevTabs => {
       const originalTab = prevTabs.find(tab => tab.id === tabId);
@@ -156,6 +176,7 @@ export const GlobalTabProvider: React.FC<GlobalTabProviderProps> = ({ children }
     closeAllTabs,
     closeOtherTabs,
     closeTabsToRight,
+    closeEntityTabs,
     duplicateTab,
   };
 

@@ -4,16 +4,27 @@ import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTabManager } from '../hooks/useTabManager';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
+import { useEntities } from '../contexts/EntityContext';
 import { 
   RiDashboardLine, 
   RiBankLine, 
   RiPriceTag3Line,
   RiMenuFoldLine,
+  RiBuildingLine,
   RiMenuUnfoldLine,
   RiFileLine,
   RiBarChartLine,
   RiCloseLine
 } from 'react-icons/ri';
+import { IconType } from 'react-icons';
+
+interface MenuItem {
+  name: string;
+  path: string;
+  icon: IconType;
+  description: string;
+  isEntity?: boolean;
+}
 
 interface SidebarProps {
   onItemClick?: () => void;
@@ -28,8 +39,9 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const pathname = usePathname();
-  const { openDashboard, openBanks, openTags, openFiles, openReports } = useTabManager();
+  const { openDashboard, openBanks, openTags, openFiles, openReports, openEntityTab } = useTabManager();
   const { activeTabId, tabs } = useGlobalTabs();
+  const { entities } = useEntities();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -45,7 +57,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const menuItems = [
+  const baseMenuItems: MenuItem[] = [
     { 
       name: 'Dashboard', 
       path: '/dashboard', 
@@ -77,6 +89,17 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
       description: 'Financial reports and statements'
     },
   ];
+
+  // Add dynamic entities to menu items
+  const entityMenuItems: MenuItem[] = entities.map(entity => ({
+    name: entity.name,
+    path: `/entity/${entity.name}`,
+    icon: RiBuildingLine,
+    description: `${entity.name} entity management`,
+    isEntity: true
+  }));
+
+  const menuItems: MenuItem[] = [...baseMenuItems, ...entityMenuItems];
 
   const handleItemClick = (action: () => void) => {
     action();
@@ -173,8 +196,8 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
         </div>
 
         {/* Navigation Menu */}
-        <nav className="mt-6 px-4">
-          <div className="space-y-2">
+        <nav className="mt-4 px-3">
+          <div className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               // Get the active tab type
@@ -190,8 +213,18 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                 '/reports': 'reports'
               };
               
+              // Check if this is an entity item and if the active tab is for this entity
+              const isEntityActive = item.isEntity && activeTabType === 'entity' && 
+                                   activeTab?.data?.entityName === item.name;
+              
+              // Debug logging for entity highlighting
+              if (item.isEntity) {
+                console.log(`Entity item: ${item.name}, Active tab type: ${activeTabType}, Active tab entity: ${activeTab?.data?.entityName}, Is active: ${isEntityActive}`);
+              }
+              
               // Prioritize active tab type over pathname to avoid double highlighting
-              const isActive = activeTabType === pathToTypeMap[item.path] || 
+              const isActive = isEntityActive || 
+                             (activeTabType === pathToTypeMap[item.path]) || 
                              (activeTabType === undefined && (pathname === item.path || pathname.startsWith(item.path + '/') || (pathname === '/' && item.path === '/dashboard')));
               const isHovered = hoveredItem === item.path;
               
@@ -199,52 +232,56 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                 <button
                   key={item.path}
                   onClick={() => {
-                    const actions: { [key: string]: () => void } = {
-                      '/dashboard': openDashboard,
-                      '/banks': openBanks,
-                      '/tags': openTags,
-                      '/files': openFiles,
-                      '/reports': openReports,
-                    };
-                    handleItemClick(actions[item.path] || (() => {}));
+                    if (item.isEntity) {
+                      handleItemClick(() => openEntityTab(item.name));
+                    } else {
+                      const actions: { [key: string]: () => void } = {
+                        '/dashboard': openDashboard,
+                        '/banks': openBanks,
+                        '/tags': openTags,
+                        '/files': openFiles,
+                        '/reports': openReports,
+                      };
+                      handleItemClick(actions[item.path] || (() => {}));
+                    }
                   }}
                   onMouseEnter={() => setHoveredItem(item.path)}
                   onMouseLeave={() => setHoveredItem(null)}
                   className={`
-                    relative flex items-center p-4 rounded-2xl transition-all duration-200 ease-out group w-full
-                    transform hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]
+                    relative flex items-center p-2.5 rounded-lg transition-all duration-200 ease-out group w-full
+                    transform hover:scale-[1.01] hover:shadow-md active:scale-[0.99]
                     ${isActive 
-                      ? 'bg-gradient-to-r from-purple-50 to-purple-100/50 dark:from-purple-900/50 dark:to-purple-800/50 text-gray-900 dark:text-gray-100 shadow-md border border-purple-200/50 dark:border-purple-600/50' 
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-white/80 dark:hover:bg-gray-700/80 hover:shadow-md border border-transparent hover:border-purple-200/50 dark:hover:border-purple-600/50'
+                      ? 'bg-gradient-to-r from-purple-50 to-purple-100/50 dark:from-purple-900/50 dark:to-purple-800/50 text-gray-900 dark:text-gray-100 shadow-sm border border-purple-200/50 dark:border-purple-600/50' 
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-white/80 dark:hover:bg-gray-700/80 hover:shadow-sm border border-transparent hover:border-purple-200/50 dark:hover:border-purple-600/50'
                     }
                     ${isCollapsed && !isMobile ? 'justify-center' : ''}
                   `}
                 >
                   {/* Active indicator with rounded corners */}
                   {isActive && (
-                    <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-purple-500 to-purple-600 rounded-r-full"></div>
+                    <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-purple-500 to-purple-600 rounded-r-full"></div>
                   )}
                   
                   {/* Icon container with enhanced styling */}
                   <div className={`
-                    relative flex items-center justify-center w-8 h-8 rounded-xl mr-3 transition-all duration-200
+                    relative flex items-center justify-center w-7 h-7 rounded-lg mr-2.5 transition-all duration-200
                     ${isActive 
-                      ? 'bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-lg transform scale-110 shadow-purple-500/25' 
+                      ? 'bg-gradient-to-br from-purple-600 to-purple-700 text-white shadow-md transform scale-105 shadow-purple-500/25' 
                       : 'text-gray-500 dark:text-gray-400 group-hover:text-purple-600 bg-gray-100/50 dark:bg-gray-700/50 group-hover:bg-purple-50 dark:group-hover:bg-purple-900/50'
                     }
                     ${isCollapsed && !isMobile ? 'mr-0' : ''}
                   `}>
-                    <Icon size={16} className="transition-all duration-200 group-hover:scale-110 group-hover:rotate-3 drop-shadow-sm" />
+                    <Icon size={14} className="transition-all duration-200 group-hover:scale-110 group-hover:rotate-3 drop-shadow-sm" />
                     
                     {/* Hover effect ring - only on desktop */}
                     {isHovered && !isActive && !isMobile && (
-                      <div className="absolute inset-0 rounded-xl border-2 border-purple-200/50 animate-ping"></div>
+                      <div className="absolute inset-0 rounded-lg border-2 border-purple-200/50 animate-ping"></div>
                     )}
                   </div>
                   
                   {(!isCollapsed || isMobile) && (
                     <div className="flex-1 min-w-0 transform transition-all duration-200 overflow-hidden text-left w-full">
-                      <div className="font-semibold text-sm transition-colors duration-200 whitespace-nowrap w-full">
+                      <div className="font-medium text-sm transition-colors duration-200 whitespace-nowrap w-full">
                         {item.name}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 truncate transition-colors duration-200 group-hover:text-gray-600 dark:group-hover:text-gray-300 whitespace-nowrap w-full">
@@ -255,7 +292,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                   
                   {/* Subtle hover indicator - only on desktop */}
                   {isHovered && !isActive && !isMobile && (
-                    <div className="absolute right-2 w-1.5 h-1.5 bg-purple-400 rounded-full opacity-60 animate-pulse"></div>
+                    <div className="absolute right-1.5 w-1 h-1 bg-purple-400 rounded-full opacity-60 animate-pulse"></div>
                   )}
                 </button>
               );
