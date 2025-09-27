@@ -1,6 +1,6 @@
 # Finance App v2
 
-A comprehensive financial management application with transaction tracking, tagging, and analytics.
+A comprehensive financial management application with transaction tracking, tagging, and analytics, fully integrated with BRMH backend services.
 
 ## Features
 
@@ -11,6 +11,10 @@ A comprehensive financial management application with transaction tracking, tagg
 - **User-Specific File Storage**: Each user has their own secure folder for files
 - **PDF Reporting**: Generate detailed financial reports in PDF format
 - **Real-time Filtering**: Advanced filtering and sorting capabilities
+- **Entity Management**: Organize and manage business entities with file associations
+- **Namespace API**: Efficient data retrieval for bank-specific information
+- **Smooth Navigation**: No page refreshes when switching between banks
+- **Error Handling**: Comprehensive error handling with AbortController for network requests
 
 ## File Storage System
 
@@ -67,33 +71,26 @@ Existing users will see a migration banner that allows them to move their files 
 
 ## Getting Started
 
-1. **Environment Setup**: Configure AWS credentials and environment variables
-2. **Database Setup**: Set up DynamoDB tables for users, banks, statements, and transactions
-3. **S3 Setup**: Create S3 bucket for file storage
-4. **Install Dependencies**: Run `npm install`
-5. **Start Development**: Run `npm run dev`
+1. **Install Dependencies**: Run `npm install`
+2. **Start Development**: Run `npm run dev`
 
 ## Environment Variables
 
 ```env
-AWS_REGION=your-region
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
-AWS_S3_BUCKET=your-bucket-name
-AWS_DYNAMODB_STATEMENTS_TABLE=bank-statements
-AWS_DYNAMODB_TRANSACTIONS_TABLE=transactions
-AWS_DYNAMODB_TAGS_TABLE=tags
-USERS_TABLE=users
+# Optional: Override BRMH backend URL (defaults to https://brmh.in)
+NEXT_PUBLIC_BACKEND_URL=https://brmh.in
 ```
 
-## Migration Notes
+**Note**: No AWS credentials or setup required! All data operations are handled through BRMH backend services.
 
-If you're upgrading from a previous version:
+## Architecture
 
-1. **Backup Data**: Always backup your data before migration
-2. **Test Migration**: Test the migration process in a development environment
-3. **Monitor Progress**: Watch for any errors during migration
-4. **Verify Results**: Ensure all files are accessible after migration
+This application is fully integrated with BRMH backend services:
+
+- **Database Operations**: All CRUD operations go through `https://brmh.in/api/crud`
+- **File Operations**: All file storage goes through `https://brmh.in/drive`
+- **Authentication**: User authentication handled by BRMH backend
+- **No AWS Setup Required**: All cloud infrastructure is managed by BRMH
 
 ## Support
 

@@ -66,19 +66,17 @@ export async function GET(request: Request) {
     return NextResponse.json(result.item.cashFlowData);
 
   } catch (error: unknown) {
-    // If the table doesn't exist in this region/account, DynamoDB returns ResourceNotFoundException
+    // If the table doesn't exist, BRMH API returns appropriate error
     const err = error as { name?: string } | undefined;
     if (err?.name === 'ResourceNotFoundException') {
-      console.error('Cashflow table not found. Check TABLES.REPORTS and AWS_REGION.', {
+      console.error('Cashflow table not found. Check TABLES.REPORTS.', {
         table: TABLES.REPORTS,
-        region: process.env.AWS_REGION,
       });
       // Return null so frontend treats it as no data yet instead of a hard error
       return NextResponse.json(null);
     }
     console.error('Error fetching cashflow data:', error, {
       table: TABLES.REPORTS,
-      region: process.env.AWS_REGION,
     });
     return NextResponse.json(
       { error: 'Failed to fetch cashflow data' },

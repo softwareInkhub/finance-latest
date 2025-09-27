@@ -68,6 +68,23 @@ export default function BanksTabsClient() {
     fetchBanks();
   }, []);
 
+  // Handle URL parameters to prevent page refresh
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const bankId = urlParams.get('bankId');
+    
+    if (bankId && banks.length > 0) {
+      const bank = banks.find(b => b.id === bankId);
+      if (bank) {
+        const tabKey = `accounts-${bank.id}`;
+        if (!tabs.some(tab => tab.key === tabKey)) {
+          setTabs([...tabs, { key: tabKey, label: bank.bankName, type: 'accounts', bankId: bank.id }]);
+        }
+        setActiveTab(tabKey);
+      }
+    }
+  }, [banks, tabs]);
+
   // Fetch tags and set up event listeners
   useEffect(() => {
     const fetchTags = async () => {
@@ -231,19 +248,19 @@ export default function BanksTabsClient() {
     const tabKey = `accounts-${bank.id}`;
     if (tabs.some(tab => tab.key === tabKey)) {
       setActiveTab(tabKey);
-      router.push(`${pathname}?bankId=${bank.id}`);
+      router.replace(`${pathname}?bankId=${bank.id}`, { scroll: false });
       return;
     }
     setTabs([...tabs, { key: tabKey, label: bank.bankName, type: 'accounts', bankId: bank.id }]);
     setActiveTab(tabKey);
-    router.push(`${pathname}?bankId=${bank.id}`);
+    router.replace(`${pathname}?bankId=${bank.id}`, { scroll: false });
   };
 
   const handleAccountClick = (account: { id: string; accountHolderName: string }, bankId: string) => {
     const tabKey = `statements-${bankId}-${account.id}`;
     if (tabs.some(tab => tab.key === tabKey)) {
       setActiveTab(tabKey);
-      router.push(`${pathname}?bankId=${bankId}&accountId=${account.id}`);
+      router.replace(`${pathname}?bankId=${bankId}&accountId=${account.id}`, { scroll: false });
       return;
     }
     setTabs([...tabs, { 
@@ -255,7 +272,7 @@ export default function BanksTabsClient() {
       accountName: account.accountHolderName
     }]);
     setActiveTab(tabKey);
-    router.push(`${pathname}?bankId=${bankId}&accountId=${account.id}`);
+    router.replace(`${pathname}?bankId=${bankId}&accountId=${account.id}`, { scroll: false });
   };
 
   const handleCloseTab = (tabKey: string, e: React.MouseEvent) => {
@@ -326,12 +343,12 @@ export default function BanksTabsClient() {
           const tabKey = `accounts-${bank.id}`;
           if (tabs.some(tab => tab.key === tabKey)) {
             setActiveTab(tabKey);
-            router.push(`${pathname}?bankId=${bank.id}`);
+            router.replace(`${pathname}?bankId=${bank.id}`, { scroll: false });
             return;
           }
           setTabs([...tabs, { key: tabKey, label: bank.bankName, type: 'accounts', bankId: bank.id }]);
           setActiveTab(tabKey);
-          router.push(`${pathname}?bankId=${bank.id}`);
+          router.replace(`${pathname}?bankId=${bank.id}`, { scroll: false });
         }}
         onAccountClick={handleAccountClick}
         onBankSectionClick={(section, bankId) => {

@@ -188,7 +188,7 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
         }
       } catch (err) {
         if (isMounted && isAbortError(err)) {
-          console.debug('Bank data request aborted');
+          console.debug('Bank data request aborted - component unmounted or new request started');
           return; // Exit early for AbortError
         }
         console.error('Error fetching bank data:', err);
@@ -323,7 +323,7 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
         controller.abort();
       }
     };
-  }, []);
+  }, [bankId, bankName]);
 
   useEffect(() => {
     if (!bankId || !bankName) return;
