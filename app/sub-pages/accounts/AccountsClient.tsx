@@ -166,7 +166,12 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
     const fetchBankData = async () => {
       try {
         console.log('Fetching bank data for bankId:', bankId);
-        const response = await fetch(`/api/bank`, {
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          throw new Error('User ID not found');
+        }
+        
+        const response = await fetch(`/api/bank?userId=${userId}`, {
           signal: controller.signal
         });
         
@@ -218,7 +223,12 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
       }
 
       try {
-        const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`, {
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          throw new Error('User ID not found');
+        }
+        
+        const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}&userId=${userId}`, {
           signal: controller.signal
         });
         
@@ -270,7 +280,12 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
 
     const fetchSuperBankHeader = async () => {
       try {
-        const response = await fetch(`/api/bank-header?bankName=SUPER%20BANK`, {
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          throw new Error('User ID not found');
+        }
+        
+        const response = await fetch(`/api/bank-header?bankName=SUPER%20BANK&userId=${userId}`, {
           signal: controller.signal
         });
         
@@ -448,8 +463,18 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
     setDeleteModal(prev => ({ ...prev, loading: true }));
     const accountId = deleteModal.account.id;
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('User not logged in');
+        return;
+      }
+      
       const response = await fetch(`/api/account/${accountId}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
       });
       if (!response.ok) {
         const errorData = await response.json();

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePathname } from 'next/navigation';
 import { useTabManager } from '../hooks/useTabManager';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
+import { useEntitySync } from '../contexts/EntitySyncContext';
 import { 
   RiDashboardLine, 
   RiBankLine, 
@@ -14,6 +14,7 @@ import {
   RiBarChartLine,
   RiCloseLine
 } from 'react-icons/ri';
+
 
 interface SidebarProps {
   onItemClick?: () => void;
@@ -27,9 +28,9 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const pathname = usePathname();
-  const { openDashboard, openBanks, openTags, openFiles, openReports } = useTabManager();
+  const { openDashboard, openBanks, openTags, openFiles, openReports, openEntityTab } = useTabManager();
   const { activeTabId, tabs } = useGlobalTabs();
+  const { entities, refreshEntities } = useEntitySync();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -45,38 +46,70 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const menuItems = [
+  // Initialize entities on component mount
+  useEffect(() => {
+    refreshEntities();
+    
+    // Set up interval to refresh entities every 30 seconds
+    const interval = setInterval(refreshEntities, 30000);
+    return () => clearInterval(interval);
+  }, [refreshEntities]);
+
+  const staticMenuItems = [
     { 
       name: 'Dashboard', 
       path: '/dashboard', 
       icon: RiDashboardLine,
-      description: 'Overview and analytics'
+      description: 'Overview and analytics',
+      isEntity: false,
+      entityId: undefined
     },
     { 
       name: 'Banks', 
       path: '/banks', 
       icon: RiBankLine,
-      description: 'Bank overview and management'
+      description: 'Bank overview and management',
+      isEntity: false,
+      entityId: undefined
     },
     { 
       name: 'Tags', 
       path: '/tags', 
       icon: RiPriceTag3Line,
-      description: 'Organize with tags'
+      description: 'Organize with tags',
+      isEntity: false,
+      entityId: undefined
     },
     { 
       name: 'Files', 
       path: '/files', 
       icon: RiFileLine,
-      description: 'Upload and manage files'
+      description: 'Upload and manage files',
+      isEntity: false,
+      entityId: undefined
     },
     { 
       name: 'Reports', 
       path: '/reports', 
       icon: RiBarChartLine,
-      description: 'Financial reports and statements'
+      description: 'Financial reports and statements',
+      isEntity: false,
+      entityId: undefined
     },
   ];
+
+  // Create dynamic entity menu items
+  const entityMenuItems = entities.map(entity => ({
+    name: entity.name,
+    path: `/entity/${entity.id}`,
+    icon: RiFileLine, // You can use a different icon for entities
+    description: entity.description || 'Entity files',
+    isEntity: true,
+    entityId: entity.id
+  }));
+
+  // Combine static and dynamic menu items
+  const menuItems = [...staticMenuItems, ...entityMenuItems];
 
   const handleItemClick = (action: () => void) => {
     action();
@@ -190,23 +223,42 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                 '/reports': 'reports'
               };
               
-              // Prioritize active tab type over pathname to avoid double highlighting
-              const isActive = activeTabType === pathToTypeMap[item.path] || 
-                             (activeTabType === undefined && (pathname === item.path || pathname.startsWith(item.path + '/') || (pathname === '/' && item.path === '/dashboard')));
+              // Check if this item matches the active tab type
+              const itemType = pathToTypeMap[item.path];
+              let isActive = false;
+              
+              if (item.isEntity) {
+                // For entity items, check if the active tab is for this entity
+                isActive = activeTab?.data?.entityId === item.entityId;
+              } else {
+                // For static items, check if the active tab type matches
+                // BUT if we're in an entity tab, don't highlight the Files item
+                if (itemType === 'files' && activeTab?.data?.entityId) {
+                  isActive = false; // Don't highlight Files when in an entity tab
+                } else {
+                  isActive = activeTabType === itemType;
+                }
+              }
               const isHovered = hoveredItem === item.path;
               
               return (
                 <button
                   key={item.path}
                   onClick={() => {
-                    const actions: { [key: string]: () => void } = {
-                      '/dashboard': openDashboard,
-                      '/banks': openBanks,
-                      '/tags': openTags,
-                      '/files': openFiles,
-                      '/reports': openReports,
-                    };
-                    handleItemClick(actions[item.path] || (() => {}));
+                    if (item.isEntity && item.entityId) {
+                      // Handle entity click
+                      handleItemClick(() => openEntityTab(item.entityId!, item.name));
+                    } else {
+                      // Handle static menu items
+                      const actions: { [key: string]: () => void } = {
+                        '/dashboard': openDashboard,
+                        '/banks': openBanks,
+                        '/tags': openTags,
+                        '/files': openFiles,
+                        '/reports': openReports,
+                      };
+                      handleItemClick(actions[item.path] || (() => {}));
+                    }
                   }}
                   onMouseEnter={() => setHoveredItem(item.path)}
                   onMouseLeave={() => setHoveredItem(null)}

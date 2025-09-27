@@ -2,12 +2,6 @@
 import { useState } from 'react';
 import { RiMenuFoldLine, RiMenuUnfoldLine } from 'react-icons/ri';
 
-interface FileItem {
-  id: string;
-  fileName: string;
-  versions?: { id: string; versionName: string }[];
-}
-
 interface BankItem {
   id: string;
   fileName: string;
@@ -21,14 +15,36 @@ interface StatementItem {
   accountId: string;
 }
 
+interface EntityItem {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+
 interface FilesSidebarProps {
   files: BankItem[];
   selectedFileId: string | null;
-  onFileClick: (file: FileItem) => void;
+  onFileClick: (file: BankItem) => void;
   statements: StatementItem[];
+  entities?: EntityItem[];
+  onEntityClick?: (entity: EntityItem) => void;
+  onEntityDelete?: (entity: EntityItem) => void;
+  onAddFile?: () => void;
+  onAddEntity?: () => void;
 }
 
-export default function FilesSidebar({ files, selectedFileId, onFileClick, statements }: FilesSidebarProps) {
+export default function FilesSidebar({ 
+  files, 
+  selectedFileId, 
+  onFileClick, 
+  statements, 
+  entities = [], 
+  onEntityClick, 
+  onEntityDelete, 
+  onAddFile, 
+  onAddEntity 
+}: FilesSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
@@ -84,9 +100,22 @@ export default function FilesSidebar({ files, selectedFileId, onFileClick, state
 
           {/* Banks Section */}
           <div className="mt-4">
-            {!isCollapsed && (
-              <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2 px-3">Banks</h3>
-            )}
+            <div className="flex items-center justify-between mb-2">
+              {!isCollapsed && (
+                <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider px-3">Banks</h3>
+              )}
+              {onAddFile && (
+                <button
+                  onClick={onAddFile}
+                  className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="Add File"
+                >
+                  <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <div className="space-y-1">
               {files.map((bank) => (
                 <button
@@ -114,6 +143,69 @@ export default function FilesSidebar({ files, selectedFileId, onFileClick, state
               ))}
             </div>
           </div>
+
+          {/* Entities Section */}
+          {entities && entities.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                {!isCollapsed && (
+                  <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider px-3">Entities</h3>
+                )}
+                {onAddEntity && (
+                  <button
+                    onClick={onAddEntity}
+                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    title="Add Entity"
+                  >
+                    <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1">
+                {entities.map((entity) => (
+                  <div key={entity.id} className="flex items-center group">
+                    <button
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg w-full text-left transition-all duration-200 ${
+                        selectedFileId === entity.id 
+                          ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg' 
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                      }`}
+                      onClick={() => onEntityClick?.(entity)}
+                      title={isCollapsed ? entity.name : ""}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${
+                        selectedFileId === entity.id ? 'bg-white' : 'bg-green-500'
+                      }`}></div>
+                      {!isCollapsed && (
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm truncate">{entity.name}</div>
+                          {entity.description && (
+                            <div className="text-xs opacity-75 truncate">{entity.description}</div>
+                          )}
+                        </div>
+                      )}
+                    </button>
+                    {onEntityDelete && !isCollapsed && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEntityDelete(entity);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 transition-all"
+                        title="Delete Entity"
+                      >
+                        <svg className="w-4 h-4 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </nav>
 

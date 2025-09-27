@@ -1566,7 +1566,7 @@ export default function SuperBankPage() {
         try { eventSourceRef.current.close(); } catch { /* noop */ }
       }
 
-      const streamUrl = `/api/transactions/stream?userId=${encodeURIComponent(userId)}&limit=${limit}`;
+      const streamUrl = `/api/transactions/all?userId=${encodeURIComponent(userId)}&limit=${limit}`;
       const es = new EventSource(streamUrl);
       eventSourceRef.current = es;
 
@@ -1753,24 +1753,33 @@ export default function SuperBankPage() {
 
   // Fetch Super Bank header
   useEffect(() => {
-    fetch(`/api/bank-header?bankName=SUPER%20BANK`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && Array.isArray(data.header)) {
-          // Ensure 'Tags' is included in the header
-          const header = data.header.includes('Tags') ? data.header : [...data.header, 'Tags'];
-          setSuperHeader(header);
-          setHeaderInputs(header);
-        } else {
-          setSuperHeader(['Tags']);
-          setHeaderInputs(['Tags']);
-        }
-      });
+    const userId = localStorage.getItem('userId');
+    if (userId) {
+      fetch(`/api/bank-header?bankName=SUPER%20BANK&userId=${userId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && Array.isArray(data.header)) {
+            // Ensure 'Tags' is included in the header
+            const header = data.header.includes('Tags') ? data.header : [...data.header, 'Tags'];
+            setSuperHeader(header);
+            setHeaderInputs(header);
+          } else {
+            setSuperHeader(['Tags']);
+            setHeaderInputs(['Tags']);
+          }
+        });
+    }
   }, []);
 
   // Fetch all bank header mappings
   useEffect(() => {
-    fetch(`/api/bank`)
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      console.error('User ID not found');
+      return;
+    }
+    
+    fetch(`/api/bank?userId=${userId}`)
       .then(res => res.json())
       .then(async (banks: { id: string; bankName: string }[]) => {
 
@@ -1779,7 +1788,7 @@ export default function SuperBankPage() {
         const idNameMap: { [id: string]: string } = {};
         await Promise.all(
           banks.map(async (bank) => {
-            const res = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bank.bankName)}`);
+            const res = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bank.bankName)}&userId=${userId}`);
             const data = await res.json();
             if (data && data.mapping) {
               mappings[bank.id] = { ...data, bankName: bank.bankName };

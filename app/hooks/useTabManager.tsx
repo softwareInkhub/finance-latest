@@ -18,6 +18,7 @@ import ReportsPage from '../reports/page';
 import FilesPage from '../files/page';
 import TagsPage from '../tags/page';
 import TransactionsPage from '../transactions/page';
+import EntityFilesPage from '../components/EntityFilesPage';
 
 export const useTabManager = () => {
   const { addTab, setActiveTab, closeTab } = useGlobalTabs();
@@ -189,6 +190,18 @@ export const useTabManager = () => {
     });
   }, [openTab]);
 
+  const openEntityTab = useCallback((entityId: string, entityName: string) => {
+    const tabId = `entity-${entityId}`;
+    
+    openTab({
+      id: tabId,
+      title: entityName,
+      type: 'files',
+      component: <EntityFilesPage entityId={entityId} entityName={entityName} />,
+      data: { entityId, entityName }
+    });
+  }, [openTab]);
+
   return {
     openTab,
     openDashboard,
@@ -202,6 +215,7 @@ export const useTabManager = () => {
     openBankTab,
     openAccountTab,
     openTransactionTab,
+    openEntityTab,
     setActiveTab,
     closeTab
   };

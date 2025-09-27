@@ -1,78 +1,64 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../aws-client';
-
-
+import { brmhCrud, TABLES } from '../brmh-client';
 
 // GET /api/statements?accountId=xxx&userId=yyy&bankId=zzz
+// Now fetches from brmh-drive-files table instead of bank-statements table
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const accountId = searchParams.get('accountId');
   const userId = searchParams.get('userId');
   const bankId = searchParams.get('bankId');
   
-  if (!accountId && !bankId) {
-    return NextResponse.json({ error: 'accountId or bankId is required' }, { status: 400 });
+  if (!userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
   
   try {
-    let filterExpression = '';
-    const expressionAttributeValues: Record<string, string> = {};
+    let filterExpression = 'userId = :userId AND isFile = :isFile';
+    const expressionAttributeValues: Record<string, string | number> = {
+      ':userId': userId,
+      ':isFile': 1
+    };
     
     if (accountId) {
-      filterExpression = 'accountId = :accountId';
+      filterExpression += ' AND accountId = :accountId';
       expressionAttributeValues[':accountId'] = accountId;
     }
     
     if (bankId) {
-      if (filterExpression) {
-        filterExpression += ' AND bankId = :bankId';
-      } else {
-        filterExpression = 'bankId = :bankId';
-      }
+      filterExpression += ' AND bankId = :bankId';
       expressionAttributeValues[':bankId'] = bankId;
     }
     
-    if (userId) {
-      if (filterExpression) {
-        filterExpression += ' AND userId = :userId';
-      } else {
-        filterExpression = 'userId = :userId';
-      }
-      expressionAttributeValues[':userId'] = userId;
-    }
+    // Fetch all files from brmh-drive-files table
+    const result = await brmhCrud.scan(TABLES.BRMH_DRIVE_FILES, {
+      FilterExpression: filterExpression,
+      ExpressionAttributeValues: expressionAttributeValues,
+      itemPerPage: 1000
+    });
     
-    // Fetch all statements with pagination
-    const allStatements: Record<string, unknown>[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
+    const files = result.items || [];
     
-    while (hasMoreItems) {
-      const params: ScanCommandInput = {
-        TableName: TABLES.BANK_STATEMENTS,
-        FilterExpression: filterExpression,
-        ExpressionAttributeValues: expressionAttributeValues,
-      };
-      
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const result = await docClient.send(new ScanCommand(params));
-      const statements = result.Items || [];
-      allStatements.push(...statements);
-      
-      // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      
-      // Add a small delay to avoid overwhelming DynamoDB
-      if (hasMoreItems) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
+    // Convert to statement format for compatibility
+    const statements = files.map((file: Record<string, unknown>) => ({
+      id: file.id,
+      bankId: file.bankId || '',
+      bankName: file.bankName || '',
+      accountId: file.accountId || '',
+      accountName: file.accountName || '',
+      accountNumber: file.accountNumber || '',
+      fileName: file.name,
+      userId: file.userId,
+      fileType: file.fileType || 'Statement',
+      driveFileId: file.id,
+      createdAt: file.createdAt,
+      updatedAt: file.updatedAt,
+      size: file.size,
+      mimeType: file.mimeType,
+      tags: file.tags || []
+    }));
     
-    return NextResponse.json(allStatements);
+    return NextResponse.json(statements);
   } catch (error) {
     console.error('Error fetching statements:', error);
     return NextResponse.json({ error: 'Failed to fetch statements' }, { status: 500 });

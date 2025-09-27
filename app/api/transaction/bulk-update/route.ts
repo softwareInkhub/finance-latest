@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
 import { recomputeAndSaveTagsSummary } from '../../reports/tags-summary/aggregate';
 
 export const runtime = 'nodejs';
@@ -67,18 +66,17 @@ export async function POST(request: Request) {
           return { transactionId: update.transactionId, success: false, error: 'No fields to update' };
         }
         
-        const updateExpr = 'SET ' + updateFields.map(f => `#${f} = :${f}`).join(', ');
-        
         try {
-          await docClient.send(
-            new UpdateCommand({
-              TableName: tableName,
-              Key: { id: update.transactionId },
-              UpdateExpression: updateExpr,
-              ExpressionAttributeNames: exprAttrNames,
-              ExpressionAttributeValues: exprAttrValues,
-            })
-          );
+          // Build updates object for brmhCrud
+          const updates: Record<string, string | number | string[]> = {};
+          if (update.transactionData) {
+            Object.assign(updates, update.transactionData);
+          }
+          if (update.tags) {
+            updates.tags = update.tags;
+          }
+          
+          await brmhCrud.update(tableName, { id: update.transactionId }, updates);
           return { transactionId: update.transactionId, success: true };
         } catch (error) {
           return { transactionId: update.transactionId, success: false, error: error instanceof Error ? error.message : 'Unknown error' };

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PutCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, TABLES, getBankTransactionTable } from '../../brmh-client';
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,120 +15,91 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     tags: Array.isArray(tags) ? tags : [],
   };
 
-  await docClient.send(
-    new PutCommand({
-      TableName: TABLES.BANKS,
-      Item: bank,
-    })
-  );
+  await brmhCrud.create(TABLES.BANKS, bank);
 
   return NextResponse.json(bank);
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { userId } = await request.json();
+
+  if (!userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+  }
 
   try {
-    // Get the bankName for this bank id
-    const bankResult = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.BANKS,
-        FilterExpression: 'id = :id',
-        ExpressionAttributeValues: { ':id': id },
-      })
-    );
-    const bank = (bankResult.Items && bankResult.Items[0]) || null;
+    // Get the bankName for this bank id (user's bank only)
+    const bankResult = await brmhCrud.scan(TABLES.BANKS, {
+      FilterExpression: 'id = :id AND userId = :userId',
+      ExpressionAttributeValues: { 
+        ':id': id,
+        ':userId': userId 
+      },
+    });
+    const bank = (bankResult.items && bankResult.items[0]) || null;
     if (!bank) {
       return NextResponse.json({ error: 'Bank not found' }, { status: 404 });
     }
     const tableName = getBankTransactionTable(bank.bankName);
 
     // Find and delete all related transactions for this bank
-    const transactionResult = await docClient.send(
-      new ScanCommand({
-        TableName: tableName,
-        FilterExpression: 'bankId = :bankId',
-        ExpressionAttributeValues: {
-          ':bankId': id,
-        },
-      })
-    );
-    const relatedTransactions = transactionResult.Items || [];
+    const transactionResult = await brmhCrud.scan(tableName, {
+      FilterExpression: 'bankId = :bankId',
+      ExpressionAttributeValues: {
+        ':bankId': id,
+      },
+    });
+    const relatedTransactions = transactionResult.items || [];
     if (relatedTransactions.length > 0) {
-      const deleteTransactionPromises = relatedTransactions.map((transaction) =>
-        docClient.send(
-          new DeleteCommand({
-            TableName: tableName,
-            Key: { id: transaction.id },
-          })
-        )
+      const deleteTransactionPromises = relatedTransactions.map((transaction: { id: string }) =>
+        brmhCrud.delete(tableName, { id: transaction.id })
       );
       await Promise.all(deleteTransactionPromises);
     }
 
     // Find and delete all related statements
-    const statementResult = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.BANK_STATEMENTS,
-        FilterExpression: 'bankId = :bankId',
-        ExpressionAttributeValues: {
-          ':bankId': id,
-        },
-      })
-    );
+    const statementResult = await brmhCrud.scan(TABLES.BANK_STATEMENTS, {
+      FilterExpression: 'bankId = :bankId',
+      ExpressionAttributeValues: {
+        ':bankId': id,
+      },
+    });
 
-    const relatedStatements = statementResult.Items || [];
+    const relatedStatements = statementResult.items || [];
     console.log(`Found ${relatedStatements.length} related statements to delete`);
 
     // Delete all related statements
     if (relatedStatements.length > 0) {
-      const deleteStatementPromises = relatedStatements.map((statement) =>
-        docClient.send(
-          new DeleteCommand({
-            TableName: TABLES.BANK_STATEMENTS,
-            Key: { id: statement.id },
-          })
-        )
+      const deleteStatementPromises = relatedStatements.map((statement: { id: string }) =>
+        brmhCrud.delete(TABLES.BANK_STATEMENTS, { id: statement.id })
       );
       await Promise.all(deleteStatementPromises);
       console.log(`Successfully deleted ${relatedStatements.length} related statements`);
     }
 
     // Find and delete all related accounts
-    const accountResult = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.ACCOUNTS,
-        FilterExpression: 'bankId = :bankId',
-        ExpressionAttributeValues: {
-          ':bankId': id,
-        },
-      })
-    );
+    const accountResult = await brmhCrud.scan(TABLES.ACCOUNTS, {
+      FilterExpression: 'bankId = :bankId',
+      ExpressionAttributeValues: {
+        ':bankId': id,
+      },
+    });
 
-    const relatedAccounts = accountResult.Items || [];
+    const relatedAccounts = accountResult.items || [];
     console.log(`Found ${relatedAccounts.length} related accounts to delete`);
 
     // Delete all related accounts
     if (relatedAccounts.length > 0) {
-      const deleteAccountPromises = relatedAccounts.map((account) =>
-        docClient.send(
-          new DeleteCommand({
-            TableName: TABLES.ACCOUNTS,
-            Key: { id: account.id },
-          })
-        )
+      const deleteAccountPromises = relatedAccounts.map((account: { id: string }) =>
+        brmhCrud.delete(TABLES.ACCOUNTS, { id: account.id })
       );
       await Promise.all(deleteAccountPromises);
       console.log(`Successfully deleted ${relatedAccounts.length} related accounts`);
     }
 
     // Finally, delete the bank itself
-  await docClient.send(
-    new DeleteCommand({
-      TableName: TABLES.BANKS,
-      Key: { id },
-    })
-  );
+    await brmhCrud.delete(TABLES.BANKS, { id });
 
     return NextResponse.json({ 
       success: true, 

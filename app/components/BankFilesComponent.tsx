@@ -36,38 +36,44 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
   const [showRange, setShowRange] = useState(false);
 
   useEffect(() => {
-    if (!file?.s3FileUrl) return;
+    if (!file?.id) return;
     setLoading(true);
     setError(null);
-    const key = file.s3FileUrl.split('.amazonaws.com/')[1];
-    if (!key) {
-      setError('Invalid S3 file URL');
+
+    const userId = localStorage.getItem('userId') || '';
+    if (!userId) {
+      setError('User not found');
       setLoading(false);
       return;
     }
-    fetch('/api/statement/presign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        key,
-        userId: localStorage.getItem('userId') || ''
-      }),
-    })
+
+    // Use the new BRMH Drive download API
+    fetch(`/api/files/download?userId=${userId}&fileId=${file.id}`)
       .then(res => res.json())
-      .then(({ url, error }) => {
-        if (error || !url) throw new Error(error || 'Failed to get presigned URL');
-        return fetch(url);
+      .then((result) => {
+        if (result.error) throw new Error(result.error);
+        if (!result.downloadUrl) throw new Error('No download URL received');
+        
+        // Fetch the actual file content from the S3 URL
+        return fetch(result.downloadUrl);
       })
-      .then(res => res.text())
-      .then(csvText => {
+      .then(res => {
+        if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
+        return res.text();
+      })
+      .then((csvText) => {
         const parsed = Papa.parse<string[]>(csvText, { skipEmptyLines: true });
+        
         if (parsed.errors.length) throw new Error('Failed to parse CSV');
         setData(parsed.data as string[][]);
         setColWidths(parsed.data[0]?.map(() => 160) || []);
       })
-      .catch(() => setError('Failed to load file preview'))
+      .catch((err) => {
+        console.error('Preview error:', err);
+        setError('Failed to load file preview: ' + err.message);
+      })
       .finally(() => setLoading(false));
-  }, [file?.s3FileUrl]);
+  }, [file?.id]);
 
   // Column resize logic
   const resizingCol = useRef<number | null>(null);

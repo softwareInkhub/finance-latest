@@ -1,5 +1,4 @@
-import { ScanCommand, ScanCommandInput, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, TABLES, getBankTransactionTable } from '../../brmh-client';
 
 type TagItem = { id: string; name: string; color?: string; userId?: string };
 type TransactionItem = Record<string, unknown> & {
@@ -169,26 +168,29 @@ function extractAmountAndType(tx: TransactionItem): { amountAbs: number; crdr: '
 }
 
 export async function recomputeAndSaveTagsSummary(userId: string): Promise<void> {
-  // 1) Load all tags for this user
-  const userTags: TagItem[] = [];
-  {
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
-    while (hasMoreItems) {
-      const params: ScanCommandInput = {
-        TableName: TABLES.TAGS,
-        FilterExpression: '#userId = :userId',
-        ExpressionAttributeNames: { '#userId': 'userId' },
-        ExpressionAttributeValues: { ':userId': userId },
-      };
-      if (lastEvaluatedKey) params.ExclusiveStartKey = lastEvaluatedKey;
-      const result = await docClient.send(new ScanCommand(params));
-      userTags.push(...(result.Items as TagItem[] | undefined ?? []));
-      lastEvaluatedKey = result.LastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      if (hasMoreItems) await new Promise(r => setTimeout(r, 100));
+  try {
+    console.log(`🚀 Starting tags summary computation for user ${userId}...`);
+    
+    // 1) Load all tags for this user
+    const userTags: TagItem[] = [];
+    {
+      let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+      let hasMoreItems = true;
+      while (hasMoreItems) {
+        // Remove unused params object since we're using brmhCrud.scan directly
+        const result = await brmhCrud.scan(TABLES.TAGS, {
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: { ':userId': userId },
+          itemPerPage: 100
+        });
+        userTags.push(...(result.items as TagItem[] | undefined ?? []));
+        lastEvaluatedKey = result.lastEvaluatedKey;
+        hasMoreItems = !!lastEvaluatedKey;
+        if (hasMoreItems) await new Promise(r => setTimeout(r, 100));
+      }
     }
-  }
+    
+    console.log(`Loaded ${userTags.length} tags for user ${userId}`);
 
   const tagsById = new Map<string, TagItem>();
   const tagsByNameLower = new Map<string, TagItem>();
@@ -236,8 +238,8 @@ export async function recomputeAndSaveTagsSummary(userId: string): Promise<void>
   };
 
   // 2) Load all banks
-  const banksResult = await docClient.send(new ScanCommand({ TableName: TABLES.BANKS }));
-  const banks = (banksResult.Items || []) as Array<{ bankName?: string } & Record<string, unknown>>;
+  const banksResult = await brmhCrud.scan(TABLES.BANKS, {});
+  const banks = (banksResult.items || []) as Array<{ bankName?: string } & Record<string, unknown>>;
 
   // 3) Accumulate per-tag metrics across bank tables
   for (const bank of banks) {
@@ -248,15 +250,13 @@ export async function recomputeAndSaveTagsSummary(userId: string): Promise<void>
       let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
       let hasMoreItems = true;
       while (hasMoreItems) {
-        const params: ScanCommandInput = { 
-          TableName: tableName, 
-          FilterExpression: 'userId = :userId', 
+        // Remove unused params object since we're using brmhCrud.scan directly
+        const result = await brmhCrud.scan(tableName, {
+          FilterExpression: 'userId = :userId',
           ExpressionAttributeValues: { ':userId': userId },
-          Limit: 1000 // Limit batch size for better performance
-        };
-        if (lastEvaluatedKey) params.ExclusiveStartKey = lastEvaluatedKey;
-        const result = await docClient.send(new ScanCommand(params));
-        const txs = (result.Items || []) as TransactionItem[];
+          itemPerPage: 1000
+        });
+        const txs = (result.items || []) as TransactionItem[];
 
         for (const tx of txs) {
           const txTagsRaw = Array.isArray(tx.tags) ? tx.tags : [];
@@ -344,7 +344,7 @@ export async function recomputeAndSaveTagsSummary(userId: string): Promise<void>
           }
         }
 
-        lastEvaluatedKey = result.LastEvaluatedKey;
+        lastEvaluatedKey = result.lastEvaluatedKey;
         hasMoreItems = !!lastEvaluatedKey;
         if (hasMoreItems) await new Promise(r => setTimeout(r, 50)); // Reduced delay for better performance
       }
@@ -385,15 +385,54 @@ export async function recomputeAndSaveTagsSummary(userId: string): Promise<void>
   });
   
   const now = new Date().toISOString();
-  await docClient.send(
-    new UpdateCommand({
-      TableName: TABLES.REPORTS,
-      Key: { id: `tags_summary_${userId}` },
-      UpdateExpression: 'SET #type = :type, #uid = :uid, #tags = :tags, #u = :updatedAt, #ca = if_not_exists(#ca, :createdAt)',
-      ExpressionAttributeNames: { '#type': 'type', '#uid': 'userId', '#tags': 'tags', '#u': 'updatedAt', '#ca': 'createdAt' },
-      ExpressionAttributeValues: { ':type': 'tags_summary', ':uid': userId, ':tags': tagsSummary, ':updatedAt': now, ':createdAt': now },
-    })
-  );
+  try {
+    console.log(`💾 Attempting to save tags summary to database for user ${userId}...`);
+    console.log(`📊 Tags summary data:`, JSON.stringify(tagsSummary, null, 2));
+    
+    // Try to create the item first, then update if it exists
+    const itemData = {
+      id: `tags_summary_${userId}`,
+      type: 'tags_summary',
+      userId,
+      tags: tagsSummary,
+      updatedAt: now,
+      createdAt: now,
+    };
+    
+    // First try to get the existing item
+    try {
+      const existingItem = await brmhCrud.getItem(TABLES.REPORTS, { id: `tags_summary_${userId}` });
+      if (existingItem.item) {
+        // Item exists, update it
+        console.log(`Updating existing tags summary for user ${userId}...`);
+        const saveResult = await brmhCrud.update(TABLES.REPORTS, { id: `tags_summary_${userId}` }, {
+          type: 'tags_summary',
+          userId,
+          tags: tagsSummary,
+          updatedAt: now,
+        });
+        console.log(`Successfully updated tags summary to database:`, saveResult);
+      } else {
+        // Item doesn't exist, create it
+        console.log(`Creating new tags summary for user ${userId}...`);
+        const saveResult = await brmhCrud.create(TABLES.REPORTS, itemData);
+        console.log(`Successfully created tags summary in database:`, saveResult);
+      }
+    } catch {
+      // If getItem fails, try to create the item
+      console.log(`GetItem failed, creating new tags summary for user ${userId}...`);
+      const saveResult = await brmhCrud.create(TABLES.REPORTS, itemData);
+      console.log(`Successfully created tags summary in database:`, saveResult);
+    }
+  } catch (error) {
+    console.error(`Failed to save tags summary to database for user ${userId}:`, error);
+    throw error;
+  }
+  
+  } catch (error) {
+    console.error(`Failed to compute tags summary for user ${userId}:`, error);
+    throw error;
+  }
 }
 
 

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
 
 
 
@@ -11,23 +10,34 @@ export async function GET(request: Request) {
   const fetchAll = searchParams.get('fetchAll') === 'true';
   const limit = fetchAll ? 100000 : (searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 1000); // Fetch all if requested
   
+  if (!userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+  }
+  
   try {
-    // First, get all banks to know which tables to scan
-    const banksResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'banks',
+    // First, get user's banks and accounts to know which tables to scan and filter transactions
+    const [banksResult, accountsResult, tagsResult] = await Promise.all([
+      brmhCrud.scan('banks', {
+        FilterExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId }
+      }),
+      brmhCrud.scan('accounts', {
+        FilterExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId }
+      }),
+      brmhCrud.scan('tags', {
+        FilterExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId }
       })
-    );
-    const banks = banksResult.Items || [];
+    ]);
     
-    // Fetch all tags to populate tag data
-    const tagsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'tags',
-      })
-    );
-    const allTags = tagsResult.Items || [];
-    const tagsMap = new Map(allTags.map(tag => [tag.id, tag]));
+    const banks = banksResult.items || [];
+    const userAccounts = accountsResult.items || [];
+    const allTags = tagsResult.items || [];
+    const tagsMap = new Map(allTags.map((tag: Record<string, unknown>) => [tag.id, tag]));
+    
+    // Create a set of user's account IDs for filtering transactions
+    const userAccountIds = new Set(userAccounts.map((account: Record<string, unknown>) => account.id));
     
 
     // Fetch transactions from all bank tables with pagination
@@ -44,26 +54,20 @@ export async function GET(request: Request) {
         console.log(`Fetching transactions from bank: ${bank.bankName} (table: ${tableName})`);
         
         while (hasMoreItems && allTransactions.length < limit) {
-          const params: ScanCommandInput = {
-            TableName: tableName,
-            // Increase batch size to reduce round trips
-            Limit: Math.min(250, limit - allTransactions.length),
-          };
+          const result = await brmhCrud.scan(tableName, {
+            FilterExpression: userId ? 'userId = :userId' : undefined,
+            ExpressionAttributeValues: userId ? { ':userId': userId } : undefined,
+            itemPerPage: Math.min(250, limit - allTransactions.length)
+          });
+          const allBankTransactions = result.items || [];
           
-          if (userId) {
-            params.FilterExpression = 'userId = :userId';
-            params.ExpressionAttributeValues = { ':userId': userId };
-          }
-          
-          if (lastEvaluatedKey) {
-            params.ExclusiveStartKey = lastEvaluatedKey;
-          }
-          
-          const result = await docClient.send(new ScanCommand(params));
-          const transactions = result.Items || [];
+          // Filter transactions by user's account IDs
+          const transactions = allBankTransactions.filter((transaction: Record<string, unknown>) => 
+            userAccountIds.has(transaction.accountId)
+          );
           
           // Populate tag data for each transaction
-          const transactionsWithTags = transactions.map(transaction => {
+          const transactionsWithTags = transactions.map((transaction: Record<string, unknown>) => {
             if (Array.isArray(transaction.tags)) {
               transaction.tags = transaction.tags
                 .map(tag => typeof tag === 'string' ? tagsMap.get(tag) : tag)
@@ -82,7 +86,7 @@ export async function GET(request: Request) {
             hasMoreItems = false;
             console.log(`Reached limit of ${limit} transactions, stopping fetch`);
           } else {
-            lastEvaluatedKey = result.LastEvaluatedKey;
+            lastEvaluatedKey = result.lastEvaluatedKey;
             hasMoreItems = !!lastEvaluatedKey;
           }
           

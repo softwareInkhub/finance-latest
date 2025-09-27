@@ -239,7 +239,7 @@ const StatementPreviewModal: React.FC<StatementPreviewModalProps> = ({ isOpen, o
   const [duplicateCheckFields, setDuplicateCheckFields] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!isOpen || !s3FileUrl) return;
+    if (!isOpen || !statementId) return;
     setLoading(true);
     setError(null);
     setHeaderRow(null);
@@ -247,38 +247,40 @@ const StatementPreviewModal: React.FC<StatementPreviewModalProps> = ({ isOpen, o
     setEndRow(null);
     setShowSliceModal(false);
     setSelectionStep('header');
-    // Extract the key from the s3FileUrl (full path after .amazonaws.com/)
-    const key = s3FileUrl.split('.amazonaws.com/')[1];
-    if (!key) {
-      setError('Invalid S3 file URL');
+
+    const userId = localStorage.getItem("userId") || "";
+    if (!userId) {
+      setError('User not found');
       setLoading(false);
       return;
     }
-    fetch('/api/statement/presign', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        key,
-        userId: localStorage.getItem("userId") || ""
-      }),
-    })
+
+    // Use the new BRMH Drive download API
+    fetch(`/api/files/download?userId=${userId}&fileId=${statementId}`)
       .then(res => res.json())
-      .then(({ url, error }) => {
-        if (error || !url) throw new Error(error || 'Failed to get presigned URL');
-        return fetch(url);
+      .then((result) => {
+        if (result.error) throw new Error(result.error);
+        if (!result.downloadUrl) throw new Error('No download URL received');
+        
+        // Fetch the actual file content from the S3 URL
+        return fetch(result.downloadUrl);
       })
       .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch CSV');
+        if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
         return res.text();
       })
-      .then(csvText => {
+      .then((csvText) => {
         const parsed = Papa.parse<string[]>(csvText, { skipEmptyLines: true });
+        
         if (parsed.errors.length) throw new Error('Failed to parse CSV');
         setData(parsed.data as string[][]);
       })
-      .catch(err => setError(err.message))
+      .catch(err => {
+        console.error('Preview error:', err);
+        setError('Failed to load file preview: ' + err.message);
+      })
       .finally(() => setLoading(false));
-  }, [isOpen, s3FileUrl]);
+  }, [isOpen, statementId]);
 
   useEffect(() => {
     if (!bankId) return;

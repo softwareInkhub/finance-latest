@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
 
 export const runtime = 'nodejs';
 
@@ -15,18 +14,13 @@ export async function GET(request: Request) {
     }
 
     // First, get the statement details
-    const statementResult = await docClient.send(
-      new GetCommand({
-        TableName: 'bank-statements',
-        Key: { id: statementId },
-      })
-    );
+    const statementResult = await brmhCrud.getItem('bank-statements', { id: statementId });
 
-    if (!statementResult.Item) {
+    if (!statementResult.item) {
       return NextResponse.json({ error: 'Statement not found' }, { status: 404 });
     }
 
-    const statement = statementResult.Item;
+    const statement = statementResult.item;
     if (statement.userId !== userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
@@ -37,22 +31,19 @@ export async function GET(request: Request) {
     // Find all transactions for this statement
     let transactionResult;
     try {
-      transactionResult = await docClient.send(
-        new ScanCommand({
-          TableName: tableName,
-          FilterExpression: 'statementId = :statementId OR s3FileUrl = :s3FileUrl',
-          ExpressionAttributeValues: {
-            ':statementId': statementId,
-            ':s3FileUrl': statement.s3FileUrl,
-          },
-        })
-      );
+      transactionResult = await brmhCrud.scan(tableName, {
+        FilterExpression: 'statementId = :statementId OR s3FileUrl = :s3FileUrl',
+        ExpressionAttributeValues: {
+          ':statementId': statementId,
+          ':s3FileUrl': statement.s3FileUrl,
+        },
+      });
     } catch (error) {
       console.warn('Failed to scan transactions table:', error);
-      transactionResult = { Items: [] };
+      transactionResult = { items: [] };
     }
 
-    const transactions = transactionResult.Items || [];
+    const transactions = transactionResult.items || [];
     
     // Calculate total rows from transactions
     let totalRows = 0;

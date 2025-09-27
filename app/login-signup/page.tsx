@@ -75,9 +75,13 @@ export default function LoginSignupPage() {
       }
 
       if (data.success) {
-        if (mode === 'login' && data.user) {
+        if (mode === 'login' && data.userId) {
           // Login successful
-          login(data.user);
+          login({
+            userId: data.userId,
+            email: data.email,
+            name: data.name
+          });
           router.push('/');
         } else if (mode === 'signup') {
           // Signup successful, switch to login mode

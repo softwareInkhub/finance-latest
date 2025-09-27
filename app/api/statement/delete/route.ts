@@ -1,30 +1,24 @@
 import { NextResponse } from 'next/server';
-import { DeleteCommand, GetCommand, ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable, s3, S3_BUCKET } from '../../aws-client';
-import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
+import { brmhDrive } from '../../brmh-drive-client';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
     const { statementId, s3FileUrl, userId, bankName, batchStart, batchEnd } = await request.json();
-    if (!statementId || !s3FileUrl || !userId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    if (!statementId || !userId) {
+      return NextResponse.json({ error: 'Missing required fields: statementId and userId are required' }, { status: 400 });
     }
 
     // First, verify the statement belongs to the user
-    const statementResult = await docClient.send(
-      new GetCommand({
-        TableName: 'bank-statements',
-        Key: { id: statementId },
-      })
-    );
+    const statementResult = await brmhCrud.getItem('bank-statements', { id: statementId });
 
-    if (!statementResult.Item) {
+    if (!statementResult.item) {
       return NextResponse.json({ error: 'Statement not found' }, { status: 404 });
     }
 
-    const statement = statementResult.Item;
+    const statement = statementResult.item;
     if (statement.userId !== userId) {
       return NextResponse.json({ error: 'Unauthorized: You can only delete your own files' }, { status: 403 });
     }
@@ -38,14 +32,9 @@ export async function POST(request: Request) {
     // If still no bankName, try to get it from bankId
     if (!finalBankName && statement.bankId) {
       try {
-        const bankResult = await docClient.send(
-          new GetCommand({
-            TableName: 'banks',
-            Key: { id: statement.bankId },
-          })
-        );
-        if (bankResult.Item && bankResult.Item.bankName) {
-          finalBankName = bankResult.Item.bankName;
+        const bankResult = await brmhCrud.getItem('banks', { id: statement.bankId });
+        if (bankResult.item && bankResult.item.bankName) {
+          finalBankName = bankResult.item.bankName;
         }
       } catch (error) {
         console.warn('Failed to fetch bank name from bankId:', error);
@@ -63,7 +52,12 @@ export async function POST(request: Request) {
     
     while (hasMoreItems) {
       try {
-        const params: ScanCommandInput = {
+        const params: {
+          TableName: string;
+          FilterExpression: string;
+          ExpressionAttributeValues: Record<string, string>;
+          ExclusiveStartKey?: Record<string, unknown>;
+        } = {
           TableName: tableName,
           FilterExpression: 'statementId = :statementId OR s3FileUrl = :s3FileUrl',
           ExpressionAttributeValues: {
@@ -76,12 +70,34 @@ export async function POST(request: Request) {
           params.ExclusiveStartKey = lastEvaluatedKey;
         }
         
-        const transactionResult = await docClient.send(new ScanCommand(params));
-        const batchTransactions = transactionResult.Items || [];
+        // Build filter expression based on available data
+        let filterExpression = 'statementId = :statementId';
+        const expressionAttributeValues: Record<string, string> = {
+          ':statementId': statementId,
+        };
+        
+        // Add s3FileUrl filter if available (for legacy files)
+        if (s3FileUrl) {
+          filterExpression += ' OR s3FileUrl = :s3FileUrl';
+          expressionAttributeValues[':s3FileUrl'] = s3FileUrl;
+        }
+        
+        // Add driveFileId filter if available (for BRMH Drive files)
+        if (statement.driveFileId) {
+          filterExpression += ' OR driveFileId = :driveFileId';
+          expressionAttributeValues[':driveFileId'] = statement.driveFileId;
+        }
+
+        const transactionResult = await brmhCrud.scan(tableName, {
+          FilterExpression: filterExpression,
+          ExpressionAttributeValues: expressionAttributeValues,
+          itemPerPage: 100
+        });
+        const batchTransactions = transactionResult.items || [];
         relatedTransactions.push(...batchTransactions);
         
         // Check if there are more items to fetch
-        lastEvaluatedKey = transactionResult.LastEvaluatedKey;
+        lastEvaluatedKey = transactionResult.lastEvaluatedKey;
         hasMoreItems = !!lastEvaluatedKey;
         
         // Add a small delay to avoid overwhelming DynamoDB
@@ -101,12 +117,7 @@ export async function POST(request: Request) {
       const batchTransactions = relatedTransactions.slice(batchStart, batchEnd);
       if (batchTransactions.length > 0) {
         const deletePromises = (batchTransactions as Array<{ id: string }>).map((transaction) =>
-          docClient.send(
-            new DeleteCommand({
-              TableName: tableName,
-              Key: { id: transaction.id },
-            })
-          )
+          brmhCrud.delete(tableName, { id: transaction.id })
         );
         await Promise.all(deletePromises);
         console.log(`Successfully deleted batch ${batchStart}-${batchEnd} (${batchTransactions.length} transactions)`);
@@ -115,43 +126,30 @@ export async function POST(request: Request) {
       // Delete all related transactions (original behavior)
       if (relatedTransactions.length > 0) {
         const deletePromises = (relatedTransactions as Array<{ id: string }>).map((transaction) =>
-          docClient.send(
-            new DeleteCommand({
-              TableName: tableName,
-              Key: { id: transaction.id },
-            })
-          )
+          brmhCrud.delete(tableName, { id: transaction.id })
         );
         await Promise.all(deletePromises);
         console.log(`Successfully deleted ${relatedTransactions.length} related transactions`);
       }
     }
 
-    // Extract the key from the s3FileUrl
-    const key = s3FileUrl.split('.amazonaws.com/')[1];
-    if (!key) {
-      return NextResponse.json({ error: 'Invalid S3 file URL' }, { status: 400 });
-    }
-
-    // Delete the file from S3
-    try {
-    await s3.send(new DeleteObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: key,
-    }));
-      console.log(`Successfully deleted S3 file: ${key}`);
-    } catch (s3Error) {
-      console.warn('Failed to delete S3 file:', s3Error);
-      // Continue with statement deletion even if S3 deletion fails
+    // Delete the file from BRMH Drive if it has a driveFileId
+    if (statement.driveFileId) {
+      try {
+        await brmhDrive.deleteFile(userId, statement.driveFileId);
+        console.log(`Successfully deleted BRMH Drive file: ${statement.driveFileId}`);
+      } catch (driveError) {
+        console.warn('Failed to delete BRMH Drive file:', driveError);
+        // Continue with statement deletion even if Drive deletion fails
+      }
+    } else if (s3FileUrl) {
+      // For legacy files without driveFileId, try to extract and delete from S3
+      // This is a fallback for old files that might still be in S3
+      console.log('Legacy file detected, skipping S3 deletion (file may still exist in S3)');
     }
 
     // Delete the statement record
-    await docClient.send(
-      new DeleteCommand({
-        TableName: 'bank-statements',
-        Key: { id: statementId },
-      })
-    );
+    await brmhCrud.delete('bank-statements', { id: statementId });
 
     const deletedCount = batchStart !== undefined && batchEnd !== undefined 
       ? Math.min(batchEnd - batchStart, relatedTransactions.length - batchStart)

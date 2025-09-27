@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, PutCommand, UpdateCommand, DeleteCommand, ScanCommandInput, GetCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES, getBankTransactionTable } from '../aws-client';
+import { brmhCrud, TABLES, getBankTransactionTable } from '../brmh-client';
 import { recomputeAndSaveTagsSummary } from '../reports/tags-summary/aggregate';
 import { v4 as uuidv4 } from 'uuid';
 import { getUniqueColor, getExistingColors } from '../../utils/colorUtils';
@@ -35,17 +34,14 @@ interface CashFlowSection {
 async function updateTagNamesInCashflow(userId: string, oldTagName: string, newTagName: string): Promise<void> {
   try {
     // Get the current cashflow data
-    const cashflowResult = await docClient.send(new GetCommand({
-      TableName: TABLES.REPORTS,
-      Key: { id: `cashflow_${userId}` }
-    }));
+    const cashflowResult = await brmhCrud.getItem(TABLES.REPORTS, { id: `cashflow_${userId}` });
     
-    if (!cashflowResult.Item?.cashFlowData) {
+    if (!cashflowResult.item?.cashFlowData) {
       console.log(`No cashflow data found for user ${userId}`);
       return;
     }
     
-    const cashFlowData = cashflowResult.Item.cashFlowData;
+    const cashFlowData = cashflowResult.item.cashFlowData;
     let hasChanges = false;
     
     // Helper function to recursively update tag names
@@ -98,19 +94,10 @@ async function updateTagNamesInCashflow(userId: string, oldTagName: string, newT
     
     // Save updated cashflow data if changes were made
     if (hasChanges) {
-      await docClient.send(new UpdateCommand({
-        TableName: TABLES.REPORTS,
-        Key: { id: `cashflow_${userId}` },
-        UpdateExpression: 'SET #d = :data, #u = :updatedAt',
-        ExpressionAttributeNames: {
-          '#d': 'cashFlowData',
-          '#u': 'updatedAt',
-        },
-        ExpressionAttributeValues: {
-          ':data': updatedCashFlowData,
-          ':updatedAt': new Date().toISOString(),
-        },
-      }));
+      await brmhCrud.update(TABLES.REPORTS, { id: `cashflow_${userId}` }, {
+        cashFlowData: updatedCashFlowData,
+        updatedAt: new Date().toISOString(),
+      });
       console.log(`Successfully updated tag name from "${oldTagName}" to "${newTagName}" in cashflow reports`);
     } else {
       console.log(`No tag references found in cashflow for "${oldTagName}"`);
@@ -126,13 +113,10 @@ async function clearAllTagBasedItemsFromCashflow(userId: string) {
   try {
     console.log(`Clearing all tag-based items from cashflow for user ${userId}`);
     
-    const cashflowResult = await docClient.send(new GetCommand({
-      TableName: TABLES.REPORTS,
-      Key: { id: `cashflow_${userId}` },
-    }));
+    const cashflowResult = await brmhCrud.getItem(TABLES.REPORTS, { id: `cashflow_${userId}` });
     
-    if (cashflowResult.Item?.cashFlowData) {
-      const cashFlowData = cashflowResult.Item.cashFlowData;
+    if (cashflowResult.item?.cashFlowData) {
+      const cashFlowData = cashflowResult.item.cashFlowData;
       let hasChanges = false;
       
       // Helper function to recursively remove ALL tag-based items
@@ -193,19 +177,10 @@ async function clearAllTagBasedItemsFromCashflow(userId: string) {
      
       // Save updated cashflow data if changes were made
       if (hasChanges) {
-        await docClient.send(new UpdateCommand({
-          TableName: TABLES.REPORTS,
-          Key: { id: `cashflow_${userId}` },
-          UpdateExpression: 'SET #d = :data, #u = :updatedAt',
-          ExpressionAttributeNames: {
-            '#d': 'cashFlowData',
-            '#u': 'updatedAt',
-          },
-          ExpressionAttributeValues: {
-            ':data': updatedCashFlowData,
-            ':updatedAt': new Date().toISOString(),
-          },
-        }));
+        await brmhCrud.update(TABLES.REPORTS, { id: `cashflow_${userId}` }, {
+          cashFlowData: updatedCashFlowData,
+          updatedAt: new Date().toISOString(),
+        });
         console.log(`Successfully cleared all tag-based items from cashflow for user ${userId}`);
       } else {
         console.log(`No tag-based items found in cashflow for user ${userId}`);
@@ -228,23 +203,16 @@ export async function GET(request: Request) {
     let hasMoreItems = true;
     
     while (hasMoreItems) {
-      const params: ScanCommandInput = { TableName: TABLES.TAGS };
-      if (userId) {
-        params.FilterExpression = '#userId = :userId';
-        params.ExpressionAttributeNames = { '#userId': 'userId' };
-        params.ExpressionAttributeValues = { ':userId': userId };
-      }
-      
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const result = await docClient.send(new ScanCommand(params));
-      const tags = result.Items || [];
+      const result = await brmhCrud.scan(TABLES.TAGS, {
+        FilterExpression: userId ? 'userId = :userId' : undefined,
+        ExpressionAttributeValues: userId ? { ':userId': userId } : undefined,
+        itemPerPage: 100
+      });
+      const tags = result.items || [];
       allTags.push(...tags);
       
       // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
+      lastEvaluatedKey = result.lastEvaluatedKey;
       hasMoreItems = !!lastEvaluatedKey;
       
       // Add a small delay to avoid overwhelming DynamoDB
@@ -272,23 +240,16 @@ export async function POST(request: Request) {
     let hasMoreItems = true;
     
     while (hasMoreItems) {
-      const existingTagsParams: ScanCommandInput = {
-        TableName: TABLES.TAGS,
-        FilterExpression: '#userId = :userId',
-        ExpressionAttributeNames: { '#userId': 'userId' },
+      const existingTagsResult = await brmhCrud.scan(TABLES.TAGS, {
+        FilterExpression: 'userId = :userId',
         ExpressionAttributeValues: { ':userId': userId },
-      };
-      
-      if (lastEvaluatedKey) {
-        existingTagsParams.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const existingTagsResult = await docClient.send(new ScanCommand(existingTagsParams));
-      const batchTags = existingTagsResult.Items || [];
+        itemPerPage: 100
+      });
+      const batchTags = existingTagsResult.items || [];
       existingTags.push(...batchTags);
       
       // Check if there are more items to fetch
-      lastEvaluatedKey = existingTagsResult.LastEvaluatedKey;
+      lastEvaluatedKey = existingTagsResult.lastEvaluatedKey;
       hasMoreItems = !!lastEvaluatedKey;
       
       // Add a small delay to avoid overwhelming DynamoDB
@@ -320,7 +281,7 @@ export async function POST(request: Request) {
       userId,
       createdAt: new Date().toISOString(),
     };
-    await docClient.send(new PutCommand({ TableName: TABLES.TAGS, Item: tag }));
+    await brmhCrud.create(TABLES.TAGS, tag);
     return NextResponse.json(tag);
   } catch (error) {
     console.error('Error creating tag:', error);
@@ -338,8 +299,8 @@ export async function PUT(request: Request) {
     let tagUserId: string | undefined;
     let oldTagName: string | undefined;
     try {
-      const tagRes = await docClient.send(new GetCommand({ TableName: TABLES.TAGS, Key: { id } }));
-      const tagItem = tagRes.Item as Record<string, unknown> | undefined;
+      const tagRes = await brmhCrud.getItem(TABLES.TAGS, { id });
+      const tagItem = tagRes.item as Record<string, unknown> | undefined;
       tagUserId = typeof tagItem?.userId === 'string' ? tagItem.userId : undefined;
       oldTagName = typeof tagItem?.name === 'string' ? tagItem.name : undefined;
     } catch (error) {
@@ -347,13 +308,10 @@ export async function PUT(request: Request) {
     }
     
     // Update the tag in tags table
-    await docClient.send(new UpdateCommand({
-      TableName: TABLES.TAGS,
-      Key: { id },
-      UpdateExpression: 'SET #name = :name, #color = :color',
-      ExpressionAttributeNames: { '#name': 'name', '#color': 'color' },
-      ExpressionAttributeValues: { ':name': name, ':color': color },
-    }));
+    await brmhCrud.update(TABLES.TAGS, { id }, {
+      name,
+      color
+    });
     
     // Update tags summary and cashflow reports in brmh-fintech-user-reports table (async)
     if (typeof tagUserId === 'string' && tagUserId.length > 0 && oldTagName && oldTagName !== name) {
@@ -403,27 +361,25 @@ export async function DELETE(request: Request) {
     let tagUserId: string | undefined;
     let tagName: string | undefined;
     try {
-      const tagRes = await docClient.send(new GetCommand({ TableName: TABLES.TAGS, Key: { id } }));
-      const tagItem = tagRes.Item as Record<string, unknown> | undefined;
+      const tagRes = await brmhCrud.getItem(TABLES.TAGS, { id });
+      const tagItem = tagRes.item as Record<string, unknown> | undefined;
       tagUserId = typeof tagItem?.userId === 'string' ? tagItem.userId : undefined;
       tagName = typeof tagItem?.name === 'string' ? tagItem.name : undefined;
     } catch {}
 
     // 1. Delete the tag itself
-    await docClient.send(new DeleteCommand({ TableName: TABLES.TAGS, Key: { id } }));
+    await brmhCrud.delete(TABLES.TAGS, { id });
 
     // 2. OPTIMIZED: Only remove tag from transactions that actually have this tag
     // This is much faster than scanning all transactions
     if (typeof tagUserId === 'string' && tagUserId.length > 0) {
       // Get all banks (we'll filter by userId in the transaction scan)
-      const userBanksResult = await docClient.send(new ScanCommand({
-        TableName: TABLES.BANKS,
-        FilterExpression: '#userId = :userId',
-        ExpressionAttributeNames: { '#userId': 'userId' },
+      const userBanksResult = await brmhCrud.scan(TABLES.BANKS, {
+        FilterExpression: 'userId = :userId',
         ExpressionAttributeValues: { ':userId': tagUserId }
-      }));
+      });
       
-      const userBanks = userBanksResult.Items || [];
+      const userBanks = userBanksResult.items || [];
       
       for (const bank of userBanks) {
         const tableName = getBankTransactionTable(typeof bank.bankName === 'string' ? bank.bankName : '');
@@ -432,14 +388,12 @@ export async function DELETE(request: Request) {
           // Note: Some records store tags as an array of IDs (string[]), others as an array of objects [{id,name,color}]
           // contains() only works for exact element matches and will not match when tags are objects.
           // So we first try a targeted scan; if the table stores objects, we'll filter client-side below.
-          const transactionsWithTag = await docClient.send(new ScanCommand({
-            TableName: tableName,
-            FilterExpression: '#userId = :userId',
-            ExpressionAttributeNames: { '#userId': 'userId' },
+          const transactionsWithTag = await brmhCrud.scan(tableName, {
+            FilterExpression: 'userId = :userId',
             ExpressionAttributeValues: { ':userId': tagUserId }
-          }));
+          });
           
-          const transactionsToUpdate = transactionsWithTag.Items || [];
+          const transactionsToUpdate = transactionsWithTag.items || [];
           
           if (transactionsToUpdate.length > 0) {
             // Update transactions in batches for better performance
@@ -447,7 +401,7 @@ export async function DELETE(request: Request) {
             for (let i = 0; i < transactionsToUpdate.length; i += batchSize) {
               const batch = transactionsToUpdate.slice(i, i + batchSize);
               
-              const updatePromises = batch.map(async (tx) => {
+              const updatePromises = batch.map(async (tx: Record<string, unknown>) => {
                 if (!Array.isArray(tx.tags) || tx.tags.length === 0) return;
                 let changed = false;
                 let newTags: unknown[] = [];
@@ -463,13 +417,9 @@ export async function DELETE(request: Request) {
                 }
                 if (!changed) return; // nothing to update
 
-                await docClient.send(new UpdateCommand({
-                  TableName: tableName,
-                  Key: { id: tx.id },
-                  UpdateExpression: 'SET #tags = :tags',
-                  ExpressionAttributeNames: { '#tags': 'tags' },
-                  ExpressionAttributeValues: { ':tags': newTags },
-                }));
+                await brmhCrud.update(tableName, { id: tx.id }, {
+                  tags: newTags
+                });
               });
               
               await Promise.all(updatePromises);
@@ -490,13 +440,10 @@ export async function DELETE(request: Request) {
         try {
           console.log(`Removing cashflow items for deleted tag ${id} from user ${tagUserId}`);
           
-          const cashflowResult = await docClient.send(new GetCommand({
-            TableName: TABLES.REPORTS,
-            Key: { id: `cashflow_${tagUserId}` },
-          }));
+          const cashflowResult = await brmhCrud.getItem(TABLES.REPORTS, { id: `cashflow_${tagUserId}` });
           
-          if (cashflowResult.Item?.cashFlowData) {
-            const cashFlowData = cashflowResult.Item.cashFlowData;
+          if (cashflowResult.item?.cashFlowData) {
+            const cashFlowData = cashflowResult.item.cashFlowData;
             let hasChanges = false;
             
             // Helper function to recursively remove tag-based items
@@ -557,19 +504,10 @@ export async function DELETE(request: Request) {
            
             // Save updated cashflow data if changes were made
             if (hasChanges) {
-              await docClient.send(new UpdateCommand({
-                TableName: TABLES.REPORTS,
-                Key: { id: `cashflow_${tagUserId}` },
-                UpdateExpression: 'SET #d = :data, #u = :updatedAt',
-                ExpressionAttributeNames: {
-                  '#d': 'cashFlowData',
-                  '#u': 'updatedAt',
-                },
-                ExpressionAttributeValues: {
-                  ':data': updatedCashFlowData,
-                  ':updatedAt': new Date().toISOString(),
-                },
-              }));
+              await brmhCrud.update(TABLES.REPORTS, { id: `cashflow_${tagUserId}` }, {
+                cashFlowData: updatedCashFlowData,
+                updatedAt: new Date().toISOString(),
+              });
               console.log(`Successfully removed cashflow items for deleted tag ${id}`);
             }
           }

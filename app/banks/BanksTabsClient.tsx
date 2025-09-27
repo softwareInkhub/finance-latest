@@ -44,7 +44,14 @@ export default function BanksTabsClient() {
     const fetchBanks = async () => {
       try {
         setError(null);
-        const response = await fetch('/api/bank');
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          setError('User not logged in');
+          setIsFetching(false);
+          return;
+        }
+        
+        const response = await fetch(`/api/bank?userId=${userId}`);
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to fetch banks');
@@ -120,42 +127,39 @@ export default function BanksTabsClient() {
         setIsLoadingStats(true);
         const userId = localStorage.getItem('userId');
         if (userId && banks.length > 0) {
-          // Fetch all accounts and transactions in parallel
-          const [accountsResponse, transactionsResponse] = await Promise.all([
-            fetch(`/api/account?bankId=all&userId=${userId}`),
-            fetch(`/api/transactions/all?userId=${userId}`)
-          ]);
-
-          const allAccounts = accountsResponse.ok ? await accountsResponse.json() : [];
-          const allTransactions = transactionsResponse.ok ? await transactionsResponse.json() : [];
-
-          console.log('Fetched accounts:', allAccounts);
-          console.log('Fetched transactions:', allTransactions);
-
-          // Process data efficiently
+          // Fetch accounts and transactions for each bank individually
           const stats: { [bankId: string]: { accounts: number; transactions: number } } = {};
           
-          banks.forEach(bank => {
-            const bankAccounts = Array.isArray(allAccounts) 
-              ? allAccounts.filter((acc: { bankId: string }) => acc.bankId === bank.id)
-              : [];
-            
-            const bankTransactions = Array.isArray(allTransactions) 
-              ? allTransactions.filter((tx: { bankId: string }) => tx.bankId === bank.id)
-              : [];
-            
-            console.log(`Bank ${bank.bankName} (${bank.id}):`, {
-              accounts: bankAccounts.length,
-              transactions: bankTransactions.length,
-              accountIds: bankAccounts.map((acc: { id: string }) => acc.id),
-              transactionIds: bankTransactions.slice(0, 3).map((tx: { id: string }) => tx.id)
-            });
-            
-            stats[bank.id] = {
-              accounts: bankAccounts.length,
-              transactions: bankTransactions.length
-            };
-          });
+          // Process each bank individually to get accurate statistics
+          for (const bank of banks) {
+            try {
+              // Fetch accounts for this specific bank
+              const accountsResponse = await fetch(`/api/account?bankId=${bank.id}&userId=${userId}`);
+              const bankAccounts = accountsResponse.ok ? await accountsResponse.json() : [];
+              
+              // Fetch transactions for this specific bank
+              const transactionsResponse = await fetch(`/api/transactions/bank?bankName=${encodeURIComponent(bank.bankName)}&userId=${userId}`);
+              const bankTransactions = transactionsResponse.ok ? await transactionsResponse.json() : [];
+              
+              console.log(`Bank ${bank.bankName} (${bank.id}):`, {
+                accounts: Array.isArray(bankAccounts) ? bankAccounts.length : 0,
+                transactions: Array.isArray(bankTransactions) ? bankTransactions.length : 0,
+                accountIds: Array.isArray(bankAccounts) ? bankAccounts.map((acc: { id: string }) => acc.id) : [],
+                transactionIds: Array.isArray(bankTransactions) ? bankTransactions.slice(0, 3).map((tx: { id: string }) => tx.id) : []
+              });
+              
+              stats[bank.id] = {
+                accounts: Array.isArray(bankAccounts) ? bankAccounts.length : 0,
+                transactions: Array.isArray(bankTransactions) ? bankTransactions.length : 0
+              };
+            } catch (error) {
+              console.error(`Error fetching stats for bank ${bank.bankName}:`, error);
+              stats[bank.id] = {
+                accounts: 0,
+                transactions: 0
+              };
+            }
+          }
           
           setBankStats(stats);
         }
@@ -181,12 +185,18 @@ export default function BanksTabsClient() {
     }
     setError(null);
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('User not logged in');
+        return;
+      }
+      
       const response = await fetch('/api/bank', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ bankName, tags }),
+        body: JSON.stringify({ bankName, tags, userId }),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -272,8 +282,18 @@ export default function BanksTabsClient() {
       return;
     }
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('User not logged in');
+        return;
+      }
+      
       const response = await fetch(`/api/bank/${bankId}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
       });
       if (!response.ok) throw new Error('Failed to delete bank');
       setBanks(prev => prev.filter(b => b.id !== bankId));

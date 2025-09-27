@@ -1,30 +1,32 @@
 import { NextResponse } from 'next/server';
-import { PutCommand, ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../aws-client';
+import { brmhCrud, TABLES } from '../brmh-client';
 import { v4 as uuidv4 } from 'uuid';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const userId = searchParams.get('userId');
+  
+  if (!userId) {
+    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+  }
+  
   try {
-    // Fetch all banks with pagination
+    // Fetch banks for specific user only
     const allBanks: Record<string, unknown>[] = [];
     let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
     let hasMoreItems = true;
     
     while (hasMoreItems) {
-      const params: ScanCommandInput = {
-        TableName: TABLES.BANKS,
-      };
-      
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const result = await docClient.send(new ScanCommand(params));
-      const banks = result.Items || [];
+      const result = await brmhCrud.scan(TABLES.BANKS, { 
+        FilterExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        itemPerPage: 100 
+      });
+      const banks = result.items || [];
       allBanks.push(...banks);
       
       // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
+      lastEvaluatedKey = result.lastEvaluatedKey;
       hasMoreItems = !!lastEvaluatedKey;
       
       // Add a small delay to avoid overwhelming DynamoDB
@@ -45,11 +47,18 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { bankName, tags } = await request.json();
+    const { bankName, tags, userId } = await request.json();
 
     if (!bankName) {
       return NextResponse.json(
         { error: 'Bank name is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'userId is required' },
         { status: 400 }
       );
     }
@@ -59,16 +68,12 @@ export async function POST(request: Request) {
       id,
       bankName,
       tags: Array.isArray(tags) ? tags : [],
+      userId, // Associate bank with user
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    await docClient.send(
-      new PutCommand({
-        TableName: TABLES.BANKS,
-        Item: bank,
-      })
-    );
+    await brmhCrud.create(TABLES.BANKS, bank);
 
     return NextResponse.json(bank);
   } catch (error) {

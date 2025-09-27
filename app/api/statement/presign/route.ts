@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { s3, S3_BUCKET } from '../../aws-client';
+import { brmhDrive } from '../../brmh-drive-client';
 
 export async function POST(request: Request) {
   try {
-    const { key } = await request.json();
-    if (!key) {
-      return NextResponse.json({ error: 'Missing key' }, { status: 400 });
+    const { fileId, key } = await request.json();
+    
+    // Support both fileId (new) and key (legacy) parameters
+    const targetFileId = fileId || key;
+    if (!targetFileId) {
+      return NextResponse.json({ error: 'Missing fileId or key' }, { status: 400 });
     }
-    const command = new GetObjectCommand({
-      Bucket: S3_BUCKET,
-      Key: key,
-    });
-    const url = await getSignedUrl(s3, command, { expiresIn: 60 }); // 1 minute expiry
+    
+    // Generate download URL using BRMH Drive
+    const result = await brmhDrive.downloadFile('default-user', targetFileId);
+    const url = result.url;
     return NextResponse.json({ url });
   } catch (error) {
-    console.error('Error generating presigned URL:', error);
-    return NextResponse.json({ error: 'Failed to generate presigned URL' }, { status: 500 });
+    console.error('Error generating download URL:', error);
+    return NextResponse.json({ error: 'Failed to generate download URL' }, { status: 500 });
   }
 } 

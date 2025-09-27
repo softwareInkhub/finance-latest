@@ -2288,8 +2288,8 @@ export default function SuperBankPage() {
         
         // Loading progress removed - using streaming instead
         
-        // Use the new streaming API
-        fetch(`/api/transactions/stream?userId=${userId}&limit=10000`, {
+        // Use the transactions/all API instead of the deleted stream API
+        fetch(`/api/transactions/all?userId=${userId}&limit=10000`, {
           signal: controller.signal,
         })
           .then((res) => {
@@ -2298,86 +2298,21 @@ export default function SuperBankPage() {
               throw new Error(`HTTP error! status: ${res.status}`);
             }
             
-            const reader = res.body?.getReader();
-            const decoder = new TextDecoder();
+            return res.json();
+          })
+          .then((data) => {
+            if (!isComponentMounted) return; // Don't process if unmounted
             
-            if (!reader) {
-              throw new Error('No response body');
+            console.log(`Fetched ${data.length} transactions from API`);
+            
+            if (Array.isArray(data)) {
+              setTransactions(data);
+              setError(null);
+              setLoading(false);
+              isStreamingCompleted = true;
+            } else {
+              throw new Error('Invalid response format');
             }
-            
-            let buffer = '';
-            
-            const processStream = async () => {
-              try {
-                let streamingCompleted = false;
-                while (true && !streamingCompleted) {
-                  const { done, value } = await reader.read();
-                  
-                  if (done) break;
-                  
-                  buffer += decoder.decode(value, { stream: true });
-                  const lines = buffer.split('\n');
-                  buffer = lines.pop() || ''; // Keep incomplete line in buffer
-                  
-                  for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                      try {
-                        const data = JSON.parse(line.slice(6));
-                        
-                        switch (data.type) {
-                          case 'status':
-                            // Status updates handled by streaming
-                            break;
-                            
-                          case 'progress':
-                            // Progress updates handled by streaming
-                            break;
-                            
-                          case 'transaction':
-                            if (isComponentMounted) {
-                              setTransactions(prev => [...prev, data.data]);
-                            }
-                            break;
-                            
-                          case 'complete':
-                            if (isComponentMounted) {
-                              console.log(`Streaming completed: ${data.totalTransactions} transactions`);
-                              setError(null);
-                              setLoading(false); // Stop loading when complete
-                              streamingCompleted = true; // Mark streaming as completed
-                              isStreamingCompleted = true; // Mark global streaming as completed
-                            }
-                            break;
-                            
-                          case 'error':
-                            if (isComponentMounted) {
-                              console.warn('Streaming error:', data.message);
-                            }
-                            break;
-                        }
-                      } catch (parseError) {
-                        console.warn('Failed to parse streaming data:', parseError);
-                      }
-                    }
-                  }
-                }
-              } catch (streamError) {
-                if (isComponentMounted) {
-                  console.error('Streaming error:', streamError);
-                  setError(`Streaming error: ${streamError instanceof Error ? streamError.message : 'Unknown error'}`);
-                }
-              } finally {
-                if (isComponentMounted) {
-                  setLoading(false);
-                }
-                // Clear any pending timeouts
-                if (timeoutId) {
-                  clearTimeout(timeoutId);
-                }
-              }
-            };
-            
-            processStream();
           })
           .catch((error) => {
             if (!isComponentMounted) return; // Don't process if unmounted
@@ -2479,7 +2414,13 @@ export default function SuperBankPage() {
 
   // Fetch Super Bank header
   useEffect(() => {
-    fetch(`/api/bank-header?bankName=SUPER%20BANK`)
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      console.error('User ID not found');
+      return;
+    }
+    
+    fetch(`/api/bank-header?bankName=SUPER%20BANK&userId=${userId}`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
@@ -2507,7 +2448,13 @@ export default function SuperBankPage() {
 
   // Fetch all bank header mappings
   useEffect(() => {
-    fetch(`/api/bank`)
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      console.error('User ID not found');
+      return;
+    }
+    
+    fetch(`/api/bank?userId=${userId}`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
@@ -2521,7 +2468,7 @@ export default function SuperBankPage() {
         const idNameMap: { [id: string]: string } = {};
         await Promise.all(
           banks.map(async (bank) => {
-            const res = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bank.bankName)}`);
+            const res = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bank.bankName)}&userId=${userId}`);
             const data = await res.json();
             if (data && data.mapping) {
               mappings[bank.id] = { ...data, bankName: bank.bankName };
@@ -3630,10 +3577,17 @@ export default function SuperBankPage() {
       headerArr.push('Tags');
     }
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setHeaderError('User not logged in');
+        setHeaderLoading(false);
+        return;
+      }
+      
       const res = await fetch("/api/bank-header", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankName: "SUPER BANK", bankId: null, header: headerArr })
+        body: JSON.stringify({ bankName: "SUPER BANK", bankId: null, header: headerArr, userId })
       });
       if (!res.ok) throw new Error("Failed to save header");
       setSuperHeader(headerArr);

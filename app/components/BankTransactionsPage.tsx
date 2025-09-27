@@ -417,16 +417,19 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
   useEffect(() => {
     // Fetch and set the header order from the bank/account when transactions tab is active
     if (bankName) {
-      fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`)
-        .then(res => res.json())
-        .then(data => {
-          const headerOrder = Array.isArray(data.header) ? data.header : [];
-          // Find all keys in filtered transactions
-          const allKeys = Array.from(new Set(filteredTransactions.flatMap(tx => Object.keys(tx)))).filter(key => key !== 'id' && key !== 'transactionData');
-          // Append any extra fields not in the header
-          const extraFields = allKeys.filter(k => !headerOrder.includes(k));
-          setTransactionHeaders([...headerOrder, ...extraFields]);
-        });
+      const userId = localStorage.getItem('userId');
+      if (userId) {
+        fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}&userId=${userId}`)
+          .then(res => res.json())
+          .then(data => {
+            const headerOrder = Array.isArray(data.header) ? data.header : [];
+            // Find all keys in filtered transactions
+            const allKeys = Array.from(new Set(filteredTransactions.flatMap(tx => Object.keys(tx)))).filter(key => key !== 'id' && key !== 'transactionData');
+            // Append any extra fields not in the header
+            const extraFields = allKeys.filter(k => !headerOrder.includes(k));
+            setTransactionHeaders([...headerOrder, ...extraFields]);
+          });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bankName, filteredTransactions.length]);

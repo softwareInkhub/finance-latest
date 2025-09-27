@@ -66,7 +66,12 @@ export default function TagTransactionsPage() {
         setTransactions(tagTransactions);
 
         // Fetch bank names
-        const banksRes = await fetch('/api/bank');
+        if (!userId) {
+          console.error('User ID not found');
+          return;
+        }
+        
+        const banksRes = await fetch(`/api/bank?userId=${userId}`);
         const banksData = await banksRes.json();
         
         if (Array.isArray(banksData)) {

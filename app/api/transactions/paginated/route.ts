@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../../aws-client';
+import { brmhCrud, TABLES } from '../../brmh-client';
 
 export async function GET(request: Request) {
   try {
@@ -41,10 +40,14 @@ export async function GET(request: Request) {
     }
 
     // Fetch transactions with pagination
-    const result = await docClient.send(new ScanCommand(scanParams));
+    const result = await brmhCrud.scan(TABLES.BANK_STATEMENTS, {
+      FilterExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId },
+      itemPerPage: limit
+    });
     
-    const transactions = result.Items || [];
-    const hasMore = !!result.LastEvaluatedKey;
+    const transactions = result.items || [];
+    const hasMore = !!result.lastEvaluatedKey;
 
     // Sort transactions by date (most recent first)
     const sortedTransactions = transactions.sort((a: Record<string, unknown>, b: Record<string, unknown>) => 
@@ -57,7 +60,7 @@ export async function GET(request: Request) {
         page,
         limit,
         hasMore,
-        lastKey: hasMore ? encodeURIComponent(JSON.stringify(result.LastEvaluatedKey)) : null,
+        lastKey: hasMore ? encodeURIComponent(JSON.stringify(result.lastEvaluatedKey)) : null,
         totalLoaded: transactions.length,
       }
     });

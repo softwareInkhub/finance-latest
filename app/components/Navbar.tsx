@@ -7,7 +7,6 @@ import {
   RiUserLine
 } from 'react-icons/ri';
 import { useAuth } from '../hooks/useAuth';
-import ThemeToggle from './ThemeToggle';
 
 interface NavbarProps {
   onMobileMenuToggle?: () => void;
@@ -55,9 +54,6 @@ export default function Navbar({ onMobileMenuToggle, title, brandTitle, brandIco
       
       {/* Right Side Controls */}
       <div className="flex items-center space-x-2 md:space-x-4">
-        {/* Theme Toggle */}
-        <ThemeToggle />
-        
         {/* Notifications */}
         <button 
           className="p-2.5 rounded-xl hover:bg-gray-100/80 dark:hover:bg-gray-800/80 focus:ring-2 focus:ring-purple-400 transition-all duration-200 relative group shadow-sm transform hover:scale-105"

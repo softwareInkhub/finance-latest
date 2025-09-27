@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
 
 // GET /api/dashboard/summary?userId=xxx
 export async function GET(request: Request) {
@@ -13,34 +12,25 @@ export async function GET(request: Request) {
   
   try {
     // Get all banks
-    const banksResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'banks',
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId }
-      })
-    );
-    const banks = banksResult.Items || [];
+    const banksResult = await brmhCrud.scan('banks', {
+      FilterExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId }
+    });
+    const banks = banksResult.items || [];
     
     // Get all accounts
-    const accountsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'accounts',
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId }
-      })
-    );
-    const accounts = accountsResult.Items || [];
+    const accountsResult = await brmhCrud.scan('accounts', {
+      FilterExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId }
+    });
+    const accounts = accountsResult.items || [];
     
     // Get all statements
-    const statementsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'statements',
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId }
-      })
-    );
-    const statements = statementsResult.Items || [];
+    const statementsResult = await brmhCrud.scan('statements', {
+      FilterExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId }
+    });
+    const statements = statementsResult.items || [];
     
     // Get transaction counts and recent transactions (limited to 50 for dashboard)
     let totalTransactions = 0;
@@ -51,29 +41,22 @@ export async function GET(request: Request) {
       
       try {
         // Get transaction count for this bank
-        const countParams: ScanCommandInput = {
-          TableName: tableName,
+        const countResult = await brmhCrud.scan(tableName, {
           FilterExpression: 'userId = :userId',
-          ExpressionAttributeValues: { ':userId': userId },
-          Select: 'COUNT'
-        };
-        
-        const countResult = await docClient.send(new ScanCommand(countParams));
-        totalTransactions += countResult.Count || 0;
+          ExpressionAttributeValues: { ':userId': userId }
+        });
+        totalTransactions += countResult.count || 0;
         
         // Get recent transactions for this bank (limit 10 per bank)
-        const recentParams: ScanCommandInput = {
-          TableName: tableName,
+        const recentResult = await brmhCrud.scan(tableName, {
           FilterExpression: 'userId = :userId',
           ExpressionAttributeValues: { ':userId': userId },
-          Limit: 10
-        };
-        
-        const recentResult = await docClient.send(new ScanCommand(recentParams));
-        const bankRecentTransactions = recentResult.Items || [];
+          itemPerPage: 10
+        });
+        const bankRecentTransactions = recentResult.items || [];
         
         // Add bank name to each transaction for context
-        const transactionsWithBank = bankRecentTransactions.map(transaction => ({
+        const transactionsWithBank = bankRecentTransactions.map((transaction: Record<string, unknown>) => ({
           ...transaction,
           bankName: bank.bankName
         }));
@@ -103,19 +86,19 @@ export async function GET(request: Request) {
       totalStatements: statements.length,
       totalTransactions,
       recentTransactions: sortedRecentTransactions,
-      banks: banks.map(bank => ({
+      banks: banks.map((bank: Record<string, unknown>) => ({
         id: bank.id,
         bankName: bank.bankName,
         createdAt: bank.createdAt
       })),
-      accounts: accounts.map(account => ({
+      accounts: accounts.map((account: Record<string, unknown>) => ({
         id: account.id,
         accountHolderName: account.accountHolderName,
         accountNumber: account.accountNumber,
         bankId: account.bankId,
         createdAt: account.createdAt
       })),
-      statements: statements.map(statement => ({
+      statements: statements.map((statement: Record<string, unknown>) => ({
         id: statement.id,
         fileName: statement.fileName,
         accountId: statement.accountId,

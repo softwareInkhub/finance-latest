@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
 
 // GET /api/transactions/bank?bankName=xxx&userId=yyy
 export async function GET(request: Request) {
@@ -20,8 +19,13 @@ export async function GET(request: Request) {
     // Get bank-specific table name
     const tableName = getBankTransactionTable(bankName);
     
-    const filterExpression = 'userId = :userId';
-    const expressionAttributeValues: Record<string, string> = { ':userId': userId };
+    // First, get user's accounts to filter transactions
+    const accountsResult = await brmhCrud.scan('accounts', {
+      FilterExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId }
+    });
+    const userAccounts = accountsResult.items || [];
+    const userAccountIds = new Set(userAccounts.map((account: Record<string, unknown>) => account.id));
 
     // Fetch all transactions with pagination
     const allTransactions: Record<string, unknown>[] = [];
@@ -29,40 +33,35 @@ export async function GET(request: Request) {
     let hasMoreItems = true;
     
     while (hasMoreItems) {
-      const params: ScanCommandInput = {
-        TableName: tableName,
-        FilterExpression: filterExpression,
-        ExpressionAttributeValues: expressionAttributeValues,
-        // Higher page size to reduce round trips
-        Limit: 250,
-      };
+      const result = await brmhCrud.scan(tableName, {
+        itemPerPage: 250
+      });
+      const allBankTransactions = result.items || [];
       
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
+      // Filter transactions by user's account IDs
+      const transactions = allBankTransactions.filter((transaction: Record<string, unknown>) => 
+        userAccountIds.has(transaction.accountId)
+      );
       
-      const result = await docClient.send(new ScanCommand(params));
-      const transactions = result.Items || [];
       allTransactions.push(...transactions);
       
       // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
+      lastEvaluatedKey = result.lastEvaluatedKey;
       hasMoreItems = !!lastEvaluatedKey;
       
       // No artificial delay; let AWS SDK handle throttling/backoff
     }
 
-    // Fetch all tags to populate tag data
-    const tagsResult = await docClient.send(
-      new ScanCommand({
-        TableName: 'tags',
-      })
-    );
-    const allTags = tagsResult.Items || [];
-    const tagsMap = new Map(allTags.map(tag => [tag.id, tag]));
+    // Fetch user's tags only to populate tag data
+    const tagsResult = await brmhCrud.scan('tags', {
+      FilterExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId }
+    });
+    const allTags = tagsResult.items || [];
+    const tagsMap = new Map(allTags.map((tag: Record<string, unknown>) => [tag.id, tag]));
 
     // Populate tag data for each transaction (handle both string IDs and full objects)
-    const transactions = allTransactions.map(transaction => {
+    const transactions = allTransactions.map((transaction: Record<string, unknown>) => {
       if (Array.isArray(transaction.tags)) {
         transaction.tags = transaction.tags
           .map(tag => typeof tag === 'string' ? tagsMap.get(tag) : tag)

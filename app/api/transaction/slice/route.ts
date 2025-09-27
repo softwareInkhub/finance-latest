@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PutCommand, ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
 import { v4 as uuidv4 } from 'uuid';
 import Papa from 'papaparse';
 
@@ -27,22 +26,16 @@ export async function POST(request: Request) {
     let hasMoreItems = true;
     
     while (hasMoreItems) {
-      const params: ScanCommandInput = {
-        TableName: tableName,
+      const existingResult = await brmhCrud.scan(tableName, {
         FilterExpression: 'accountId = :accountId',
         ExpressionAttributeValues: { ':accountId': accountId },
-      };
-      
-      if (lastEvaluatedKey) {
-        params.ExclusiveStartKey = lastEvaluatedKey;
-      }
-      
-      const existingResult = await docClient.send(new ScanCommand(params));
-      const batchItems = (existingResult.Items || []) as Record<string, string>[];
+        itemPerPage: 100
+      });
+      const batchItems = (existingResult.items || []) as Record<string, string>[];
       existing.push(...batchItems);
       
       // Check if there are more items to fetch
-      lastEvaluatedKey = existingResult.LastEvaluatedKey;
+      lastEvaluatedKey = existingResult.lastEvaluatedKey;
       hasMoreItems = !!lastEvaluatedKey;
       
       // Add a small delay to avoid overwhelming DynamoDB
@@ -96,10 +89,7 @@ export async function POST(request: Request) {
       cleaned['s3FileUrl'] = s3FileUrl || '';
       cleaned['createdAt'] = now;
       cleaned['id'] = uuidv4();
-      return docClient.send(new PutCommand({
-        TableName: tableName,
-        Item: cleaned,
-      }));
+      return brmhCrud.create(tableName, cleaned);
     });
     await Promise.all(putPromises);
     console.log(`Saved ${rows.length} transactions to ${tableName}`);

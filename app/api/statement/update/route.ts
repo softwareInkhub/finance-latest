@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient } from '../../aws-client';
+import { brmhCrud } from '../../brmh-client';
 
 export const runtime = 'nodejs';
 
@@ -12,16 +11,11 @@ export async function POST(request: Request) {
     }
 
     // Fetch the statement to verify ownership and get bank info
-    const statementResult = await docClient.send(
-      new GetCommand({
-        TableName: 'bank-statements',
-        Key: { id: statementId },
-      })
-    );
-    if (!statementResult.Item) {
+    const statementResult = await brmhCrud.getItem('bank-statements', { id: statementId });
+    if (!statementResult.item) {
       return NextResponse.json({ error: 'Statement not found' }, { status: 404 });
     }
-    const statement = statementResult.Item;
+    const statement = statementResult.item;
     if (statement.userId !== userId) {
       return NextResponse.json({ error: 'Unauthorized: You can only edit your own files' }, { status: 403 });
     }
@@ -34,14 +28,9 @@ export async function POST(request: Request) {
     // If still no bankName, try to get it from bankId
     if (!finalBankName && statement.bankId) {
       try {
-        const bankResult = await docClient.send(
-          new GetCommand({
-            TableName: 'banks',
-            Key: { id: statement.bankId },
-          })
-        );
-        if (bankResult.Item && bankResult.Item.bankName) {
-          finalBankName = bankResult.Item.bankName;
+        const bankResult = await brmhCrud.getItem('banks', { id: statement.bankId });
+        if (bankResult.item && bankResult.item.bankName) {
+          finalBankName = bankResult.item.bankName;
         }
       } catch (error) {
         console.warn('Failed to fetch bank name from bankId:', error);
@@ -49,23 +38,11 @@ export async function POST(request: Request) {
     }
 
     // Update the statement record
-    await docClient.send(
-      new UpdateCommand({
-        TableName: 'bank-statements',
-        Key: { id: statementId },
-        UpdateExpression: 'SET #fileName = :fileName, #bankName = :bankName, #updatedAt = :updatedAt',
-        ExpressionAttributeNames: {
-          '#fileName': 'fileName',
-          '#bankName': 'bankName',
-          '#updatedAt': 'updatedAt',
-        },
-        ExpressionAttributeValues: {
-          ':fileName': fileName,
-          ':bankName': finalBankName || '',
-          ':updatedAt': new Date().toISOString(),
-        },
-      })
-    );
+    await brmhCrud.update('bank-statements', { id: statementId }, {
+      fileName,
+      bankName: finalBankName || '',
+      updatedAt: new Date().toISOString(),
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, getBankTransactionTable } from '../../aws-client';
+import { brmhCrud, getBankTransactionTable } from '../../brmh-client';
 import { recomputeAndSaveTagsSummary } from '../../reports/tags-summary/aggregate';
 
 export const runtime = 'nodejs';
@@ -36,16 +35,19 @@ export async function POST(request: Request) {
       exprAttrNames['#tags'] = 'tags';
       exprAttrValues[':tags'] = tagIds;
     }
-    const updateExpr = 'SET ' + updateFields.map(f => `#${f} = :${f}`).join(', ');
-    await docClient.send(
-      new UpdateCommand({
-        TableName: tableName,
-        Key: { id: transactionId },
-        UpdateExpression: updateExpr,
-        ExpressionAttributeNames: exprAttrNames,
-        ExpressionAttributeValues: exprAttrValues,
-      })
-    );
+    // Build updates object for brmhCrud
+    const updates: Record<string, string | number | string[]> = {};
+    if (transactionData) {
+      Object.assign(updates, transactionData);
+    }
+    if (tags) {
+      const tagIds = Array.isArray(tags) 
+        ? tags.map(tag => typeof tag === 'string' ? tag : tag.id).filter(Boolean)
+        : [];
+      updates.tags = tagIds;
+    }
+    
+    await brmhCrud.update(tableName, { id: transactionId }, updates);
     // Fire-and-forget recompute of user tag summary if userId is present in transactionData
     try {
       const userId = (transactionData && (transactionData as Record<string, unknown>).userId) as string | undefined;

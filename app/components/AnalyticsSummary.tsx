@@ -127,7 +127,13 @@ const AnalyticsSummary: React.FC<AnalyticsSummaryProps> = ({
           // Fetch bank information first
           const bankMap: { [bankId: string]: string } = {};
           try {
-            const bankRes = await fetch('/api/bank');
+            const userId = localStorage.getItem('userId');
+            if (!userId) {
+              console.error('User ID not found');
+              return;
+            }
+            
+            const bankRes = await fetch(`/api/bank?userId=${userId}`);
             if (bankRes.ok) {
               const banks = await bankRes.json();
               console.log('Fetched banks:', banks);

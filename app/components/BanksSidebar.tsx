@@ -47,9 +47,12 @@ function BanksSidebar({
   const pathname = usePathname();
 
   useEffect(() => {
-    fetch('/api/bank')
-      .then(res => res.json())
-      .then(data => setBanks(Array.isArray(data) ? data : []));
+    const userId = localStorage.getItem('userId');
+    if (userId) {
+      fetch(`/api/bank?userId=${userId}`)
+        .then(res => res.json())
+        .then(data => setBanks(Array.isArray(data) ? data : []));
+    }
   }, []);
 
   // Fetch accounts for a bank when expanded

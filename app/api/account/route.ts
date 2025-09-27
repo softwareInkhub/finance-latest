@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PutCommand, ScanCommand, ScanCommandInput } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../aws-client';
+import { brmhCrud, TABLES } from '../brmh-client';
 import { v4 as uuidv4 } from 'uuid';
 
 
@@ -15,43 +14,48 @@ export async function GET(request: Request) {
   if (accountId) {
     // Fetch a single account by id
     try {
-      const result = await docClient.send(
-        new ScanCommand({
-          TableName: TABLES.ACCOUNTS,
-          FilterExpression: 'id = :id',
-          ExpressionAttributeValues: { ':id': accountId },
-        })
-      );
-      return NextResponse.json(result.Items?.[0] || {});
+      const result = await brmhCrud.scan(TABLES.ACCOUNTS, {
+        FilterExpression: 'id = :id',
+        ExpressionAttributeValues: { ':id': accountId },
+      });
+      return NextResponse.json(result.items?.[0] || {});
     } catch (error) {
       console.error('Error fetching account by id:', error);
       return NextResponse.json({ error: 'Failed to fetch account' }, { status: 500 });
     }
   }
   
-  if (!bankId && bankId !== 'all') {
+  // If no bankId provided, fetch all accounts for the user
+  if (!bankId && userId) {
+    try {
+      const result = await brmhCrud.scan(TABLES.ACCOUNTS, {
+        FilterExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        itemPerPage: 100
+      });
+      return NextResponse.json(result.items || []);
+    } catch (error) {
+      console.error('Error fetching all accounts for user:', error);
+      return NextResponse.json({ error: 'Failed to fetch accounts' }, { status: 500 });
+    }
+  }
+  
+  if (!bankId) {
     return NextResponse.json({ error: 'bankId is required' }, { status: 400 });
   }
   
   try {
-    let filterExpression = '';
-    const expressionAttributeValues: Record<string, string | number> = {};
+    // Fetch accounts for specific bank only
+    let filterExpression = 'bankId = :bankId';
+    const expressionAttributeValues: Record<string, string | number> = {
+      ':bankId': bankId
+    };
     
-    if (bankId === 'all') {
-      // Fetch all accounts for the user
-      if (userId) {
-        filterExpression = 'userId = :userId';
-        expressionAttributeValues[':userId'] = userId;
-      }
-    } else {
-      // Fetch accounts for specific bank
-      filterExpression = 'bankId = :bankId';
-      expressionAttributeValues[':bankId'] = bankId;
-      if (userId) {
-        filterExpression += ' AND userId = :userId';
-        expressionAttributeValues[':userId'] = userId;
-      }
+    if (userId) {
+      filterExpression += ' AND userId = :userId';
+      expressionAttributeValues[':userId'] = userId;
     }
+    
     
     // Fetch all accounts with pagination
     const allAccounts: Record<string, unknown>[] = [];
@@ -59,7 +63,12 @@ export async function GET(request: Request) {
     let hasMoreItems = true;
     
     while (hasMoreItems) {
-      const params: ScanCommandInput = {
+      const params: {
+        TableName: string;
+        FilterExpression: string;
+        ExpressionAttributeValues: Record<string, string | number>;
+        ExclusiveStartKey?: Record<string, unknown>;
+      } = {
         TableName: TABLES.ACCOUNTS,
         FilterExpression: filterExpression,
         ExpressionAttributeValues: expressionAttributeValues,
@@ -69,12 +78,18 @@ export async function GET(request: Request) {
         params.ExclusiveStartKey = lastEvaluatedKey;
       }
       
-      const result = await docClient.send(new ScanCommand(params));
-      const accounts = result.Items || [];
+      const result = await brmhCrud.scan(TABLES.ACCOUNTS, {
+        FilterExpression: filterExpression,
+        ExpressionAttributeValues: expressionAttributeValues,
+        itemPerPage: 100
+      });
+      const accounts = result.items || [];
+      
+      
       allAccounts.push(...accounts);
       
       // Check if there are more items to fetch
-      lastEvaluatedKey = result.LastEvaluatedKey;
+      lastEvaluatedKey = result.lastEvaluatedKey;
       hasMoreItems = !!lastEvaluatedKey;
       
       // Add a small delay to avoid overwhelming DynamoDB
@@ -107,12 +122,7 @@ export async function POST(request: Request) {
       tags: Array.isArray(tags) ? tags : [],
       userId: userId || '',
     };
-    await docClient.send(
-      new PutCommand({
-        TableName: TABLES.ACCOUNTS,
-        Item: account,
-      })
-    );
+    await brmhCrud.create(TABLES.ACCOUNTS, account);
     return NextResponse.json(account);
   } catch (error) {
     console.error('Error creating account:', error);

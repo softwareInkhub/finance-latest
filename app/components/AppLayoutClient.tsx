@@ -7,6 +7,8 @@ import AuthWrapper from './AuthWrapper';
 import { GlobalTabBar } from './GlobalTabBar';
 import { GlobalTabContent } from './GlobalTabContent';
 import { usePathname } from 'next/navigation';
+import { EntitySyncProvider } from '../contexts/EntitySyncContext';
+import { FileSyncProvider } from '../contexts/FileSyncContext';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
 
 export default function AppLayoutClient({ children }: { children: React.ReactNode }) {
@@ -74,44 +76,48 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   
   return (
     <AuthWrapper>
-      {isLoginPage ? children : (
-        <div className="flex h-screen m-0 p-0 relative bg-gray-50 dark:bg-gray-900 overflow-hidden">
-          <Sidebar 
-            onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            isMobileOpen={isMobileSidebarOpen}
-            onMobileToggle={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-          />
-          <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
-            <Navbar 
-              onMobileMenuToggle={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} 
-              title={getSectionSubtitle(pathname)}
-              brandTitle={(tabs.find(t => t.id === activeTabId)?.title) || getBrandTitle(pathname)}
-              brandIcon={(() => {
-                const tab = tabs.find(t => t.id === activeTabId);
-                if (tab) {
-                  switch (tab.type) {
-                    case 'banks':
-                      return <RiBankLine className="w-4 h-4" />;
-                    case 'tags':
-                      return <RiPriceTag3Line className="w-4 h-4" />;
-                    case 'files':
-                      return <RiFileList3Line className="w-4 h-4" />;
-                    case 'reports':
-                      return <RiBarChartLine className="w-4 h-4" />;
-                    default:
-                      return getBrandIcon(pathname);
-                  }
-                }
-                return getBrandIcon(pathname);
-              })()}
-            />
-            <GlobalTabBar />
-            <div className="flex-1 overflow-hidden min-h-0">
-              <GlobalTabContent />
+      <EntitySyncProvider>
+        <FileSyncProvider>
+          {isLoginPage ? children : (
+            <div className="flex h-screen m-0 p-0 relative bg-gray-50 dark:bg-gray-900 overflow-hidden">
+              <Sidebar 
+                onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                isMobileOpen={isMobileSidebarOpen}
+                onMobileToggle={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              />
+              <div className={`flex-1 flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
+                <Navbar 
+                  onMobileMenuToggle={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)} 
+                  title={getSectionSubtitle(pathname)}
+                  brandTitle={(tabs.find(t => t.id === activeTabId)?.title) || getBrandTitle(pathname)}
+                  brandIcon={(() => {
+                    const tab = tabs.find(t => t.id === activeTabId);
+                    if (tab) {
+                      switch (tab.type) {
+                        case 'banks':
+                          return <RiBankLine className="w-4 h-4" />;
+                        case 'tags':
+                          return <RiPriceTag3Line className="w-4 h-4" />;
+                        case 'files':
+                          return <RiFileList3Line className="w-4 h-4" />;
+                        case 'reports':
+                          return <RiBarChartLine className="w-4 h-4" />;
+                        default:
+                          return getBrandIcon(pathname);
+                      }
+                    }
+                    return getBrandIcon(pathname);
+                  })()}
+                />
+                <GlobalTabBar />
+                <div className="flex-1 overflow-hidden min-h-0">
+                  <GlobalTabContent />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </FileSyncProvider>
+      </EntitySyncProvider>
     </AuthWrapper>
   );
 } 

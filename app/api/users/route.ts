@@ -1,143 +1,129 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { DynamoDBClient, PutItemCommand, ScanCommand, GetItemCommand } from '@aws-sdk/client-dynamodb';
-import { v4 as uuidv4 } from 'uuid';
+import { NextResponse } from 'next/server';
+import { brmhCrud, TABLES } from '../brmh-client';
 import bcrypt from 'bcryptjs';
 
-const client = new DynamoDBClient({ region: process.env.AWS_REGION });
-const USERS_TABLE = process.env.USERS_TABLE || 'users';
-
-export async function POST(req: NextRequest) {
+// GET /api/users?id=xxx - Get user by ID
+export async function GET(request: Request) {
   try {
-    const { action, email, password, name } = await req.json();
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('id');
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
+    
+    // Fetch user from database
+    const result = await brmhCrud.scan(TABLES.USERS, {
+      FilterExpression: 'userId = :userId OR id = :userId',
+      ExpressionAttributeValues: { ':userId': userId },
+      itemPerPage: 1
+    });
+    
+    const user = result.items?.[0];
+    
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    
+    // Return user data without password
+    return NextResponse.json({
+      id: user.id,
+      userId: user.userId,
+      email: user.email,
+      name: user.name || user.username,
+      username: user.username,
+      phone: user.phone,
+      role: user.role,
+      createdAt: user.createdAt || user.timestamp
+    });
+  } catch (error) {
+    console.error('Error getting user:', error);
+    return NextResponse.json({ error: 'Failed to get user' }, { status: 500 });
+  }
+}
+
+// POST /api/users - Create or authenticate user
+export async function POST(request: Request) {
+  try {
+    const { action, email, password, name } = await request.json();
     
     if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
+      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
-    }
-
-    // Validate password length
-    if (password.length < 6) {
-      return NextResponse.json({ error: 'Password must be at least 6 characters long' }, { status: 400 });
-    }
-
-    if (action === 'signup') {
-      // Validate name for signup
-      if (!name || name.trim().length < 2) {
-        return NextResponse.json({ error: 'Name must be at least 2 characters long' }, { status: 400 });
-      }
-
-      // Check if user exists by scanning for email
-      const scanCmd = new ScanCommand({
-        TableName: USERS_TABLE,
-        FilterExpression: '#email = :email',
-        ExpressionAttributeNames: { '#email': 'email' },
-        ExpressionAttributeValues: { ':email': { S: email.toLowerCase() } },
+    
+    if (action === 'login') {
+      // Real authentication - find user by email
+      const result = await brmhCrud.scan(TABLES.USERS, {
+        FilterExpression: 'email = :email',
+        ExpressionAttributeValues: { ':email': email },
+        itemPerPage: 1
       });
       
-      const existing = await client.send(scanCmd);
-      if (existing.Items && existing.Items.length > 0) {
-        return NextResponse.json({ error: 'User with this email already exists' }, { status: 409 });
-      }
-
-      // Hash password
-      const saltRounds = 12;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-      // Create user
-      const userId = uuidv4();
-      const putCmd = new PutItemCommand({
-        TableName: USERS_TABLE,
-        Item: {
-          id: { S: userId },
-          email: { S: email.toLowerCase() },
-          password: { S: hashedPassword },
-          name: { S: name.trim() },
-          userId: { S: userId },
-          createdAt: { S: new Date().toISOString() },
-        },
-      });
-      
-      await client.send(putCmd);
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Account created successfully' 
-      });
-      
-    } else if (action === 'login') {
-      // Scan for user by email
-      const scanCmd = new ScanCommand({
-        TableName: USERS_TABLE,
-        FilterExpression: '#email = :email',
-        ExpressionAttributeNames: { '#email': 'email' },
-        ExpressionAttributeValues: { ':email': { S: email.toLowerCase() } },
-      });
-      
-      const result = await client.send(scanCmd);
-      const user = result.Items && result.Items[0];
+      const user = result.items?.[0];
       
       if (!user) {
         return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
       }
-
+      
       // Verify password
-      const storedPassword = user.password.S;
-      if (!storedPassword) {
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      
+      if (!isValidPassword) {
         return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
       }
-
-      const isPasswordValid = await bcrypt.compare(password, storedPassword);
-      if (!isPasswordValid) {
-        return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      
+      return NextResponse.json({
+        success: true,
+        userId: user.userId || user.id,
+        email: user.email,
+        name: user.name || user.username || email.split('@')[0],
+        message: 'Login successful'
+      });
+    }
+    
+    if (action === 'signup') {
+      // Check if user already exists
+      const existingUserResult = await brmhCrud.scan(TABLES.USERS, {
+        FilterExpression: 'email = :email',
+        ExpressionAttributeValues: { ':email': email },
+        itemPerPage: 1
+      });
+      
+      if (existingUserResult.items && existingUserResult.items.length > 0) {
+        return NextResponse.json({ error: 'User with this email already exists' }, { status: 409 });
       }
-
-      return NextResponse.json({ 
-        success: true, 
-        user: { 
-          email: user.email.S, 
-          name: user.name.S, 
-          userId: user.userId.S 
-        } 
+      
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 12);
+      
+      // Create new user
+      const newUser = {
+        id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        userId: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        email,
+        password: hashedPassword,
+        name: name || email.split('@')[0],
+        username: email.split('@')[0],
+        createdAt: new Date().toISOString(),
+        timestamp: new Date().toISOString()
+      };
+      
+      await brmhCrud.create(TABLES.USERS, newUser);
+      
+      return NextResponse.json({
+        success: true,
+        userId: newUser.userId,
+        email: newUser.email,
+        name: newUser.name,
+        message: 'Signup successful'
       });
     }
     
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error) {
-    console.error('Auth API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Error with user operation:', error);
+    return NextResponse.json({ error: 'Failed to process user request' }, { status: 500 });
   }
 }
 
-// GET /api/users?id=...
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-    
-    if (!id) {
-      return NextResponse.json({ error: 'User id required' }, { status: 400 });
-    }
-    
-    const getCmd = new GetItemCommand({
-      TableName: USERS_TABLE,
-      Key: { id: { S: id } },
-    });
-    
-    const result = await client.send(getCmd);
-    if (!result.Item) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-    
-    return NextResponse.json({ 
-      email: result.Item.email.S,
-      name: result.Item.name.S 
-    });
-  } catch (error) {
-    console.error('Get user API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-} 
+

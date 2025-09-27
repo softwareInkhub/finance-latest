@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../../aws-client';
+import { brmhCrud, TABLES } from '../../brmh-client';
 
 export async function POST(request: Request) {
   try {
@@ -23,27 +22,13 @@ export async function POST(request: Request) {
     // Save cashflow data to DynamoDB in the REPORTS table
     const now = new Date().toISOString();
     // Upsert: update cashFlowData and updatedAt, set createdAt if item is new
-    await docClient.send(
-      new UpdateCommand({
-        TableName: TABLES.REPORTS,
-        Key: { id: `cashflow_${userId}` },
-        UpdateExpression: 'SET #d = :data, #u = :updatedAt, #uid = :userId, #t = :type, #ca = if_not_exists(#ca, :createdAt)',
-        ExpressionAttributeNames: {
-          '#d': 'cashFlowData',
-          '#u': 'updatedAt',
-          '#uid': 'userId',
-          '#t': 'type',
-          '#ca': 'createdAt',
-        },
-        ExpressionAttributeValues: {
-          ':data': cashFlowData,
-          ':updatedAt': now,
-          ':userId': userId,
-          ':type': 'cashflow_report',
-          ':createdAt': now,
-        },
-      })
-    );
+    await brmhCrud.update(TABLES.REPORTS, { id: `cashflow_${userId}` }, {
+      cashFlowData,
+      updatedAt: now,
+      userId,
+      type: 'cashflow_report',
+      createdAt: now,
+    });
 
     return NextResponse.json({ 
       success: true, 
@@ -72,18 +57,13 @@ export async function GET(request: Request) {
     }
 
     // Retrieve cashflow data from DynamoDB
-    const result = await docClient.send(
-      new GetCommand({
-        TableName: TABLES.REPORTS,
-        Key: { id: `cashflow_${userId}` },
-      })
-    );
+    const result = await brmhCrud.getItem(TABLES.REPORTS, { id: `cashflow_${userId}` });
 
-    if (!result.Item) {
+    if (!result.item) {
       return NextResponse.json(null);
     }
 
-    return NextResponse.json(result.Item.cashFlowData);
+    return NextResponse.json(result.item.cashFlowData);
 
   } catch (error: unknown) {
     // If the table doesn't exist in this region/account, DynamoDB returns ResourceNotFoundException

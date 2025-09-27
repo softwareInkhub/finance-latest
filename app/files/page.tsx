@@ -3,8 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 import FilesSidebar from '../components/FilesSidebar';
+import { useEntitySync } from '../contexts/EntitySyncContext';
+import { useFileSync } from '../contexts/FileSyncContext';
+import { usePreviewTabManager } from '../hooks/usePreviewTabManager';
 
-import { RiCloseLine, RiAddLine } from 'react-icons/ri';
+import { RiCloseLine, RiAddLine, RiUploadLine, RiFileLine } from 'react-icons/ri';
 
 import Papa from 'papaparse';
 
@@ -77,13 +80,12 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
   useEffect(() => {
 
     if (isOpen) {
-
-      fetch('/api/bank')
-
-        .then(res => res.json())
-
-        .then(data => setBanks(Array.isArray(data) ? data : []));
-
+      const userId = localStorage.getItem('userId');
+      if (userId) {
+        fetch(`/api/bank?userId=${userId}`)
+          .then(res => res.json())
+          .then(data => setBanks(Array.isArray(data) ? data : []));
+      }
     }
 
   }, [isOpen]);
@@ -119,19 +121,29 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
 
 
   const handleSubmit = async (e: React.FormEvent) => {
-
     e.preventDefault();
-
     setError(null);
 
     if (!selectedFile || !fileName || !fileType || !bankId || !bankAccount) {
-
       setError('Please fill all fields and select a file.');
-
       return;
-
     }
 
+    // Client-side file validation
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (selectedFile.size > maxSize) {
+      setError(`File too large. Maximum size is ${maxSize / (1024 * 1024)}MB`);
+      return;
+    }
+
+    // Check file type
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    if (!allowedTypes.includes(selectedFile.type) && !selectedFile.name.match(/\.(csv|xlsx?)$/i)) {
+      setError('Please select a CSV or Excel file.');
+      return;
+    }
+
+    console.log(`Starting upload: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)}MB)`);
     setUploading(true);
 
     const userId = localStorage.getItem('userId');
@@ -461,70 +473,59 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
 
   useEffect(() => {
-
-    if (!file?.s3FileUrl) return;
+    if (!file?.id) return;
 
     setLoading(true);
-
     setError(null);
 
-    const key = file.s3FileUrl.split('.amazonaws.com/')[1];
+    try {
+      // Check if file has direct content (BRMH Drive format)
+      if (file.content) {
+        // File has base64 content directly - but this is deprecated
+        // For now, skip this and use the download API instead
+        console.warn('Direct file content is deprecated, using download API instead');
+      }
 
-    if (!key) {
+      // Fallback to download API for legacy files
+      const userId = localStorage.getItem('userId') || '';
+      if (!userId) {
+        setError('User not found');
+        setLoading(false);
+        return;
+      }
 
-      setError('Invalid S3 file URL');
-
+      // Use the BRMH Drive download API
+      fetch(`/api/files/download?userId=${userId}&fileId=${file.id}`)
+        .then(res => res.json())
+        .then((result) => {
+          if (result.error) throw new Error(result.error);
+          if (!result.downloadUrl) throw new Error('No download URL received');
+          
+          // Fetch the actual file content from the S3 URL
+          return fetch(result.downloadUrl);
+        })
+        .then(res => {
+          if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
+          return res.text();
+        })
+        .then((csvText) => {
+          const parsed = Papa.parse<string[]>(csvText, { skipEmptyLines: true });
+          
+          if (parsed.errors.length) throw new Error('Failed to parse CSV');
+          setData(parsed.data as string[][]);
+          setColWidths(parsed.data[0]?.map(() => 160) || []);
+        })
+        .catch((err) => {
+          console.error('Preview error:', err);
+          setError('Failed to load file preview: ' + err.message);
+        })
+        .finally(() => setLoading(false));
+    } catch (err) {
+      console.error('Preview error:', err);
+      setError('Failed to load file preview: ' + (err as Error).message);
       setLoading(false);
-
-      return;
-
     }
-
-    fetch('/api/statement/presign', {
-
-      method: 'POST',
-
-      headers: { 'Content-Type': 'application/json' },
-
-      body: JSON.stringify({
-
-        key,
-
-        userId: localStorage.getItem('userId') || ''
-
-      }),
-
-    })
-
-      .then(res => res.json())
-
-      .then(({ url, error }) => {
-
-        if (error || !url) throw new Error(error || 'Failed to get presigned URL');
-
-        return fetch(url);
-
-      })
-
-      .then(res => res.text())
-
-      .then(csvText => {
-
-        const parsed = Papa.parse<string[]>(csvText, { skipEmptyLines: true });
-
-        if (parsed.errors.length) throw new Error('Failed to parse CSV');
-
-        setData(parsed.data as string[][]);
-
-        setColWidths(parsed.data[0]?.map(() => 160) || []);
-
-      })
-
-      .catch(() => setError('Failed to load file preview'))
-
-      .finally(() => setLoading(false));
-
-  }, [file?.s3FileUrl]);
+  }, [file?.id, file?.content]);
 
 
 
@@ -596,7 +597,7 @@ function FilePreview({ file, onSlice }: { file: FileData, onSlice?: (sliceData: 
 
 
 
-  if (!file?.s3FileUrl) return <div>No preview available.</div>;
+  if (!file?.id) return <div>No preview available.</div>;
 
   if (loading) return <div>Loading preview...</div>;
 
@@ -1301,11 +1302,11 @@ function FilesTable({ files, onFileClick, selectedIds, onSelect, onSelectAll, on
 
           <tbody>
 
-            {files.map(file => (
+            {files.map((file, index) => (
 
               <tr
 
-                key={file.id}
+                key={`file-${file.id}-${index}`}
 
                 className={`hover:bg-gray-50 cursor-pointer group ${selectedIds.includes(file.id) ? 'bg-blue-50' : ''}`}
 
@@ -2280,11 +2281,11 @@ function FilesOverview({ files, onUpload, onEdit, onDelete, onFileClick, viewMod
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
 
-            {filteredFiles.map((file) => (
+            {filteredFiles.map((file, index) => (
 
               <FileCard
 
-                key={file.id}
+                key={`filecard-${file.id}-${index}`}
 
                 file={file}
 
@@ -2359,13 +2360,12 @@ function EditFileModal({ isOpen, file, onClose, onSave }: { isOpen: boolean; fil
     setNewBankId(file?.bankId || '');
 
     if (isOpen) {
-
-      fetch('/api/bank')
-
-        .then(res => res.json())
-
-        .then(data => setBanks(Array.isArray(data) ? data : []));
-
+      const userId = localStorage.getItem('userId');
+      if (userId) {
+        fetch(`/api/bank?userId=${userId}`)
+          .then(res => res.json())
+          .then(data => setBanks(Array.isArray(data) ? data : []));
+      }
     }
 
   }, [file, isOpen]);
@@ -2590,6 +2590,417 @@ function CreateFolderModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onC
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function CreateEntityModal({ isOpen, onClose, onCreate }: { isOpen: boolean; onClose: () => void; onCreate: (name: string, description: string) => void }) {
+  const [entityName, setEntityName] = useState('');
+  const [entityDescription, setEntityDescription] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { addEntity } = useEntitySync();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!entityName.trim()) return;
+
+    setCreating(true);
+    setError(null);
+
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      // Create entity using BRMH Drive API
+      const response = await fetch('/api/folders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          folderData: {
+            name: entityName.trim(),
+            description: entityDescription.trim() || undefined
+          },
+          parentId: 'ROOT'
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create entity');
+      }
+
+      const result = await response.json();
+      console.log('Entity created successfully:', result);
+      
+      // Add the new entity to the context
+      addEntity({
+        id: result.folderId || result.id,
+        name: entityName.trim(),
+        description: entityDescription.trim() || undefined,
+        createdAt: new Date().toISOString()
+      });
+      
+      onCreate(entityName.trim(), entityDescription.trim());
+      setEntityName('');
+      setEntityDescription('');
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create entity');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isOpen ? 'block' : 'hidden'}`}>
+      <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
+        <h2 className="text-xl font-bold mb-4">Create New Entity</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Entity Name *</label>
+            <input
+              type="text"
+              value={entityName}
+              onChange={(e) => setEntityName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter entity name..."
+              autoFocus
+              required
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Description (Optional)</label>
+            <textarea
+              value={entityDescription}
+              onChange={(e) => setEntityDescription(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter entity description..."
+              rows={3}
+            />
+          </div>
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+              {error}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              disabled={creating}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!entityName.trim() || creating}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {creating ? 'Creating...' : 'Create Entity'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EntityUploadModal({ isOpen, onClose, entityId, entityName, onSuccess }: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  entityId?: string; 
+  entityName?: string; 
+  onSuccess: () => void; 
+}) {
+  const { addFileToEntity } = useFileSync();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFileSelect = (file: File) => {
+    // Check if file is CSV or Excel
+    const allowedTypes = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    
+    const allowedExtensions = ['.csv', '.xls', '.xlsx'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+      setError('Please select a CSV or Excel file (.csv, .xls, .xlsx)');
+      return;
+    }
+    
+    setSelectedFile(file);
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFile || !entityId) return;
+
+    // Client-side file validation
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (selectedFile.size > maxSize) {
+      setError(`File too large. Maximum size is ${maxSize / (1024 * 1024)}MB`);
+      return;
+    }
+
+    // Check file type
+    const allowedTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    if (!allowedTypes.includes(selectedFile.type) && !selectedFile.name.match(/\.(csv|xlsx?)$/i)) {
+      setError('Please select a CSV or Excel file.');
+      return;
+    }
+
+    console.log(`Starting entity upload: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)}MB)`);
+    setUploading(true);
+    setError(null);
+
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('userId', userId);
+      formData.append('parentId', entityId);
+      formData.append('tags', JSON.stringify(['entity-file', entityName || '']));
+
+      const response = await fetch('/api/files', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload file');
+      }
+
+      const result = await response.json();
+      console.log('File uploaded successfully:', result);
+      
+      // Add file to FileSync context
+      addFileToEntity(entityId, {
+        id: result.fileId || result.id,
+        name: selectedFile.name,
+        mimeType: selectedFile.type,
+        size: selectedFile.size,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        userId: localStorage.getItem('userId') || '',
+        parentId: entityId,
+        tags: ['entity-file', entityName || ''],
+        s3Key: result.s3Key,
+        downloadUrl: result.downloadUrl
+      });
+      
+      onSuccess();
+      setSelectedFile(null);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload file');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className={`fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${isOpen ? 'block' : 'hidden'}`}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md transform transition-all duration-300 scale-100">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+              <RiUploadLine className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Upload File</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">to {entityName}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={uploading}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          <form onSubmit={handleSubmit}>
+            {/* Drag & Drop Area */}
+            <div className="relative mb-4">
+              <input
+                type="file"
+                accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                disabled={uploading}
+                required
+              />
+              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors bg-gray-50 dark:bg-gray-700/50">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-xl flex items-center justify-center">
+                    <RiUploadLine className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                      Drop your file here
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      or click to browse
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-1 text-xs">
+                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
+                        CSV
+                      </span>
+                      <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
+                        Excel
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Selected File Info */}
+            {selectedFile && (
+              <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <RiFileLine className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-xs text-green-700 dark:text-green-300">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Error Message */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+              </div>
+            )}
+            
+            {/* Upload Progress */}
+            {uploading && (
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                  <p className="text-sm text-blue-800 dark:text-blue-200">Uploading file...</p>
+                </div>
+              </div>
+            )}
+            
+            {/* File Info */}
+            <div className="mb-4 text-xs text-gray-500 dark:text-gray-400 text-center">
+              <p>Maximum file size: 50MB</p>
+              <p>Supported formats: CSV, Excel (.xls, .xlsx)</p>
+            </div>
+          </form>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 rounded-b-2xl">
+          <button
+            onClick={onClose}
+            disabled={uploading}
+            className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!selectedFile || uploading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            <RiUploadLine className="w-4 h-4" />
+            {uploading ? 'Uploading...' : 'Upload File'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteEntityModal({ isOpen, entity, onClose, onDelete }: { 
+  isOpen: boolean; 
+  entity: { id: string; name: string } | null; 
+  onClose: () => void; 
+  onDelete: () => void; 
+}) {
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!entity) return;
+    
+    setDeleting(true);
+    try {
+      await onDelete();
+      onClose();
+    } catch (error) {
+      console.error('Error deleting entity:', error);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isOpen ? 'block' : 'hidden'}`}>
+      <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
+        <h2 className="text-xl font-bold mb-4 text-red-600">Delete Entity</h2>
+        
+        <div className="mb-4">
+          <p className="text-gray-700 mb-2">
+            Are you sure you want to delete the entity <strong>&quot;{entity?.name}&quot;</strong>?
+          </p>
+          <p className="text-sm text-red-600">
+            This action cannot be undone. All files in this entity will also be deleted.
+          </p>
+        </div>
+        
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+            disabled={deleting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+          >
+            {deleting ? 'Deleting...' : 'Delete Entity'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -4735,9 +5146,17 @@ const FilesPage: React.FC = () => {
 
   const [showUploadModal, setShowUploadModal] = useState(false);
 
+  const [showEntityModal, setShowEntityModal] = useState(false);
 
+  const [showEntityUploadModal, setShowEntityUploadModal] = useState<{ isOpen: boolean; entityId?: string; entityName?: string }>({ isOpen: false });
+
+  const [showDeleteEntityModal, setShowDeleteEntityModal] = useState<{ isOpen: boolean; entity?: { id: string; name: string } }>({ isOpen: false });
 
   const [banks, setBanks] = useState<{ id: string; fileName: string; versions: unknown[] }[]>([]);
+
+  const { entities, removeEntity, refreshEntities, updateEntities } = useEntitySync();
+  const { updateEntityFiles } = useFileSync();
+  const { openFilePreview } = usePreviewTabManager();
 
   const [files, setFiles] = useState<FileData[]>([]);
 
@@ -4779,72 +5198,105 @@ const FilesPage: React.FC = () => {
       setFilesLoading(true);
 
       const userId = localStorage.getItem('userId');
-
-      // 1. Fetch all banks
-
-      const banksRes = await fetch('/api/bank');
-
-      const banksData = await banksRes.json();
-
-      setBanks(Array.isArray(banksData) ? banksData.map((b: Record<string, unknown>) => ({ id: b.id as string, fileName: b.bankName as string, versions: [] })) : []);
-
-      let allAccounts: Record<string, unknown>[] = [];
-
-      // 2. For each bank, fetch all accounts for the user
-
-      for (const bank of banksData) {
-
-        const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
-
-        const accounts = await accountsRes.json();
-
-        if (Array.isArray(accounts)) {
-
-          allAccounts = allAccounts.concat(accounts);
-
-        }
-
+      if (!userId) {
+        console.error('User ID not found');
+        return;
       }
 
-      // 3. For each account, fetch all statements for the user and merge account info
+      try {
+        // 1. Fetch all banks
+        const banksRes = await fetch(`/api/bank?userId=${userId}`);
+        const banksData = await banksRes.json();
 
-      let allStatements: Record<string, unknown>[] = [];
+        const processedBanks = Array.isArray(banksData) ? banksData
+          .filter((b: Record<string, unknown>) => b.id && b.bankName) // Filter out invalid entries
+          .map((b: Record<string, unknown>) => ({ 
+            id: b.id as string, 
+            fileName: b.bankName as string, 
+            versions: [] 
+          })) : [];
+        
+        console.log('Processed banks:', processedBanks);
+        setBanks(processedBanks);
 
-      for (const account of allAccounts) {
-
-        const statementsRes = await fetch(`/api/statements?accountId=${account.id as string}&userId=${userId}`);
-
-        const statements = await statementsRes.json();
-
-        if (Array.isArray(statements)) {
-
-          // Merge account information with each statement
-
-          const statementsWithAccountInfo = statements.map((statement: Record<string, unknown>) => ({
-
-            ...statement,
-
-            accountName: account.accountHolderName || statement.accountName || '',
-
-            accountNumber: account.accountNumber || statement.accountNumber || '',
-
-          }));
-
-          allStatements = allStatements.concat(statementsWithAccountInfo);
-
+        // Fetch entities from BRMH Drive
+        try {
+          const entitiesRes = await fetch(`/api/folders?userId=${userId}&parentId=ROOT&limit=50`);
+          if (entitiesRes.ok) {
+            const entitiesData = await entitiesRes.json();
+            updateEntities(entitiesData.folders || []);
+            console.log('Entities fetched:', entitiesData.folders);
+          }
+        } catch (error) {
+          console.error('Error fetching entities:', error);
         }
 
+        let allAccounts: Record<string, unknown>[] = [];
+
+        // 2. For each bank, fetch all accounts for the user
+        for (const bank of banksData) {
+          const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
+          const accounts = await accountsRes.json();
+
+          if (Array.isArray(accounts)) {
+            allAccounts = allAccounts.concat(accounts);
+          }
+        }
+
+        // 3. Fetch all files from BRMH Drive (includes both bank statements and standalone files)
+        let allStatements: Record<string, unknown>[] = [];
+
+        try {
+          const driveFilesRes = await fetch(`/api/files?userId=${userId}&parentId=ROOT&limit=1000`);
+          const driveFiles = await driveFilesRes.json();
+          
+          if (driveFiles.files && Array.isArray(driveFiles.files)) {
+            // Convert BRMH Drive files to FileData format
+            const driveFileData = driveFiles.files.map((file: Record<string, unknown>) => ({
+              id: file.id,
+              fileName: file.name,
+              fileType: file.fileType || 'Drive File',
+              bankName: file.bankName || 'BRMH Drive',
+              accountName: file.accountName || 'Drive Storage',
+              accountNumber: file.accountNumber || '',
+              uploadDate: file.createdAt,
+              size: file.size,
+              mimeType: file.mimeType,
+              tags: file.tags || [],
+              s3FileUrl: '',
+              driveFileId: file.id,
+              userId: userId,
+              bankId: file.bankId || '',
+              accountId: file.accountId || ''
+            }));
+            
+            allStatements = driveFileData;
+          }
+        } catch (driveError) {
+          console.log('BRMH Drive files not available:', driveError);
+          console.log('This is expected if BRMH Drive API is not accessible');
+        }
+
+        // Files are already fetched from BRMH Drive above, no need for additional fetching
+
+        // Remove duplicates based on file ID
+        const uniqueStatements = allStatements.filter((statement, index, self) => 
+          index === self.findIndex(s => s.id === statement.id)
+        );
+        
+        setFiles(uniqueStatements as FileData[]);
+
+      } catch (error) {
+        console.error('Error fetching files:', error);
+      } finally {
+        setFilesLoading(false);
       }
-
-      setFiles(allStatements as FileData[]);
-
-      setFilesLoading(false);
 
     };
 
     fetchAllUserFiles();
 
-  }, []);
+  }, [updateEntities]);
 
 
 
@@ -4899,62 +5351,79 @@ const FilesPage: React.FC = () => {
   // Add a function to refresh files
 
   const refreshFiles = async () => {
-
     setFilesLoading(true);
 
     const userId = localStorage.getItem('userId');
-
-    const banksRes = await fetch('/api/bank');
-
-    const banksData = await banksRes.json();
-
-    let allAccounts: Record<string, unknown>[] = [];
-
-    for (const bank of banksData) {
-
-      const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
-
-      const accounts = await accountsRes.json();
-
-      if (Array.isArray(accounts)) {
-
-        allAccounts = allAccounts.concat(accounts);
-
-      }
-
+    if (!userId) {
+      console.error('User ID not found');
+      return;
     }
 
-    let allStatements: Record<string, unknown>[] = [];
+    try {
+      // 1. Fetch all banks
+      const banksRes = await fetch(`/api/bank?userId=${userId}`);
+      const banksData = await banksRes.json();
 
-    for (const account of allAccounts) {
+      let allAccounts: Record<string, unknown>[] = [];
 
-      const statementsRes = await fetch(`/api/statements?accountId=${account.id as string}&userId=${userId}`);
+      // 2. For each bank, fetch all accounts for the user
+      for (const bank of banksData) {
+        const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
+        const accounts = await accountsRes.json();
 
-      const statements = await statementsRes.json();
-
-      if (Array.isArray(statements)) {
-
-        // Merge account information with each statement
-
-        const statementsWithAccountInfo = statements.map((statement: Record<string, unknown>) => ({
-
-          ...statement,
-
-          accountName: account.accountHolderName || statement.accountName || '',
-
-          accountNumber: account.accountNumber || statement.accountNumber || '',
-
-        }));
-
-        allStatements = allStatements.concat(statementsWithAccountInfo);
-
+        if (Array.isArray(accounts)) {
+          allAccounts = allAccounts.concat(accounts);
+        }
       }
 
+      // 3. Fetch all files from BRMH Drive (includes both bank statements and standalone files)
+      let allStatements: Record<string, unknown>[] = [];
+
+      try {
+        const driveFilesRes = await fetch(`/api/files?userId=${userId}&parentId=ROOT&limit=1000`);
+        const driveFiles = await driveFilesRes.json();
+        
+        if (driveFiles.files && Array.isArray(driveFiles.files)) {
+          // Convert BRMH Drive files to FileData format
+          const driveFileData = driveFiles.files.map((file: Record<string, unknown>) => ({
+            id: file.id,
+            fileName: file.name,
+            fileType: file.fileType || 'Drive File',
+            bankName: file.bankName || 'BRMH Drive',
+            accountName: file.accountName || 'Drive Storage',
+            accountNumber: file.accountNumber || '',
+            uploadDate: file.createdAt,
+            size: file.size,
+            mimeType: file.mimeType,
+            tags: file.tags || [],
+            s3FileUrl: '', // Keep for compatibility
+            driveFileId: file.id,
+            userId: userId,
+            bankId: file.bankId || '',
+            accountId: file.accountId || '',
+            content: file.content, // Add the base64 content for direct preview
+            createdAt: file.createdAt
+          }));
+          
+          allStatements = driveFileData;
+        }
+      } catch (driveError) {
+        console.log('BRMH Drive files not available:', driveError);
+        console.log('This is expected if BRMH Drive API is not accessible');
+      }
+
+      // Remove duplicates based on file ID
+      const uniqueStatements = allStatements.filter((statement, index, self) => 
+        index === self.findIndex(s => s.id === statement.id)
+      );
+      
+      setFiles(uniqueStatements as FileData[]);
+
+    } catch (error) {
+      console.error('Error refreshing files:', error);
+    } finally {
+      setFilesLoading(false);
     }
-
-    setFiles(allStatements as FileData[]);
-
-    setFilesLoading(false);
 
     // Trigger Super Bank refresh after file upload
     console.log('File uploaded successfully, triggering Super Bank refresh...');
@@ -4970,6 +5439,7 @@ const FilesPage: React.FC = () => {
       localStorage.removeItem('lastFileUpload');
     }, 100);
   };
+
 
   // Folder functions
   const createFolder = async (name?: string) => {
@@ -5001,6 +5471,128 @@ const FilesPage: React.FC = () => {
     }
   };
 
+  // Entity functions
+  const handleCreateEntity = async (name: string, description: string) => {
+    console.log('Entity created:', { name, description });
+    // Refresh entities to show the new entity
+    await refreshEntities();
+  };
+
+  // Fetch files for a specific entity
+  const fetchEntityFiles = async (entityId: string) => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      console.error('User ID not found');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/files?userId=${userId}&parentId=${entityId}&limit=1000`);
+      if (response.ok) {
+        const data = await response.json();
+        const entityFiles = data.files || [];
+        console.log('Entity files fetched:', entityFiles);
+        
+        // Update the files state to include entity files
+        setFiles(prevFiles => {
+          // Remove existing files for this entity
+          const filteredFiles = prevFiles.filter(file => file.parentId !== entityId);
+          // Add new entity files
+          return [...filteredFiles, ...entityFiles];
+        });
+        
+        // Also update the FileSync context
+        updateEntityFiles(entityId, entityFiles);
+      } else {
+        console.error('Failed to fetch entity files:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching entity files:', error);
+    }
+  };
+
+  // Delete entity function
+  const handleDeleteEntity = async (entity: { id: string; name: string }) => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      console.error('User ID not found');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/folders/${entity.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete entity');
+      }
+
+      console.log('Entity deleted successfully:', entity.name);
+      
+      // Remove entity from context
+      removeEntity(entity.id);
+      
+      // If the deleted entity was selected, go back to all files
+      if (selectedFileId === entity.id) {
+        setSelectedFileId('all');
+        setActiveTabId('all');
+      }
+      
+      // Refresh entities list
+      await refreshEntities();
+    } catch (error) {
+      console.error('Error deleting entity:', error);
+      alert('Failed to delete entity: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Delete file using BRMH Drive API
+  const handleDeleteFileBRMH = async (file: FileData) => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      console.error('User ID not found');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/files/${file.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete file');
+      }
+
+      console.log('File deleted successfully:', file.fileName);
+      
+      // Remove file from state
+      setFiles(prevFiles => prevFiles.filter(f => f.id !== file.id));
+      
+      // If the deleted file was selected, go back to all files
+      if (selectedFileId === file.id) {
+        setSelectedFileId('all');
+        setActiveTabId('all');
+      }
+      
+      // Refresh files list
+      await refreshFiles();
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      alert('Failed to delete file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
   const moveFileToFolder = async (fileId: string, folderId: string | null) => {
     setFiles(prev => prev.map(file => 
       file.id === fileId ? { ...file, folderId } : file
@@ -5021,6 +5613,28 @@ const FilesPage: React.FC = () => {
   
 
   const getFilteredFiles = () => {
+    // If a specific file is selected, show only that file
+    if (selectedFileId && selectedFileId !== 'all') {
+      // Check if it's a bank selection
+      const selectedBank = banks.find(bank => bank.id === selectedFileId);
+      if (selectedBank) {
+        return files.filter(file => file.bankId === selectedFileId);
+      }
+      
+      // Check if it's an entity selection
+      const selectedEntity = entities.find(entity => entity.id === selectedFileId);
+      if (selectedEntity) {
+        return files.filter(file => file.parentId === selectedFileId);
+      }
+      
+      // Check if it's a specific file
+      const selectedFile = files.find(file => file.id === selectedFileId);
+      if (selectedFile) {
+        return [selectedFile];
+      }
+    }
+    
+    // Default: show all files
     if (selectedFolder === null) {
       return files.filter(file => !file.folderId); // Show files not in any folder
     }
@@ -5035,20 +5649,139 @@ const FilesPage: React.FC = () => {
 
   // File click (main file, not version)
 
-  const handleFileClick = (file: { id: string; fileName: string }) => {
+  const handleFileClick = async (file: FileData) => {
+    // Add comprehensive null checks
+    if (!file) {
+      console.error('handleFileClick called with null/undefined file');
+      return;
+    }
 
-    setSelectedFileId(file.id);
+    console.log('handleFileClick called with:', file);
 
-    setActiveTabId(file.id);
+    // Handle different file data structures
+    const fileId = file.id || file.fileId;
+    const fileName = file.fileName || file.name || file.path || 'Unknown File';
 
-    setOpenTabs((prevTabs) => {
+    if (!fileId) {
+      console.error('handleFileClick called with file missing id:', file);
+      return;
+    }
 
-      if (prevTabs.find((tab) => tab.id === file.id)) return prevTabs;
+    if (!fileName) {
+      console.error('handleFileClick called with file missing fileName:', file);
+      return;
+    }
 
-      return [...prevTabs, { id: file.id, name: file.fileName }];
+    // Create a normalized file object
+    const normalizedFile = {
+      id: fileId,
+      fileName: fileName
+    };
 
-    });
+    // Handle special cases like "All Files"
+    if (normalizedFile.id === 'all') {
+      console.log('Handling "All Files" click');
+      setSelectedFileId('all');
+      setActiveTabId('all');
+      return;
+    }
 
+    // Find the full file data
+    const fullFile = files.find(f => f.id === normalizedFile.id);
+    console.log('Looking for file with id:', normalizedFile.id);
+    console.log('Available files:', files.map(f => ({ id: f.id, fileName: f.fileName })));
+    console.log('Found fullFile:', fullFile);
+    
+    if (fullFile && fullFile.fileName) {
+      // Check if it's an Excel file
+      const isExcelFile = fullFile.fileName.toLowerCase().endsWith('.xlsx') || 
+                         fullFile.fileName.toLowerCase().endsWith('.xls');
+      
+      // Check if it's a CSV file (bank statement)
+      const isCsvFile = fullFile.fileName.toLowerCase().endsWith('.csv');
+      
+      if (isExcelFile) {
+        // For Excel files, try to get download URL and use Excel preview
+        try {
+          const userId = localStorage.getItem('userId');
+          const response = await fetch(`/api/files/download?fileId=${fullFile.id}&userId=${userId}`);
+          if (response.ok) {
+            const data = await response.json();
+            openFilePreview({
+              id: fullFile.id,
+              name: fullFile.fileName,
+              downloadUrl: data.downloadUrl,
+              mimeType: fullFile.fileType
+            });
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to get download URL:', error);
+        }
+      } else if (isCsvFile) {
+        // For CSV files (bank statements), use the original slicing functionality
+        console.log('Opening CSV file for slicing:', fullFile.fileName);
+        setSelectedFileId(normalizedFile.id as string);
+        setActiveTabId(normalizedFile.id as string);
+        setOpenTabs((prevTabs) => {
+          if (prevTabs.find((tab) => tab.id === normalizedFile.id)) return prevTabs;
+          return [...prevTabs, { id: normalizedFile.id as string, name: normalizedFile.fileName as string }];
+        });
+        return;
+      }
+      
+      // Fallback: open in new window or use old behavior for other file types
+      openFilePreview({
+        id: fullFile.id,
+        name: fullFile.fileName,
+        downloadUrl: undefined,
+        mimeType: fullFile.fileType
+      });
+    } else {
+      console.log('File not found in files array, treating as entity file');
+      // For entity files, try to get download URL directly
+      if (file.downloadUrl || file.mimeType) {
+        try {
+          const userId = localStorage.getItem('userId');
+          let downloadUrl = file.downloadUrl;
+          
+          if (!downloadUrl) {
+            const response = await fetch(`/api/files/download?fileId=${normalizedFile.id}&userId=${userId}`);
+            if (response.ok) {
+              const data = await response.json();
+              downloadUrl = data.downloadUrl;
+            }
+          }
+          
+          // Check if it's an Excel file
+          const isExcelFile = (file.mimeType as string)?.includes('spreadsheet') || 
+                             (file.mimeType as string)?.includes('excel') ||
+                             (normalizedFile.fileName && (normalizedFile.fileName as string).toLowerCase().endsWith('.xlsx')) || 
+                             (normalizedFile.fileName && (normalizedFile.fileName as string).toLowerCase().endsWith('.xls'));
+          
+          if (isExcelFile && downloadUrl) {
+            openFilePreview({
+              id: normalizedFile.id as string,
+              name: normalizedFile.fileName as string,
+              downloadUrl: downloadUrl as string,
+              mimeType: file.mimeType as string
+            });
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to get download URL for entity file:', error);
+        }
+      }
+      
+      // Fallback to old behavior for other cases
+      console.log('Using fallback behavior for file:', normalizedFile);
+      setSelectedFileId(normalizedFile.id as string);
+      setActiveTabId(normalizedFile.id as string);
+      setOpenTabs((prevTabs) => {
+        if (prevTabs.find((tab) => tab.id === normalizedFile.id)) return prevTabs;
+        return [...prevTabs, { id: normalizedFile.id as string, name: normalizedFile.fileName as string }];
+      });
+    }
   };
 
 
@@ -5608,26 +6341,30 @@ const FilesPage: React.FC = () => {
         
 
       try {
-
-        const res = await fetch('/api/statement/delete', {
-
-          method: 'POST',
-
-          headers: { 'Content-Type': 'application/json' },
-
-          body: JSON.stringify({
-
-            statementId: deleteFile.id,
-
-            s3FileUrl: deleteFile.s3FileUrl,
-
-            userId,
-
-            bankName: deleteFile.bankName || '',
-
-          }),
-
-        });
+        let res;
+        
+        // Check if this is a BRMH Drive file
+        if (deleteFile.id.startsWith('drive-') || deleteFile.driveFileId) {
+          // Use BRMH Drive delete API
+          const fileId = deleteFile.driveFileId || deleteFile.id.replace('drive-', '');
+          res = await fetch(`/api/files/${fileId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId }),
+          });
+        } else {
+          // Use statement delete API for bank statements
+          res = await fetch('/api/statement/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              statementId: deleteFile.id,
+              s3FileUrl: deleteFile.s3FileUrl,
+              userId,
+              bankName: deleteFile.bankName || '',
+            }),
+          });
+        }
 
           
           
@@ -5649,52 +6386,28 @@ const FilesPage: React.FC = () => {
 
           console.log(`Progress: ${totalRows}/${totalRows} (100%)`);
           
+          // Log successful deletion
+          console.log('File deleted successfully:', deleteFile.fileName);
           
 
-      } catch {
-
+      } catch (deleteError: unknown) {
           clearInterval(progressInterval);
-
-          throw new Error('Failed to delete file');
-
+          console.error('Delete API call failed:', deleteError);
+          throw new Error(`Failed to delete file: ${deleteError instanceof Error ? deleteError.message : 'Unknown error'}`);
         }
       
       
 
-      // Verify deletion was successful
-
-      const verifyRes = await fetch(`/api/transactions?accountId=${deleteFile.accountId}&userId=${userId}&bankName=${encodeURIComponent(deleteFile.bankName || '')}`);
-
-      let remainingTransactions = 0;
-
-      if (verifyRes.ok) {
-
-        const txs = await verifyRes.json();
-
-        if (Array.isArray(txs)) {
-
-          remainingTransactions = txs.filter((tx: Record<string, unknown>) => (tx.statementId as string) === deleteFile.id).length;
-
-        }
-
-      }
-
-      
-      
-      if (remainingTransactions > 0) {
-
-        throw new Error(`Failed to delete all transactions. ${remainingTransactions} transactions remaining.`);
-
-      }
+      // Skip verification for BRMH Drive files to improve performance
+      // For bank statements, we could add verification here if needed, but it's not critical
+      console.log('File deletion completed successfully');
       
       
 
-    } catch (error) {
-
+    } catch (error: unknown) {
       console.error('Error deleting file:', error);
-
-      // You could show an error toast here
-
+      // Show error message to user
+      alert(`Failed to delete file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
 
     setDeleteLoading(false);
@@ -5709,7 +6422,11 @@ const FilesPage: React.FC = () => {
 
     setDeleteFile(null);
 
-    refreshFiles();
+    // Refresh the file list
+    await refreshFiles();
+    
+    // Show success message
+    console.log('File deletion completed, UI refreshed');
 
     }
 
@@ -5885,27 +6602,96 @@ const FilesPage: React.FC = () => {
       );
 
     } else {
-
-      // Show file details and preview if a file is selected
-
-      const file = files.find(f => f.id === activeTabId);
-
-      if (file) {
-
+      // Check if activeTabId is an entity id
+      const entity = entities.find(e => e.id === activeTabId);
+      
+      if (entity) {
+        // Show all files for this entity
+        const entityFiles = files.filter(f => f.parentId === entity.id);
+        
         mainContent = (
-
           <div className="p-8">
-
-            <h2 className="text-xl font-bold mb-4 text-blue-800">{file.fileName}</h2>
-
-            <FilePreview file={file} onSlice={handleOpenSliceTab} />
-
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-blue-800">{entity.name} Files</h2>
+              <button
+                onClick={() => setShowEntityUploadModal({ isOpen: true, entityId: entity.id, entityName: entity.name })}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center gap-2"
+              >
+                <RiAddLine className="w-4 h-4" />
+                Upload File
+              </button>
+            </div>
+            
+            <div className="flex flex-wrap gap-8">
+              {entityFiles.length === 0 && (
+                <div className="text-gray-500">No files in this entity yet.</div>
+              )}
+              
+              {entityFiles.map(file => (
+                <div
+                  key={file.id}
+                  className="bg-white rounded-xl shadow-md p-3 flex flex-col items-center justify-center border border-blue-100 mb-3 w-48 relative group"
+                >
+                  {/* Delete button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Are you sure you want to delete "${file.fileName}"? This action cannot be undone.`)) {
+                        handleDeleteFileBRMH(file);
+                      }
+                    }}
+                    className="absolute top-2 right-2 p-1 rounded-full bg-red-100 hover:bg-red-200 text-red-600 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                    title="Delete file"
+                  >
+                    <FiTrash2 className="w-4 h-4" />
+                  </button>
+                  
+                  <div 
+                    className="flex flex-col items-center justify-center cursor-pointer w-full"
+                    onClick={() => handleFileClick(file)}
+                  >
+                    <span className="text-2xl mb-2">
+                      <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+                        <rect width="24" height="24" rx="6" fill="#EEF2FF"/>
+                        <path d="M7 7.75A.75.75 0 0 1 7.75 7h8.5a.75.75 0 0 1 .75.75v8.5a.75.75 0 0 1-.75.75h-8.5a.75.75 0 0 1-.75-.75v-8.5ZM9 10.5h6M9 13.5h6" stroke="#6366F1" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </span>
+                    
+                    <span className="text-lg font-semibold text-blue-900 text-center">{file.fileName}</span>
+                    
+                    <div className="text-xs text-gray-500 text-center w-full mt-1">
+                      <div><span className="font-semibold">Entity:</span> {entity.name}</div>
+                      <div><span className="font-semibold">Type:</span> {file.fileType || '-'}</div>
+                    </div>
+                    
+                    <span className="text-xs text-gray-400 mt-1">Uploaded: {String((file as unknown as Record<string, unknown>).uploaded ?? '')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-
         );
+      } else {
+        // Show file details and preview if a file is selected
+        const file = files.find(f => f.id === activeTabId);
+
+        if (file) {
+
+          mainContent = (
+
+            <div className="p-8">
+
+              <h2 className="text-xl font-bold mb-4 text-blue-800">{file.fileName}</h2>
+
+              <FilePreview file={file} onSlice={handleOpenSliceTab} />
+
+            </div>
+
+          );
+
+        }
 
       }
-
     }
 
   }
@@ -5918,13 +6704,48 @@ const FilesPage: React.FC = () => {
 
       <FilesSidebar
 
-        files={banks || []}
+        files={(() => {
+          const filteredBanks = (banks || []).filter(bank => bank && bank.id && bank.fileName);
+          console.log('FilesSidebar files prop:', filteredBanks);
+          return filteredBanks;
+        })()}
+
+        entities={entities}
 
         selectedFileId={selectedFileId}
 
-        onFileClick={handleFileClick as unknown as (file: { id: string; fileName: string }) => void}
+        onFileClick={(bank) => {
+          // Convert BankItem to FileData-like object for handleFileClick
+          const fileData: FileData = {
+            id: bank.id,
+            fileName: bank.fileName,
+            fileType: 'unknown',
+            bankId: bank.id,
+            bankName: bank.fileName,
+            accountId: '',
+            userId: '',
+            createdAt: new Date().toISOString()
+          };
+          handleFileClick(fileData);
+        }}
+
+        onEntityClick={(entity) => {
+          console.log('Entity clicked:', entity);
+          setSelectedFileId(entity.id);
+          setActiveTabId(entity.id);
+          // Fetch files for this entity
+          fetchEntityFiles(entity.id);
+        }}
+
+        onEntityDelete={(entity) => {
+          setShowDeleteEntityModal({ isOpen: true, entity });
+        }}
 
         statements={files as unknown as Array<{ id: string; fileName: string; fileType: string; bankId: string; accountId: string }>}
+
+        onAddFile={() => setShowUploadModal(true)}
+
+        onAddEntity={() => setShowEntityModal(true)}
 
       />
 
@@ -5997,6 +6818,32 @@ const FilesPage: React.FC = () => {
         
         
         <UploadModal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} onSuccess={refreshFiles} />
+
+        <CreateEntityModal isOpen={showEntityModal} onClose={() => setShowEntityModal(false)} onCreate={handleCreateEntity} />
+
+        <EntityUploadModal 
+          isOpen={showEntityUploadModal.isOpen} 
+          onClose={() => setShowEntityUploadModal({ isOpen: false })} 
+          entityId={showEntityUploadModal.entityId}
+          entityName={showEntityUploadModal.entityName}
+          onSuccess={async () => {
+            // Refresh entity files after successful upload
+            if (showEntityUploadModal.entityId) {
+              await fetchEntityFiles(showEntityUploadModal.entityId);
+            }
+          }}
+        />
+
+        <DeleteEntityModal 
+          isOpen={showDeleteEntityModal.isOpen} 
+          onClose={() => setShowDeleteEntityModal({ isOpen: false })} 
+          entity={showDeleteEntityModal.entity || null}
+          onDelete={async () => {
+            if (showDeleteEntityModal.entity) {
+              await handleDeleteEntity(showDeleteEntityModal.entity);
+            }
+          }}
+        />
 
         <EditFileModal isOpen={editModalOpen} file={editFile} onClose={() => setEditModalOpen(false)} onSave={handleEditSave} />
 

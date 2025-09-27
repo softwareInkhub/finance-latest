@@ -65,7 +65,7 @@ export default function DashboardPage() {
 
         // Fetch banks
         try {
-          const banksResponse = await fetch('/api/bank');
+          const banksResponse = await fetch(`/api/bank?userId=${userId}`);
           if (banksResponse.ok) {
             banks = await banksResponse.json();
           }
@@ -75,7 +75,7 @@ export default function DashboardPage() {
 
         // Fetch accounts
         try {
-          const accountsResponse = await fetch('/api/account');
+          const accountsResponse = await fetch(`/api/account?userId=${userId}`);
           if (accountsResponse.ok) {
             accounts = await accountsResponse.json();
           }
@@ -85,7 +85,7 @@ export default function DashboardPage() {
 
         // Fetch statements
         try {
-          const statementsResponse = await fetch('/api/statements');
+          const statementsResponse = await fetch(`/api/statements?userId=${userId}`);
           if (statementsResponse.ok) {
             statements = await statementsResponse.json();
           }

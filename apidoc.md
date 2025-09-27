@@ -103,48 +103,6 @@ This document lists all API endpoints exposed under `/api` with their methods, r
 
 ---
 
-### Debug
-
-#### GET /api/debug/bank-tables
-- Response:
-  - `{ tables: string[] }`
-
-#### GET /api/debug/crdr-analysis
-- Query:
-  - `userId` (string, required)
-  - `bankName` (string, default: `HDFC`)
-- Response:
-  - `{ userId, bankName, tableName, summary: { total, cr, dr, unknown, crAmount, drAmount }, analysis: Array<{ transactionId, description, amount, amountAbs, crdr, debug, tags }> }`
-
-#### GET /api/debug/sample-transaction
-- Query:
-  - `userId` (string, required)
-  - `bankName` (string, default: `HDFC`)
-- Response:
-  - `{ userId, bankName, tableName, sampleTransactions: Array<{ id, amount, type, description, date, tags, allFields: string[], allValues: Record<string, string|number> }> }`
-
-#### GET /api/debug/tag-count
-- Query:
-  - `userId` (string, required)
-  - `tagName` (string, default: `HDFC`)
-- Response:
-  - `{ counts: Record<string, number> }`
-
-#### GET /api/debug/tags-summary-check
-- Query:
-  - `userId` (string, required)
-- Response:
-  - `{ summary: any }`
-
-#### GET /api/debug/transaction-analysis
-- Query:
-  - `userId` (string, required)
-  - `tagName` (string | undefined)
-- Response:
-  - `{ analysis: any, summary: any }`
-
----
-
 ### Reports
 
 #### GET /api/reports/cashflow
@@ -339,19 +297,6 @@ This document lists all API endpoints exposed under `/api` with their methods, r
 - Response:
   - `{ items: Transaction[], pageInfo: { nextLastKey?: string, page: number, limit: number } }`
 
-#### GET /api/transactions/stream
-- Query:
-  - `userId` (string | undefined)
-  - `limit` (number, default 10000)
-- Response:
-  - `ReadableStream` of NDJSON or `{ items: Transaction[] }` (depending on client usage)
-
-#### GET /api/transactions/tag/[tagName]
-- Params: `tagName` (path, string)
-- Query:
-  - `userId` (string, required)
-- Response:
-  - `{ items: Transaction[], count: number }`
 
 ---
 
