@@ -2019,11 +2019,49 @@ export default function SuperBankPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger
+  const [hasMoreTransactions, setHasMoreTransactions] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   
   // Add debugging (only in development)
   if (process.env.NODE_ENV === 'development') {
     console.log('SuperBankPage rendered - loading:', loading, 'error:', error, 'transactions count:', transactions.length);
   }
+
+  // Function to load more transactions
+  const loadMoreTransactions = async () => {
+    if (loadingMore || !hasMoreTransactions) return;
+    
+    setLoadingMore(true);
+    const userId = localStorage.getItem("userId") || "";
+    
+    try {
+      // Fetch more transactions (increasing the limit to get new ones)
+      const response = await fetch(`/api/transactions/all?userId=${userId}&limit=${transactions.length + 1000}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const allTransactions = await response.json();
+      if (Array.isArray(allTransactions)) {
+        // Get only the new transactions (skip the ones we already have)
+        const newTransactions = allTransactions.slice(transactions.length);
+        
+        if (newTransactions.length > 0) {
+          setTransactions(prev => [...prev, ...newTransactions]);
+        }
+        
+        // Check if we got fewer new transactions than requested (indicates no more data)
+        if (newTransactions.length < 1000) {
+          setHasMoreTransactions(false);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load more transactions:', error);
+      setError(`Failed to load more transactions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // Super Bank header state
   const [superHeader, setSuperHeader] = useState<string[]>([]);
@@ -2288,8 +2326,8 @@ export default function SuperBankPage() {
         
         // Loading progress removed - using streaming instead
         
-        // Use the transactions/all API instead of the deleted stream API
-        fetch(`/api/transactions/all?userId=${userId}&limit=10000`, {
+        // Load initial batch of transactions (faster loading)
+        fetch(`/api/transactions/all?userId=${userId}&limit=1000`, {
           signal: controller.signal,
         })
           .then((res) => {
@@ -2310,6 +2348,11 @@ export default function SuperBankPage() {
               setError(null);
               setLoading(false);
               isStreamingCompleted = true;
+              
+              // Check if we got fewer transactions than requested (indicates no more data)
+              if (data.length < 1000) {
+                setHasMoreTransactions(false);
+              }
             } else {
               throw new Error('Invalid response format');
             }
@@ -2355,6 +2398,7 @@ export default function SuperBankPage() {
         setLoading(false);
       }
     };
+
     
     // Reset completion flag when refresh trigger changes (new files uploaded)
     isStreamingCompleted = false;
@@ -3895,7 +3939,7 @@ export default function SuperBankPage() {
                   // Retry fetching data
                   const userId = localStorage.getItem("userId") || "";
                   if (userId) {
-                    fetch(`/api/transactions/all?userId=${userId}&fetchAll=true`)
+                    fetch(`/api/transactions/all?userId=${userId}&limit=1000`)
                       .then(res => res.json())
                       .then(data => {
                         if (Array.isArray(data)) {
@@ -4338,6 +4382,30 @@ export default function SuperBankPage() {
             availableBanks={availableBanks}
             availableAccounts={availableAccounts}
           />
+          
+          {/* Load More Button */}
+          {hasMoreTransactions && (
+            <div className="flex justify-center mt-4">
+              <button
+                onClick={loadMoreTransactions}
+                disabled={loadingMore}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {loadingMore ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                    </svg>
+                    Loading...
+                  </span>
+                ) : (
+                  `Load More Transactions (${transactions.length} loaded)`
+                )}
+              </button>
+            </div>
+          )}
+          
           </div>
         </div>
         </div>

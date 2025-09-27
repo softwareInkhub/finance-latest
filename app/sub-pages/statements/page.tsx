@@ -81,8 +81,11 @@ function StatementsContent() {
 
   useEffect(() => {
     if (tab === 'transactions' && accountId && bankName) {
+      console.log(`🔄 Refreshing transactions for account: ${accountId}, bank: ${bankName}`);
       setLoadingTransactions(true);
       setTransactionsError(null);
+      setTransactions([]); // Clear previous transactions immediately
+      
       const userId = localStorage.getItem("userId") || "";
       
       // Add error handling and timeout
@@ -95,9 +98,12 @@ function StatementsContent() {
           if (controller) {
             controller.abort();
           }
-        }, 30000); // 30 second timeout
+        }, 15000); // Reduced timeout to 15 seconds
         
-        fetch(`/api/transactions?accountId=${accountId}&userId=${userId}&bankName=${encodeURIComponent(bankName)}`, {
+        const url = `/api/transactions?accountId=${accountId}&userId=${userId}&bankName=${encodeURIComponent(bankName)}`;
+        console.log(`📡 Fetching from: ${url}`);
+        
+        fetch(url, {
           signal: controller.signal
         })
           .then(res => {
@@ -109,13 +115,17 @@ function StatementsContent() {
           .then(data => {
             if (Array.isArray(data)) {
               setTransactions(data);
-              console.log(`Loaded ${data.length} transactions for account ${accountId}`);
+              console.log(`✅ Loaded ${data.length} transactions for account ${accountId}`);
+              if (data.length === 0) {
+                console.log(`ℹ️ No transactions found for account ${accountId}`);
+              }
             } else {
+              console.error('❌ Invalid response format:', data);
               setTransactionsError(data.error || 'Failed to fetch transactions');
             }
           })
           .catch((error) => {
-            console.error('Error fetching transactions:', error);
+            console.error('❌ Error fetching transactions:', error);
             if (error.name === 'AbortError') {
               setTransactionsError('Request timed out. Please try again.');
             } else if (error.message.includes('Failed to fetch')) {
@@ -132,12 +142,18 @@ function StatementsContent() {
             setLoadingTransactions(false);
           });
       } catch (error) {
-        console.error('Error setting up fetch request:', error);
+        console.error('❌ Error setting up fetch request:', error);
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
         setLoadingTransactions(false);
+        setTransactionsError('Failed to setup request');
       }
+    } else if (tab === 'transactions' && !accountId) {
+      console.log('⚠️ No accountId provided, clearing transactions');
+      setTransactions([]);
+      setLoadingTransactions(false);
+      setTransactionsError('No account selected');
     }
   }, [tab, accountId, bankName]);
 

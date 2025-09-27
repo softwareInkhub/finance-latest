@@ -12,7 +12,8 @@ import {
   RiMenuUnfoldLine,
   RiFileLine,
   RiBarChartLine,
-  RiCloseLine
+  RiCloseLine,
+  RiFolderLine
 } from 'react-icons/ri';
 
 
@@ -28,7 +29,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const { openDashboard, openBanks, openTags, openFiles, openReports, openEntityTab } = useTabManager();
+  const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports, openEntityTab } = useTabManager();
   const { activeTabId, tabs } = useGlobalTabs();
   const { entities, refreshEntities } = useEntitySync();
 
@@ -61,6 +62,14 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
       path: '/dashboard', 
       icon: RiDashboardLine,
       description: 'Overview and analytics',
+      isEntity: false,
+      entityId: undefined
+    },
+    { 
+      name: 'Entities', 
+      path: '/entities', 
+      icon: RiFolderLine,
+      description: 'Manage entities, files and folders',
       isEntity: false,
       entityId: undefined
     },
@@ -217,6 +226,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
               // Map path to tab type for comparison
               const pathToTypeMap: { [key: string]: string } = {
                 '/dashboard': 'dashboard',
+                '/entities': 'entities',
                 '/banks': 'banks',
                 '/tags': 'tags',
                 '/files': 'files',
@@ -252,6 +262,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                       // Handle static menu items
                       const actions: { [key: string]: () => void } = {
                         '/dashboard': openDashboard,
+                        '/entities': openEntities,
                         '/banks': openBanks,
                         '/tags': openTags,
                         '/files': openFiles,

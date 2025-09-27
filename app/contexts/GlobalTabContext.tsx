@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode, use
 export interface GlobalTab {
   id: string;
   title: string;
-  type: 'dashboard' | 'transactions' | 'reports' | 'files' | 'banks' | 'tags' | 'accounts' | 'statements' | 'custom';
+  type: 'dashboard' | 'entities' | 'transactions' | 'reports' | 'files' | 'banks' | 'tags' | 'accounts' | 'statements' | 'custom';
   component: ReactNode;
   closable?: boolean;
   data?: Record<string, unknown>; // Additional data for the tab

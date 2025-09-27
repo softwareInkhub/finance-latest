@@ -1,7 +1,8 @@
 'use client';
-import { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
 import ExcelPreview from '../components/ExcelPreview';
+// FilePreview is defined in files/page.tsx, we'll create a simple CSV preview component
 
 export const usePreviewTabManager = () => {
   const { addTab, setActiveTab } = useGlobalTabs();
@@ -18,7 +19,7 @@ export const usePreviewTabManager = () => {
     addTab({
       id: tabId,
       title: `Preview: ${file.name}`,
-      type: 'files',
+      type: 'custom', // Use 'custom' type to avoid switching to Files section
       component: (
         <div className="h-full">
           <ExcelPreview 
@@ -30,6 +31,163 @@ export const usePreviewTabManager = () => {
         </div>
       ),
       data: { fileId: file.id, fileName: file.name, previewType: 'excel' }
+    });
+
+    setActiveTab(tabId);
+  }, [addTab, setActiveTab]);
+
+  const openCsvPreview = useCallback((file: { id: string; name: string; downloadUrl?: string }) => {
+    // Add null checks
+    if (!file || !file.id || !file.name) {
+      console.error('Invalid file data for CSV preview:', file);
+      return;
+    }
+
+    const tabId = `preview-${file.id}`;
+    
+    // Create a CSV preview component that uses ExcelPreview for full Excel-like functionality
+    const CsvPreviewComponent = () => {
+      const [excelData, setExcelData] = React.useState<{
+        sheetNames: string[];
+        sheets: { [key: string]: unknown[][] };
+        headers: { [key: string]: string[] };
+      } | null>(null);
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState<string | null>(null);
+
+      React.useEffect(() => {
+        const loadCsvData = async () => {
+          try {
+            setLoading(true);
+            setError(null);
+
+            // Get download URL from BRMH Drive API
+            const userId = localStorage.getItem('userId');
+            if (!userId) {
+              throw new Error('User not authenticated');
+            }
+
+            const response = await fetch(`/api/files/download?userId=${userId}&fileId=${file.id}`);
+            if (!response.ok) {
+              throw new Error('Failed to get download URL');
+            }
+
+            const result = await response.json();
+            if (result.error) {
+              throw new Error(result.error);
+            }
+
+            // Fetch CSV content
+            const csvResponse = await fetch(result.downloadUrl);
+            if (!csvResponse.ok) {
+              throw new Error('Failed to fetch CSV file');
+            }
+
+            const csvText = await csvResponse.text();
+            
+            // Parse CSV using Papa Parse (if available) or simple parsing
+            const lines = csvText.split('\n').filter(line => line.trim());
+            const parsedData = lines.map(line => {
+              // Simple CSV parsing - split by comma and handle quotes
+              const result = [];
+              let current = '';
+              let inQuotes = false;
+              
+              for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                  inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                  result.push(current.trim());
+                  current = '';
+                } else {
+                  current += char;
+                }
+              }
+              result.push(current.trim());
+              return result;
+            });
+
+            // Convert CSV data to Excel-like format
+            const sheetName = 'Sheet1';
+            const sheets = { [sheetName]: parsedData };
+            const headers = { [sheetName]: parsedData.length > 0 ? parsedData[0].map(String) : [] };
+
+            setExcelData({
+              sheetNames: [sheetName],
+              sheets,
+              headers
+            });
+          } catch (err) {
+            console.error('Error loading CSV:', err);
+            setError(err instanceof Error ? err.message : 'Failed to load CSV file');
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        loadCsvData();
+      }, []); // Remove file.id from dependency array since it's from outer scope
+
+      if (loading) {
+        return (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        );
+      }
+
+      if (error) {
+        return (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-red-500 text-center">
+              <p className="text-lg font-semibold mb-2">Error loading file</p>
+              <p className="text-sm">{error}</p>
+            </div>
+          </div>
+        );
+      }
+
+      if (!excelData) {
+        return (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-gray-500 text-center">
+              <p className="text-lg font-semibold mb-2">No data found</p>
+              <p className="text-sm">The CSV file appears to be empty</p>
+            </div>
+          </div>
+        );
+      }
+
+      // Use ExcelPreview component for full Excel-like functionality
+      return (
+        <div className="h-full">
+          <ExcelPreview 
+            file={{
+              id: file.id,
+              name: file.name,
+              downloadUrl: file.downloadUrl
+            }}
+            onClose={() => {
+              // Tab will be closed by the global tab system
+            }}
+            // Pass the parsed CSV data directly to ExcelPreview
+            excelData={excelData}
+          />
+        </div>
+      );
+    };
+    
+    addTab({
+      id: tabId,
+      title: `Preview: ${file.name}`,
+      type: 'custom', // Use 'custom' type to avoid switching to Files section
+      component: (
+        <div className="h-full">
+          <CsvPreviewComponent />
+        </div>
+      ),
+      data: { fileId: file.id, fileName: file.name, previewType: 'csv' }
     });
 
     setActiveTab(tabId);
@@ -52,14 +210,23 @@ export const usePreviewTabManager = () => {
       return;
     }
     
+    // Check if it's a CSV file
+    if (fileExtension === 'csv' || 
+        file.mimeType?.includes('csv') ||
+        file.mimeType?.includes('text/csv')) {
+      openCsvPreview(file);
+      return;
+    }
+    
     // For other file types, open in new tab/window
     if (file.downloadUrl) {
       window.open(file.downloadUrl, '_blank');
     }
-  }, [openExcelPreview]);
+  }, [openExcelPreview, openCsvPreview]);
 
   return {
     openExcelPreview,
+    openCsvPreview,
     openFilePreview
   };
 };

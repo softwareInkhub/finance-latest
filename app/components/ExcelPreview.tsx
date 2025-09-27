@@ -16,18 +16,27 @@ interface ExcelPreviewProps {
     downloadUrl?: string;
   };
   onClose: () => void;
+  excelData?: ExcelData; // Optional pre-loaded data for CSV files
 }
 
-export default function ExcelPreview({ file, onClose }: ExcelPreviewProps) {
-  const [excelData, setExcelData] = useState<ExcelData | null>(null);
+export default function ExcelPreview({ file, onClose, excelData: preloadedData }: ExcelPreviewProps) {
+  const [excelData, setExcelData] = useState<ExcelData | null>(preloadedData || null);
   const [activeSheet, setActiveSheet] = useState<string>('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!preloadedData);
   const [error, setError] = useState<string | null>(null);
   const [previewRows, setPreviewRows] = useState<number>(10000); // High limit to show most files completely
   const [columnWidths, setColumnWidths] = useState<{ [key: string]: number }>({});
   const [isResizing, setIsResizing] = useState<number | null>(null);
 
   const loadExcelData = useCallback(async () => {
+    // Skip loading if we already have preloaded data
+    if (preloadedData) {
+      setExcelData(preloadedData);
+      setActiveSheet(preloadedData.sheetNames[0] || '');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -40,17 +49,100 @@ export default function ExcelPreview({ file, onClose }: ExcelPreviewProps) {
         throw new Error('No download URL available. Please ensure the file is properly uploaded and accessible.');
       }
 
-      // Fetch the Excel file
-      const response = await fetch(file.downloadUrl);
+      // Try to fetch the Excel file
+      let response;
+      let actualDownloadUrl = file.downloadUrl;
+      
+      // If downloadUrl is a local API endpoint, call it first to get the actual download URL
+      if (file.downloadUrl.startsWith('/api/files/download')) {
+        console.log('Getting download URL from local API...');
+        console.log('API endpoint:', file.downloadUrl);
+        const downloadResponse = await fetch(file.downloadUrl);
+        console.log('Download API response status:', downloadResponse.status);
+        console.log('Download API response headers:', Object.fromEntries(downloadResponse.headers.entries()));
+        
+        if (downloadResponse.ok) {
+          const downloadData = await downloadResponse.json();
+          console.log('Download API response data:', downloadData);
+          if (downloadData.downloadUrl) {
+            actualDownloadUrl = downloadData.downloadUrl;
+            console.log('Got actual download URL:', actualDownloadUrl);
+          } else {
+            throw new Error('No download URL received from API');
+          }
+        } else {
+          const errorText = await downloadResponse.text();
+          console.error('Download API error response:', errorText);
+          throw new Error(`Failed to get download URL: ${downloadResponse.status} ${downloadResponse.statusText}`);
+        }
+      }
+      
+      // Now fetch the actual file
+      response = await fetch(actualDownloadUrl);
+      
+      // If the direct URL fails, try to get download URL from BRMH Drive API as fallback
       if (!response.ok) {
-        throw new Error('Failed to fetch file');
+        console.log('Direct download failed, trying to get download URL from BRMH Drive API...');
+        const userId = localStorage.getItem('userId');
+        if (userId) {
+          try {
+            const downloadResponse = await fetch(`/api/files/download?userId=${userId}&fileId=${file.id}`);
+            if (downloadResponse.ok) {
+              const downloadData = await downloadResponse.json();
+              if (downloadData.downloadUrl) {
+                response = await fetch(downloadData.downloadUrl);
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to get download URL from API:', e);
+          }
+        }
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+      }
+
+      // Check if response is HTML (error page) instead of binary data
+      const contentType = response.headers.get('content-type');
+      console.log('Response content-type:', contentType);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (contentType && contentType.includes('text/html')) {
+        const htmlText = await response.text();
+        console.error('Received HTML instead of Excel file:', htmlText.substring(0, 200));
+        throw new Error('File not found or access denied. The server returned an error page instead of the Excel file.');
+      }
+      
+      // Check if response is JSON instead of binary data
+      if (contentType && contentType.includes('application/json')) {
+        const jsonText = await response.text();
+        console.error('Received JSON instead of Excel file:', jsonText.substring(0, 200));
+        throw new Error('The server returned JSON data instead of the Excel file. This might be file metadata instead of the actual file content.');
       }
 
       const arrayBuffer = await response.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      
+      // Validate that we have actual file content
+      if (arrayBuffer.byteLength === 0) {
+        throw new Error('The file appears to be empty or corrupted.');
+      }
+
+      let workbook;
+      try {
+        workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      } catch (parseError) {
+        console.error('Error parsing Excel file:', parseError);
+        throw new Error('Failed to parse Excel file. The file may be corrupted or in an unsupported format.');
+      }
 
       // Extract sheet names
       const sheetNames = workbook.SheetNames;
+      
+      if (!sheetNames || sheetNames.length === 0) {
+        throw new Error('No sheets found in the Excel file.');
+      }
       
       // Extract data from each sheet
       const sheets: { [key: string]: unknown[][] } = {};
@@ -58,15 +150,37 @@ export default function ExcelPreview({ file, onClose }: ExcelPreviewProps) {
 
       sheetNames.forEach(sheetName => {
         const worksheet = workbook.Sheets[sheetName];
+        if (!worksheet) {
+          console.warn(`Sheet "${sheetName}" is empty or corrupted`);
+          sheets[sheetName] = [];
+          headers[sheetName] = [];
+          return;
+        }
+
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
         
         // Convert to 2D array
         const dataArray = jsonData as unknown[][];
+        
+        // Validate that we have data
+        if (!dataArray || dataArray.length === 0) {
+          console.warn(`Sheet "${sheetName}" contains no data`);
+          sheets[sheetName] = [];
+          headers[sheetName] = [];
+          return;
+        }
+        
         sheets[sheetName] = dataArray;
         
         // Extract headers (first row)
         headers[sheetName] = dataArray.length > 0 ? dataArray[0].map(String) : [];
       });
+
+      // Validate that we have at least one sheet with data
+      const validSheets = sheetNames.filter(name => sheets[name] && sheets[name].length > 0);
+      if (validSheets.length === 0) {
+        throw new Error('No valid sheets with data found in the Excel file.');
+      }
 
       setExcelData({
         sheetNames,
@@ -74,9 +188,9 @@ export default function ExcelPreview({ file, onClose }: ExcelPreviewProps) {
         headers
       });
 
-      // Set first sheet as active
-      if (sheetNames.length > 0) {
-        setActiveSheet(sheetNames[0]);
+      // Set first valid sheet as active
+      if (validSheets.length > 0) {
+        setActiveSheet(validSheets[0]);
       }
 
     } catch (err) {
@@ -85,7 +199,7 @@ export default function ExcelPreview({ file, onClose }: ExcelPreviewProps) {
     } finally {
       setLoading(false);
     }
-  }, [file]);
+  }, [file, preloadedData]);
 
   useEffect(() => {
     loadExcelData();

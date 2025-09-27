@@ -57,77 +57,86 @@ export default function DashboardPage() {
           return;
         }
 
-        // Fetch basic data with individual error handling
+        // Fetch all data in parallel with timeouts for better performance
+        const fetchWithTimeout = (url: string, timeout = 10000) => {
+          return Promise.race([
+            fetch(url),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout')), timeout)
+            )
+          ]);
+        };
+
+        // Load essential data first (fast APIs)
+        const [banksResult, accountsResult, statementsResult] = await Promise.allSettled([
+          fetchWithTimeout(`/api/bank?userId=${userId}`, 5000),
+          fetchWithTimeout(`/api/account?userId=${userId}`, 5000),
+          fetchWithTimeout(`/api/statements?userId=${userId}`, 5000)
+        ]);
+
+        // Set initial stats with fast data
         let banks = [];
         let accounts = [];
         let statements = [];
-        let recentTransactions = [];
 
-        // Fetch banks
-        try {
-          const banksResponse = await fetch(`/api/bank?userId=${userId}`);
-          if (banksResponse.ok) {
-            banks = await banksResponse.json();
-          }
-        } catch (error) {
-          console.warn('Failed to fetch banks:', error);
+        if (banksResult.status === 'fulfilled' && (banksResult.value as Response).ok) {
+          banks = await (banksResult.value as Response).json();
+        } else {
+          console.warn('Failed to fetch banks:', banksResult.status === 'rejected' ? banksResult.reason : 'HTTP error');
         }
 
-        // Fetch accounts
-        try {
-          const accountsResponse = await fetch(`/api/account?userId=${userId}`);
-          if (accountsResponse.ok) {
-            accounts = await accountsResponse.json();
-          }
-        } catch (error) {
-          console.warn('Failed to fetch accounts:', error);
+        if (accountsResult.status === 'fulfilled' && (accountsResult.value as Response).ok) {
+          accounts = await (accountsResult.value as Response).json();
+        } else {
+          console.warn('Failed to fetch accounts:', accountsResult.status === 'rejected' ? accountsResult.reason : 'HTTP error');
         }
 
-        // Fetch statements
-        try {
-          const statementsResponse = await fetch(`/api/statements?userId=${userId}`);
-          if (statementsResponse.ok) {
-            statements = await statementsResponse.json();
-          }
-        } catch (error) {
-          console.warn('Failed to fetch statements:', error);
+        if (statementsResult.status === 'fulfilled' && (statementsResult.value as Response).ok) {
+          statements = await (statementsResult.value as Response).json();
+        } else {
+          console.warn('Failed to fetch statements:', statementsResult.status === 'rejected' ? statementsResult.reason : 'HTTP error');
         }
 
-        // Fetch recent transactions (limited to 50 for performance)
-        try {
-          const transactionsResponse = await fetch(`/api/transactions/all?userId=${userId}&limit=50`);
-          if (transactionsResponse.ok) {
-            recentTransactions = await transactionsResponse.json();
-          }
-        } catch (error) {
-          console.warn('Failed to fetch recent transactions:', error);
-        }
-
-        // Set stats
+        // Set initial stats and show dashboard
         setStats({
           totalBanks: Array.isArray(banks) ? banks.length : 0,
           totalAccounts: Array.isArray(accounts) ? accounts.length : 0,
           totalStatements: Array.isArray(statements) ? statements.length : 0,
-          totalTransactions: Array.isArray(recentTransactions) ? recentTransactions.length : 0
+          totalTransactions: 0 // Will be updated when transactions load
         });
 
-        setTransactions(Array.isArray(recentTransactions) ? recentTransactions : []);
-        generateCashflowData(Array.isArray(recentTransactions) ? recentTransactions : []);
-
-        // Generate recent activities
-        const activities = generateRecentActivities(
-          Array.isArray(banks) ? banks : [],
-          Array.isArray(accounts) ? accounts : [],
-          Array.isArray(statements) ? statements : [],
-          Array.isArray(recentTransactions) ? recentTransactions : []
-        );
-        setRecentActivities(activities);
-        
         setError(null);
+        setLoading(false); // Show dashboard immediately
+
+        // Load transactions in background (slower API)
+        try {
+          const transactionsResponse = await fetchWithTimeout(`/api/transactions/all?userId=${userId}&limit=50`, 20000) as Response;
+          if (transactionsResponse.ok) {
+            const recentTransactions = await transactionsResponse.json();
+            setStats(prev => ({
+              ...prev,
+              totalTransactions: Array.isArray(recentTransactions) ? recentTransactions.length : 0
+            }));
+            setTransactions(Array.isArray(recentTransactions) ? recentTransactions : []);
+            generateCashflowData(Array.isArray(recentTransactions) ? recentTransactions : []);
+            
+            // Generate recent activities with all data
+            const activities = generateRecentActivities(
+              Array.isArray(banks) ? banks : [],
+              Array.isArray(accounts) ? accounts : [],
+              Array.isArray(statements) ? statements : [],
+              Array.isArray(recentTransactions) ? recentTransactions : []
+            );
+            setRecentActivities(activities);
+          }
+        } catch (error) {
+          console.warn('Failed to fetch transactions in background:', error);
+        }
+
+        return; // Exit early, don't process transactions below
       } catch (error) {
         console.error('Error in dashboard data fetch:', error);
         setError('Some data failed to load, but dashboard is still functional.');
-      } finally {
         setLoading(false);
       }
     };
