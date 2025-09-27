@@ -3057,8 +3057,8 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
         console.log('Sample existing transaction field values:');
 
-        uniqueFields.forEach(field => {
-          const dbField = fieldMapping[field];
+        uniqueFields.forEach(() => {
+          // const dbField = fieldMapping[field]; // Debug field - commented out
           // const value = existing[0][dbField]; // Debug value - commented out
         });
 
@@ -3131,7 +3131,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
         
         
         // Show what values are being extracted for each field
-        uniqueFields.forEach(field => {
+        uniqueFields.forEach(() => {
           // const value = rowObj[field]; // Debug value - commented out
         });
 
