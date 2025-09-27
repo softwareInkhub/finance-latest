@@ -272,10 +272,38 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
   const currentHeaders = useMemo(() => excelData?.headers[activeSheet] || [], [excelData?.headers, activeSheet]);
   const dataRows = currentSheetData.slice(1, previewRows + 1); // Skip header row
 
+  // Auto-fit columns when headers change
+  useEffect(() => {
+    if (currentHeaders.length > 0 && Object.keys(columnWidths).length === 0) {
+      // Auto-fit columns on first load
+      setTimeout(() => {
+        // Inline the fitAllColumns logic to avoid dependency issues
+        const equalWidth = 100 / currentHeaders.length;
+        
+        const newWidths: { [key: string]: number } = {};
+        currentHeaders.forEach((_, index) => {
+          const key = `${activeSheet}-${index}`;
+          newWidths[key] = equalWidth;
+        });
+        
+        setColumnWidths(newWidths);
+      }, 100);
+    }
+  }, [currentHeaders, columnWidths, activeSheet]);
+
   const getColumnWidth = useCallback((columnIndex: number): number => {
     const key = `${activeSheet}-${columnIndex}`;
-    return columnWidths[key] || 100; // Even smaller default width for more columns
-  }, [columnWidths, activeSheet]);
+    // Always use percentage-based widths for responsive behavior
+    if (columnWidths[key]) {
+      return columnWidths[key];
+    }
+    // For files with many columns, use smaller percentage
+    if (currentHeaders.length > 15) {
+      return Math.max(3, 100 / currentHeaders.length); // Minimum 3% per column
+    }
+    // For fewer columns, use equal distribution
+    return 100 / currentHeaders.length;
+  }, [columnWidths, activeSheet, currentHeaders.length]);
 
   const getTotalTableWidth = useCallback((): number => {
     if (!currentHeaders.length) return 100;
@@ -298,7 +326,19 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
     document.body.style.userSelect = 'none';
     
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.max(30, startWidth + (e.clientX - startX));
+      const deltaX = e.clientX - startX;
+      
+      // Always use percentage-based resizing for responsive behavior
+      const container = document.querySelector('.overflow-auto.max-h-\\[60vh\\]');
+      const containerWidth = container ? container.clientWidth : window.innerWidth;
+      const deltaPercent = (deltaX / containerWidth) * 100;
+      
+      // Set different limits based on number of columns
+      const minPercent = currentHeaders.length > 15 ? 2 : 5; // Smaller min for many columns
+      const maxPercent = currentHeaders.length > 15 ? 20 : 50; // Smaller max for many columns
+      
+      const newWidth = Math.max(minPercent, Math.min(maxPercent, startWidth + deltaPercent));
+      
       const key = `${activeSheet}-${columnIndex}`;
       setColumnWidths(prev => ({
         ...prev,
@@ -336,16 +376,13 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
   const fitAllColumns = () => {
     if (!currentHeaders.length) return;
     
-    // Calculate optimal width for each column
-    const containerWidth = 1400; // Approximate container width
-    const rowNumberWidth = 48; // Width of row number column
-    const availableWidth = containerWidth - rowNumberWidth;
-    const columnWidth = Math.max(80, Math.floor(availableWidth / currentHeaders.length));
+    // Always use equal percentage distribution for responsive behavior
+    const equalWidth = 100 / currentHeaders.length;
     
     const newWidths: { [key: string]: number } = {};
     currentHeaders.forEach((_, index) => {
       const key = `${activeSheet}-${index}`;
-      newWidths[key] = columnWidth;
+      newWidths[key] = equalWidth;
     });
     
     setColumnWidths(newWidths);
@@ -391,7 +428,7 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
 
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full max-h-[80vh] flex flex-col">
       <style jsx>{`
         .scrollbar-thin {
           scrollbar-width: thin;
@@ -434,7 +471,7 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
         }
       `}</style>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border-b-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 gap-4">
         <div className="flex items-center gap-3">
           {getFileIcon(file.name)}
           <div>
@@ -446,7 +483,7 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={fitAllColumns}
             className="flex items-center gap-2 px-3 py-2 text-sm bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
@@ -508,10 +545,13 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
       )}
 
       {/* Data Table */}
-      <div className="flex-1 overflow-auto bg-white dark:bg-gray-900">
+      <div className="flex-1 overflow-auto bg-white dark:bg-gray-900 max-h-[60vh]">
         {currentHeaders.length > 0 ? (
-          <div className="overflow-auto h-full" style={{ overflowX: 'auto', overflowY: 'auto' }}>
-            <table className="border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900" style={{ tableLayout: 'fixed', width: `${getTotalTableWidth()}px` }}>
+          <div className="overflow-auto max-h-[60vh]" style={{ overflowX: 'auto', overflowY: 'auto' }}>
+            <table className="border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 w-full" style={{ 
+              tableLayout: 'fixed', 
+              width: '100%' 
+            }}>
               <thead className="sticky top-0 z-10">
                 <tr>
                   {/* Row number header */}
@@ -529,13 +569,15 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
                   {currentHeaders.map((header, index) => (
                     <th
                       key={index}
-                      className="border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 relative group"
+                      className="border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 px-2 sm:px-3 py-1 sm:py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 relative group"
                       style={{ 
                         backgroundColor: '#f3f4f6',
                         borderColor: '#d1d5db',
-                        fontSize: '11px',
+                        fontSize: '10px',
                         fontWeight: '600',
-                        width: getColumnWidth(index)
+                        width: `${getColumnWidth(index)}%`,
+                        minWidth: '60px',
+                        maxWidth: '300px'
                       }}
                     >
                       <div className="truncate" title={header || `Column ${index + 1}`}>
@@ -543,12 +585,13 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
                       </div>
                       {/* Resize handle */}
                       <div
-                        className="absolute top-0 right-0 w-2 h-full cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                        className="absolute top-0 right-0 w-3 h-full cursor-col-resize hover:bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity z-20"
                         onMouseDown={(e) => handleMouseDown(e, index)}
                         style={{
                           backgroundColor: isResizing === index ? '#3b82f6' : 'transparent',
                           right: '-1px'
                         }}
+                        title="Drag to resize column"
                       />
                     </th>
                   ))}
@@ -578,12 +621,14 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
                     {currentHeaders.map((_, colIndex) => (
                       <td
                         key={colIndex}
-                        className={`border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 ${getCellAlignment(row[colIndex])}`}
+                        className={`border border-gray-300 dark:border-gray-600 px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm text-gray-900 dark:text-gray-100 ${getCellAlignment(row[colIndex])}`}
                         style={{ 
                           borderColor: '#d1d5db',
-                          fontSize: '12px',
-                          lineHeight: '1.4',
-                          width: getColumnWidth(colIndex)
+                          fontSize: '11px',
+                          lineHeight: '1.3',
+                          width: `${getColumnWidth(colIndex)}%`,
+                          minWidth: '60px',
+                          maxWidth: '300px'
                         }}
                       >
                         <div className="truncate" title={formatCellValue(row[colIndex])}>
@@ -605,7 +650,7 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
 
       {/* Footer Info */}
       <div className="p-3 border-t-2 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
-        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-sm text-gray-600 dark:text-gray-400 gap-2">
           <div className="flex items-center gap-4">
             <span>
               Showing {Math.min(previewRows, dataRows.length)} of {currentSheetData.length - 1} rows
@@ -629,7 +674,7 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
               </span>
             )}
           </div>
-           <div className="flex items-center gap-4">
+           <div className="flex flex-wrap items-center gap-2 sm:gap-4">
              <span>
                Sheet: <span className="font-semibold text-gray-900 dark:text-white">{activeSheet}</span>
              </span>

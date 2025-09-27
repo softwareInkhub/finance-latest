@@ -9,6 +9,7 @@ import { GlobalTabContent } from './GlobalTabContent';
 import { usePathname } from 'next/navigation';
 import { EntitySyncProvider } from '../contexts/EntitySyncContext';
 import { FileSyncProvider } from '../contexts/FileSyncContext';
+import { SidebarPreferencesProvider } from '../contexts/SidebarPreferencesContext';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
 
 export default function AppLayoutClient({ children }: { children: React.ReactNode }) {
@@ -78,7 +79,8 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
     <AuthWrapper>
       <EntitySyncProvider>
         <FileSyncProvider>
-          {isLoginPage ? children : (
+          <SidebarPreferencesProvider>
+            {isLoginPage ? children : (
             <div className="flex h-screen m-0 p-0 relative bg-gray-50 dark:bg-gray-900 overflow-hidden">
               <Sidebar 
                 onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -115,7 +117,8 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
                 </div>
               </div>
             </div>
-          )}
+            )}
+          </SidebarPreferencesProvider>
         </FileSyncProvider>
       </EntitySyncProvider>
     </AuthWrapper>

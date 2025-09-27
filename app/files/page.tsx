@@ -207,7 +207,7 @@ function UploadModal({ isOpen, onClose, onSuccess }: { isOpen: boolean; onClose:
 
       // Close modal instantly after successful upload
       setTimeout(() => {
-        onClose();
+          onClose();
       }, 100); // Small delay to show success message briefly
 
     } catch {
@@ -2868,7 +2868,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
       console.log('Preview data headers:', previewData[0]);
 
       
-      
+
       if (existing.length > 0 && previewData.length > 1) {
 
         console.log('Selected fields to check:', uniqueFields);
@@ -4001,7 +4001,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
             </button>
 
             
-
+            
             
 
             {/* Serial Number Generation Buttons */}
@@ -4508,20 +4508,27 @@ const FilesPage: React.FC = () => {
 
 
   useEffect(() => {
-
     const fetchAllUserFiles = async () => {
-
       setFilesLoading(true);
+      console.log('Starting file fetch...');
 
       const userId = localStorage.getItem('userId');
       if (!userId) {
         console.error('User ID not found');
+        setFilesLoading(false);
         return;
       }
 
       try {
-        // 1. Fetch all banks
-        const banksRes = await fetch(`/api/bank?userId=${userId}`);
+        // Start all API calls in parallel for maximum speed
+        console.log('Fetching banks and files in parallel...');
+        
+        const [banksRes, driveFilesRes] = await Promise.all([
+          fetch(`/api/bank?userId=${userId}`),
+          fetch(`/api/files?userId=${userId}&parentId=ROOT&limit=1000`)
+        ]);
+        
+        // 1. Process banks data
         const banksData = await banksRes.json();
 
         const processedBanks = Array.isArray(banksData) ? banksData
@@ -4536,24 +4543,27 @@ const FilesPage: React.FC = () => {
         setBanks(processedBanks);
 
 
-        let allAccounts: Record<string, unknown>[] = [];
-
-        // 2. For each bank, fetch all accounts for the user
-        for (const bank of banksData) {
+        // 2. Fetch all accounts for all banks in parallel (much faster!)
+        const accountPromises = banksData.map(async (bank: Record<string, unknown>) => {
+          try {
           const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
           const accounts = await accountsRes.json();
-
-          if (Array.isArray(accounts)) {
-            allAccounts = allAccounts.concat(accounts);
+          return Array.isArray(accounts) ? accounts : [];
+          } catch (error) {
+            console.error(`Error fetching accounts for bank ${(bank as Record<string, unknown>).id}:`, error);
+            return [];
           }
-        }
+        });
 
-        // 3. Fetch all files from BRMH Drive (includes both bank statements and standalone files)
+        await Promise.all(accountPromises);
+        // Note: account results are fetched but not currently used in this function
+
+        // 3. Process files from BRMH Drive (already fetched in parallel above)
         let allStatements: Record<string, unknown>[] = [];
 
         try {
-          const driveFilesRes = await fetch(`/api/files?userId=${userId}&parentId=ROOT&limit=1000`);
           const driveFiles = await driveFilesRes.json();
+          console.log('Drive files response:', driveFiles);
           
           if (driveFiles.files && Array.isArray(driveFiles.files)) {
             // Convert BRMH Drive files to FileData format
@@ -4576,6 +4586,7 @@ const FilesPage: React.FC = () => {
             }));
             
             allStatements = driveFileData;
+            console.log(`Processed ${driveFileData.length} files from BRMH Drive`);
           }
         } catch (driveError) {
           console.log('BRMH Drive files not available:', driveError);
@@ -4589,12 +4600,15 @@ const FilesPage: React.FC = () => {
           index === self.findIndex(s => s.id === statement.id)
         );
         
+        console.log(`File loading complete: ${uniqueStatements.length} unique files loaded`);
         setFiles(uniqueStatements as FileData[]);
 
       } catch (error) {
         console.error('Error fetching files:', error);
+        setFiles([]); // Set empty array on error
       } finally {
         setFilesLoading(false);
+        console.log('File loading finished');
       }
 
     };
@@ -4669,15 +4683,14 @@ const FilesPage: React.FC = () => {
       const banksRes = await fetch(`/api/bank?userId=${userId}`);
       const banksData = await banksRes.json();
 
-      let allAccounts: Record<string, unknown>[] = [];
-
       // 2. For each bank, fetch all accounts for the user
       for (const bank of banksData) {
         const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
         const accounts = await accountsRes.json();
 
+        // Note: accounts are fetched but not currently used in this function
         if (Array.isArray(accounts)) {
-          allAccounts = allAccounts.concat(accounts);
+          // Accounts fetched but not stored as they're not used
         }
       }
 
@@ -5618,7 +5631,17 @@ const FilesPage: React.FC = () => {
 
   if (filesLoading) {
 
-    mainContent = <div className="p-8 text-blue-700 font-semibold">Loading files...</div>;
+    mainContent = (
+      <div className="p-8 text-center">
+        <div className="text-blue-700 font-semibold mb-4">Loading files...</div>
+        <div className="text-sm text-gray-600">
+          Fetching your files and folders from BRMH Drive...
+        </div>
+        <div className="mt-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700 mx-auto"></div>
+        </div>
+      </div>
+    );
 
   } else if (activeTabId === 'all') {
 
@@ -5781,23 +5804,23 @@ const FilesPage: React.FC = () => {
 
     } else {
       
-      // Show file details and preview if a file is selected
-      const file = files.find(f => f.id === activeTabId);
+        // Show file details and preview if a file is selected
+        const file = files.find(f => f.id === activeTabId);
 
-      if (file) {
+        if (file) {
         // Show all files for this entity
-        
-        mainContent = (
-          <div className="p-8">
+
+          mainContent = (
+            <div className="p-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-blue-800">File Preview</h2>
             </div>
-            
-            <FilePreview file={file} onSlice={handleOpenSliceTab} />
-          </div>
-        );
+
+              <FilePreview file={file} onSlice={handleOpenSliceTab} />
+            </div>
+          );
+        }
       }
-    }
   }
 
 

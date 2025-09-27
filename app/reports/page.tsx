@@ -432,7 +432,11 @@ export default function ReportsPage() {
     fetchRemote();
   }, [saveCashFlowData]);
 
-  // Recompute tags summary on backend and reload
+  // Cache for tags summary recomputation to prevent excessive API calls
+  const tagsSummaryRecomputeCacheRef = useRef<{ timestamp: number; data: unknown } | null>(null);
+  const TAGS_SUMMARY_RECOMPUTE_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
+
+  // Recompute tags summary on backend and reload - OPTIMIZED
   const recomputeAndLoadTagsSummary = useCallback(async () => {
     try {
       if (typeof window === 'undefined') return null;
@@ -442,6 +446,15 @@ export default function ReportsPage() {
         console.log('No userId found for recompute');
         return null;
       }
+      
+      // Check cache first
+      const now = Date.now();
+      const cached = tagsSummaryRecomputeCacheRef.current;
+      if (cached && (now - cached.timestamp) < TAGS_SUMMARY_RECOMPUTE_CACHE_DURATION) {
+        console.log('Using cached tags summary recomputation');
+        return cached.data;
+      }
+      
       console.log('Sending POST to recompute tags summary...');
       const postRes = await fetch('/api/reports/tags-summary', {
         method: 'POST',
@@ -462,13 +475,16 @@ export default function ReportsPage() {
       }
       const summary = await res.json();
       console.log('Updated summary received:', summary);
+      
+      // Cache the result
+      tagsSummaryRecomputeCacheRef.current = { timestamp: now, data: summary };
       setTagsSummary(summary);
       return summary as typeof tagsSummary;
     } catch (err) {
       console.error('Failed to recompute/load tags summary:', err);
       return null;
     }
-  }, []);
+  }, [TAGS_SUMMARY_RECOMPUTE_CACHE_DURATION]);
 
   // Load tags summary from backend on mount
   useEffect(() => {
@@ -511,16 +527,44 @@ export default function ReportsPage() {
 
   
 
+  // Cache for tags summary to avoid unnecessary recomputation
+  const tagsSummaryCacheRef = useRef<{ timestamp: number; data: unknown } | null>(null);
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
   // Function to fetch tag financial data - using backend summary
   const fetchTagFinancialData = useCallback(async (tagName: string, ensureFresh: boolean = false) => {
-    // Only recompute if explicitly requested and not during modal operations
-    if (ensureFresh) {
-      await recomputeAndLoadTagsSummary();
+    // Check cache first
+    const now = Date.now();
+    const cached = tagsSummaryCacheRef.current;
+    
+    if (!ensureFresh && cached && (now - cached.timestamp) < CACHE_DURATION) {
+      console.log('Using cached tags summary for tag:', tagName);
+      const rec = tagsSummaryMap.get(tagName.toLowerCase());
+      if (rec) return { credit: rec.credit, debit: rec.debit, balance: rec.balance };
+      return { credit: 0, debit: 0, balance: 0 };
     }
+    
+    // Check if we have summary data, if not, compute it on-demand
+    if (!tagsSummary || Object.keys(tagsSummary).length === 0) {
+      console.log('No tags summary available, computing on-demand for tag:', tagName);
+      const summary = await recomputeAndLoadTagsSummary();
+      if (summary) {
+        tagsSummaryCacheRef.current = { timestamp: now, data: summary };
+      }
+    }
+    
+    // Only recompute if explicitly requested
+    if (ensureFresh) {
+      const summary = await recomputeAndLoadTagsSummary();
+      if (summary) {
+        tagsSummaryCacheRef.current = { timestamp: now, data: summary };
+    }
+    }
+    
     const rec = tagsSummaryMap.get(tagName.toLowerCase());
     if (rec) return { credit: rec.credit, debit: rec.debit, balance: rec.balance };
       return { credit: 0, debit: 0, balance: 0 };
-  }, [tagsSummaryMap, recomputeAndLoadTagsSummary]);
+  }, [tagsSummaryMap, tagsSummary, recomputeAndLoadTagsSummary, CACHE_DURATION]);
 
   // Keep a ref of latest cashFlowData to avoid effect dependency loops
   const cashFlowDataRef = useRef<CashFlowSection[]>(cashFlowData);
@@ -543,6 +587,47 @@ export default function ReportsPage() {
   const [accountFilter, setAccountFilter] = useState<string>('');
   const [sortDropdownOpen, setSortDropdownOpen] = useState<string | null>(null);
   const [dateSortOrder, setDateSortOrder] = useState<'newest' | 'oldest' | ''>('');
+
+  // Tags fetching functionality
+  const isFetchingTagsRef = useRef(false);
+  const tagsCacheRef = useRef<{ timestamp: number; data: Tag[] } | null>(null);
+  const TAGS_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  const fetchTags = useCallback(async () => {
+    try {
+      if (isFetchingTagsRef.current) return;
+      
+      // Check cache first
+      const now = Date.now();
+      const cached = tagsCacheRef.current;
+      if (cached && (now - cached.timestamp) < TAGS_CACHE_DURATION) {
+        console.log('Using cached tags');
+        setAllTags(cached.data);
+        return;
+      }
+      
+      isFetchingTagsRef.current = true;
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        console.error('No user ID found');
+        return;
+      }
+      
+      console.log('Fetching tags from API...');
+      const response = await fetch(`/api/tags?userId=${userId}`);
+      if (response.ok) {
+        const tags = await response.json();
+        // Cache the result
+        tagsCacheRef.current = { timestamp: now, data: tags };
+        setAllTags(tags);
+        console.log(`Loaded ${tags.length} tags`);
+      }
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    } finally {
+      isFetchingTagsRef.current = false;
+    }
+  }, [TAGS_CACHE_DURATION]);
 
   // Load tags on component mount and set up event listeners
   useEffect(() => {
@@ -752,7 +837,7 @@ export default function ReportsPage() {
       window.removeEventListener('testEvent', testEvent);
       window.removeEventListener('testTagEvent', testTagEvent);
     };
-  }, [recomputeAndLoadTagsSummary]);
+  }, [recomputeAndLoadTagsSummary, fetchTags]);
 
   // Filter handlers for tag transactions table
   // const handleDateFilter = (date: string | 'clear') => {
@@ -1120,7 +1205,7 @@ export default function ReportsPage() {
     })();
   }, [recomputeAndLoadTagsSummary]);
 
-  // Manual refresh function to sync latest tag changes from Super Bank
+  // Manual refresh function to sync latest tag changes from Super Bank - OPTIMIZED
   const handleRefreshTags = useCallback(async () => {
     // Prevent multiple simultaneous refresh operations
     if (isRefreshing) {
@@ -1168,7 +1253,7 @@ export default function ReportsPage() {
       
       // Normalize keys to lowercase so lookups are consistent
       const lookup = new Map<string, { credit: number; debit: number; balance: number }>(
-        (summary?.tags || []).map((t: Record<string, unknown>) => [String(t.tagName || '').toLowerCase(), { credit: Number(t.credit || 0), debit: Number(t.debit || 0), balance: Number(t.balance || 0) }])
+        (Array.isArray((summary as Record<string, unknown>)?.tags) ? (summary as Record<string, unknown>).tags as Record<string, unknown>[] : []).map((t: Record<string, unknown>) => [String(t.tagName || '').toLowerCase(), { credit: Number(t.credit || 0), debit: Number(t.debit || 0), balance: Number(t.balance || 0) }])
       );
       const tagToData = new Map(
         Array.from(tagNames).map((name) => {
@@ -1338,12 +1423,20 @@ export default function ReportsPage() {
           });
   }, [tagsSummaryMap, saveCashFlowData]);
 
-  // Auto-refresh tags when page loads/becomes visible (backend-driven)
+  // Auto-refresh tags when page loads/becomes visible (backend-driven) - OPTIMIZED
   useEffect(() => {
     let visibilityTimeoutId: NodeJS.Timeout;
+    let lastRefreshTime = 0;
+    const MIN_REFRESH_INTERVAL = 30000; // 30 seconds minimum between refreshes
     
     const handleVisibilityChange = () => {
       if (!document.hidden && !isRefreshing) {
+        const now = Date.now();
+        if (now - lastRefreshTime < MIN_REFRESH_INTERVAL) {
+          console.log('Skipping refresh - too soon since last refresh');
+          return;
+        }
+        
         clearTimeout(visibilityTimeoutId);
         visibilityTimeoutId = setTimeout(() => {
           // Only refresh if we have tag-based items
@@ -1356,9 +1449,10 @@ export default function ReportsPage() {
             )
           );
           if (hasTagItems) {
+            lastRefreshTime = now;
           handleRefreshTags();
           }
-        }, 500);
+        }, 1000); // Increased delay to 1 second
       }
     };
 
@@ -1375,20 +1469,36 @@ export default function ReportsPage() {
     };
   }, [handleRefreshTags, isRefreshing, cashFlowData]);
 
-  // Listen for tag updates from the tags page
+  // Listen for tag updates from the tags page - OPTIMIZED
   useEffect(() => {
+    let updateTimeoutId: NodeJS.Timeout;
+    let lastUpdateTime = 0;
+    const MIN_UPDATE_INTERVAL = 5000; // 5 seconds minimum between updates
+    
     const handleTagUpdated = (event: CustomEvent) => {
       console.log('Tag updated event received:', event.detail);
-      // Trigger a refresh after a short delay to allow backend updates to complete
-      setTimeout(() => {
+      const now = Date.now();
+      
+      if (now - lastUpdateTime < MIN_UPDATE_INTERVAL) {
+        console.log('Skipping tag update - too soon since last update');
+        return;
+      }
+      
+      // Clear any pending update
+      clearTimeout(updateTimeoutId);
+      
+      // Trigger a refresh after a delay to allow backend updates to complete
+      updateTimeoutId = setTimeout(() => {
+        lastUpdateTime = now;
         handleRefreshTags();
-      }, 1000);
+      }, 2000); // Increased delay to 2 seconds
     };
 
     window.addEventListener('tagUpdated', handleTagUpdated as EventListener);
 
     return () => {
       window.removeEventListener('tagUpdated', handleTagUpdated as EventListener);
+      clearTimeout(updateTimeoutId);
     };
   }, [handleRefreshTags]);
 
@@ -1960,36 +2070,14 @@ export default function ReportsPage() {
     setShowGroupOptionModal(false);
     
     try {
-      // Ensure the latest tag-summary so CR/DR/Bal show immediately
-      await recomputeAndLoadTagsSummary();
+      // Only fetch tags - don't recompute summary unless explicitly needed
+      // The summary will be computed when a tag is actually selected
       await fetchTags();
     } finally {
       setIsTagsModalLoading(false);
     }
   };
 
-  const isFetchingTagsRef = useRef(false);
-  const fetchTags = async () => {
-    try {
-      if (isFetchingTagsRef.current) return;
-      isFetchingTagsRef.current = true;
-      const userId = localStorage.getItem('userId');
-      if (!userId) {
-        console.error('No user ID found');
-        return;
-      }
-      
-      const response = await fetch(`/api/tags?userId=${userId}`);
-      if (response.ok) {
-        const tags = await response.json();
-        setAllTags(tags);
-      }
-    } catch (error) {
-      console.error('Error fetching tags:', error);
-    } finally {
-      isFetchingTagsRef.current = false;
-    }
-  };
 
   const handleTagSelect = (tag: Tag) => {
     setModalSelectedTags(prev => {
@@ -2613,6 +2701,10 @@ export default function ReportsPage() {
     }
   };
 
+      // Cache for tag transactions to avoid repeated API calls
+  const tagTransactionsCacheRef = useRef<Map<string, { timestamp: number; data: TransactionData[] }>>(new Map());
+  const TAG_TRANSACTIONS_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
+
       // Helper: open tag transactions modal by tag name – fetch from backend per-bank tables
   const openTagTransactions = useCallback(async (tagName: string) => {
     try {
@@ -2620,31 +2712,32 @@ export default function ReportsPage() {
       setActiveTagTransactions([]);
       setIsTagModalLoading(true);
       setShowTagTransactionsModal(true); // open immediately
-      // Fetch all transactions for user across banks from backend, then filter client-side by tag name for the modal
+      
+      // Check cache first
+      const now = Date.now();
+      const cached = tagTransactionsCacheRef.current.get(tagName);
+      if (cached && (now - cached.timestamp) < TAG_TRANSACTIONS_CACHE_DURATION) {
+        console.log('Using cached transactions for tag:', tagName);
+        setActiveTagTransactions(cached.data);
+        setIsTagModalLoading(false);
+        return;
+      }
+      
+      // Use the new efficient tag-based API endpoint
       const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
-      // Fast path: load a limited batch quickly for instant render
-      const fastUrl = userId
-        ? `/api/transactions/all?userId=${encodeURIComponent(userId)}&limit=3000`
-        : `/api/transactions/all?limit=3000`;
-      const fastRes = await fetch(fastUrl);
+      const tagUrl = userId
+        ? `/api/transactions/by-tag?userId=${encodeURIComponent(userId)}&tagName=${encodeURIComponent(tagName)}&limit=100`
+        : `/api/transactions/by-tag?tagName=${encodeURIComponent(tagName)}&limit=100`;
+      
+      console.log(`🚀 Fetching transactions for tag: ${tagName}`);
+      const tagRes = await fetch(tagUrl);
       let txs: TransactionData[] = [];
-      if (fastRes.ok) {
-        const allTx = await fastRes.json();
-        const selectedLower = tagName.toLowerCase();
-        txs = Array.isArray(allTx)
-          ? allTx.filter((tx: Record<string, unknown>) =>
-              Array.isArray(tx.tags) &&
-              tx.tags.some((t: unknown) => {
-                if (typeof t === 'string') return t.toLowerCase() === selectedLower;
-                if (t && typeof t === 'object') {
-                  const anyTag = t as Record<string, unknown>;
-                  const name = typeof anyTag.name === 'string' ? anyTag.name.toLowerCase() : '';
-                  return name === selectedLower;
-                }
-                return false;
-              })
-            )
-          : [];
+      
+      if (tagRes.ok) {
+        txs = await tagRes.json();
+        console.log(`✅ Loaded ${txs.length} transactions for tag: ${tagName}`);
+      } else {
+        console.error(`❌ Failed to fetch transactions for tag: ${tagName}`, tagRes.statusText);
       }
         // Fetch user account numbers for unique accountIds
       const uniqueAccountIds: string[] = Array.from(new Set(txs.map((t: TransactionData) => t.accountId as string).filter((v): v is string => typeof v === 'string' && v.length > 0)));
@@ -2668,64 +2761,20 @@ export default function ReportsPage() {
             (tx.accountId && idToUserAccountNo[tx.accountId]) ||
             tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A'
         }));
+        // Cache the results
+        tagTransactionsCacheRef.current.set(tagName, { timestamp: now, data: enriched });
+        
         setActiveTagTransactions(enriched);
         setIsTagModalLoading(false);
+        console.log(`Loaded ${enriched.length} transactions for tag: ${tagName}`);
 
-        // Background: fetch all and update when complete
-        const fullUrl = userId
-          ? `/api/transactions/all?userId=${encodeURIComponent(userId)}&fetchAll=true`
-          : `/api/transactions/all?fetchAll=true`;
-        fetch(fullUrl)
-          .then(async (res) => {
-            if (!res.ok) return null;
-            const allTx = await res.json();
-            const selectedLower = tagName.toLowerCase();
-            const txsAll: TransactionData[] = Array.isArray(allTx)
-              ? allTx.filter((tx: Record<string, unknown>) =>
-                  Array.isArray(tx.tags) &&
-                  tx.tags.some((t: unknown) => {
-                    if (typeof t === 'string') return t.toLowerCase() === selectedLower;
-                    if (t && typeof t === 'object') {
-                      const anyTag = t as Record<string, unknown>;
-                      const name = typeof anyTag.name === 'string' ? anyTag.name.toLowerCase() : '';
-                      return name === selectedLower;
-                    }
-                    return false;
-                  })
-                )
-              : [];
-            const uniqueIds: string[] = Array.from(new Set(
-              txsAll.map((t: TransactionData) => t.accountId as string).filter((v): v is string => typeof v === 'string' && v.length > 0)
-            ));
-            const entriesAll = await Promise.all(
-              uniqueIds.map(async (accountId: string) => {
-                try {
-                  const r = await fetch(`/api/account?accountId=${encodeURIComponent(accountId)}`);
-                  if (!r.ok) return [accountId, null] as const;
-                  const account = await r.json();
-                  const acctNo: string | null = (account?.accountNumber as string) || null;
-                  return [accountId, acctNo] as const;
-                } catch {
-                  return [accountId, null] as const;
-                }
-              })
-            );
-            const mapAll: { [id: string]: string | null } = Object.fromEntries(entriesAll);
-            const enrichedAll: TransactionData[] = txsAll.map((tx: TransactionData) => ({
-              ...tx,
-              userAccountNumber:
-                (tx.accountId && mapAll[tx.accountId]) ||
-                tx.accountNumber || tx.accountNo || tx.account || tx.account_id || tx.accountId || 'N/A'
-            }));
-            if (enrichedAll.length > enriched.length) {
-              setActiveTagTransactions(enrichedAll);
-            }
-          });
+        // No need for background loading with the new efficient API
+        console.log(`🎉 Successfully loaded ${enriched.length} transactions for tag: ${tagName}`);
     } catch {
       setActiveTagTransactions([]);
       setIsTagModalLoading(false);
     }
-  }, []);
+  }, [TAG_TRANSACTIONS_CACHE_DURATION]);
 
   // Function to get transaction counts by bank (unused - kept for potential future use)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

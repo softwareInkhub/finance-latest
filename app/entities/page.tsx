@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 // import { useEntitySync } from '../contexts/EntitySyncContext';
 // import { useFileSync } from '../contexts/FileSyncContext';
+import { useSidebarPreferences } from '../contexts/SidebarPreferencesContext';
 import { usePreviewTabManager } from '../hooks/usePreviewTabManager';
 import { 
   RiAddLine, 
@@ -13,7 +14,9 @@ import {
   RiDownloadLine,
   RiSearchLine,
   RiErrorWarningLine,
-  RiCloseLine
+  RiCloseLine,
+  RiSideBarLine,
+  RiSideBarFill
 } from 'react-icons/ri';
 
 interface Entity {
@@ -36,6 +39,7 @@ interface FileItem {
   parentId?: string;
   downloadUrl?: string;
   mimeType?: string;
+  entityName?: string; // For "All Files" view
 }
 
 interface DriveFolder {
@@ -74,7 +78,8 @@ export default function EntitiesPage() {
         }
       }
     }
-    return null;
+    // Default to "All Files" view
+    return { id: 'all-files', name: 'All Files', description: 'View all files from all entities' } as Entity;
   });
   const [entityFiles, setEntityFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,46 +95,25 @@ export default function EntitiesPage() {
   const [newEntityDescription, setNewEntityDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Refs to prevent duplicate API calls and debounce
+  const loadingRef = useRef(false);
+  const filesLoadingRef = useRef(false);
+  const lastLoadTimeRef = useRef(0);
+
   // Note: Context hooks are kept for potential future use
   // const { entities: contextEntities, refreshEntities } = useEntitySync();
   // const { entityFiles: contextEntityFiles, refreshEntityFiles } = useFileSync();
   const { openFilePreview } = usePreviewTabManager();
-
-  // Load entities on component mount
-  useEffect(() => {
-    loadEntities();
-  }, []);
-
-  // Load entity files if there's a selected entity from localStorage
-  useEffect(() => {
-    if (selectedEntity && entities.length > 0) {
-      // Verify the selected entity still exists in the current entities list
-      const entityExists = entities.find(e => e.id === selectedEntity.id);
-      if (entityExists) {
-        loadEntityFiles(selectedEntity.id);
-      } else {
-        // Clear selected entity if it no longer exists
-        setSelectedEntity(null);
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('selectedEntity');
-        }
-      }
-    }
-  }, [entities, selectedEntity]);
-
-  // Cleanup function to clear selected entity when component unmounts
-  useEffect(() => {
-    return () => {
-      // Don't clear on unmount, keep it for when user returns to entities
-      // The state will be restored from localStorage
-    };
-  }, []);
+  const { toggleEntityInSidebar, isEntityInSidebar } = useSidebarPreferences();
 
   // Note: We're using direct BRMH API calls instead of context
   // The context is kept for potential future use
 
-  const loadEntities = async () => {
+  const loadEntities = useCallback(async () => {
+    if (loadingRef.current) return; // Prevent duplicate calls
+    
     try {
+      loadingRef.current = true;
       setLoading(true);
       const userId = localStorage.getItem('userId');
       if (!userId) {
@@ -209,21 +193,129 @@ export default function EntitiesPage() {
       console.log('Final entities:', entities);
 
       setEntities(entities);
+      
+      // Load file counts for all entities
+      await loadFileCountsForAllEntities(entities);
+      
       setError(null);
     } catch (err) {
       setError('Failed to load entities');
       console.error('Error loading entities:', err);
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadEntityFiles = async (entityId: string) => {
+  const loadAllEntityFiles = useCallback(async () => {
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setError('User not authenticated');
+        return;
+      }
+
+      console.log('Loading all files from all entities...');
+      
+      // Get all files from all entities in parallel
+      const allFilesPromises = entities.map(async (entity) => {
+        try {
+          // Try the files endpoint first
+          let response = await fetch(`https://brmh.in/drive/files/${userId}?parentId=${entity.id}&limit=100`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          let driveResponse;
+          
+          if (response.ok) {
+            driveResponse = await response.json();
+          } else {
+            // Fallback to contents endpoint
+            response = await fetch(`https://brmh.in/drive/contents/${userId}/${entity.id}?limit=100`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (!response.ok) {
+              console.warn(`Failed to fetch files for entity ${entity.name}`);
+              return [];
+            }
+            
+            driveResponse = await response.json();
+          }
+          
+          // Handle different response formats
+          let driveFiles = [];
+          
+          if (Array.isArray(driveResponse)) {
+            driveFiles = driveResponse;
+          } else if (driveResponse && Array.isArray(driveResponse.items)) {
+            driveFiles = driveResponse.items;
+          } else if (driveResponse && Array.isArray(driveResponse.files)) {
+            driveFiles = driveResponse.files;
+          } else if (driveResponse && Array.isArray(driveResponse.folders)) {
+            driveFiles = driveResponse.folders;
+          }
+          
+          // Transform files and add entity name
+          return driveFiles.map((file: DriveFile) => ({
+            id: file.id,
+            name: file.name,
+            type: file.type === 'folder' ? 'folder' : 'file',
+            size: file.size,
+            createdAt: file.createdAt,
+            entityId: entity.id,
+            entityName: entity.name, // Add entity name
+            parentId: file.parentId,
+            downloadUrl: file.downloadUrl || `/api/files/download?userId=${userId}&fileId=${file.id}`,
+            mimeType: file.mimeType || (file.type === 'folder' ? 'folder' : 'application/octet-stream')
+          }));
+        } catch (error) {
+          console.error(`Error loading files for entity ${entity.name}:`, error);
+          return [];
+        }
+      });
+
+      const allFilesResults = await Promise.all(allFilesPromises);
+      const allFiles = allFilesResults.flat();
+      
+      console.log(`Loaded ${allFiles.length} files from ${entities.length} entities`);
+      setEntityFiles(allFiles);
+    } catch (error) {
+      setError('Failed to load all entity files');
+      console.error('Error loading all entity files:', error);
+      setEntityFiles([]);
+    }
+  }, [entities]);
+
+  const loadEntityFiles = useCallback(async (entityId: string) => {
+    if (filesLoadingRef.current) return; // Prevent duplicate calls
+    
+    // Debounce: prevent calls within 500ms of each other
+    const now = Date.now();
+    if (now - lastLoadTimeRef.current < 500) {
+      console.log('Debouncing loadEntityFiles call');
+      return;
+    }
+    lastLoadTimeRef.current = now;
+    
+    try {
+      filesLoadingRef.current = true;
       setFilesLoading(true);
       const userId = localStorage.getItem('userId');
       if (!userId) {
         setError('User not authenticated');
+        return;
+      }
+
+      // Handle "All Files" case
+      if (entityId === 'all-files') {
+        await loadAllEntityFiles();
         return;
       }
 
@@ -300,11 +392,150 @@ export default function EntitiesPage() {
         }));
       
       setEntityFiles(files);
+      
+      // Update the file count for this entity (without causing re-render loop)
+      if (entityId !== 'all-files') {
+        console.log(`Updating file count for entity ${entityId}: ${files.length} files`);
+        setEntities(prevEntities => {
+          const updatedEntities = prevEntities.map(entity => {
+            if (entity.id === entityId) {
+              console.log(`Entity ${entity.name} file count updated from ${entity.fileCount} to ${files.length}`);
+              return { ...entity, fileCount: files.length };
+            }
+            return entity;
+          });
+          console.log('Updated entities:', updatedEntities);
+          return updatedEntities;
+        });
+      }
     } catch (err) {
       setError('Failed to load entity files');
       console.error('Error loading entity files:', err);
     } finally {
+      filesLoadingRef.current = false;
       setFilesLoading(false);
+    }
+  }, [loadAllEntityFiles]); // Include loadAllEntityFiles dependency
+
+  // Load entities on component mount
+  useEffect(() => {
+    loadEntities();
+  }, [loadEntities]);
+
+  // Load entity files if there's a selected entity from localStorage
+  useEffect(() => {
+    if (selectedEntity && entities.length > 0 && !filesLoadingRef.current) {
+      // Handle "All Files" case
+      if (selectedEntity.id === 'all-files') {
+        loadEntityFiles(selectedEntity.id);
+        return;
+      }
+      
+      // Verify the selected entity still exists in the current entities list
+      const entityExists = entities.find(e => e.id === selectedEntity.id);
+      if (entityExists) {
+        loadEntityFiles(selectedEntity.id);
+      } else {
+        // Clear selected entity if it no longer exists
+        setSelectedEntity(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('selectedEntity');
+        }
+      }
+    }
+  }, [entities, selectedEntity, loadEntityFiles]);
+
+  // Cleanup function to clear selected entity when component unmounts
+  useEffect(() => {
+    return () => {
+      // Don't clear on unmount, keep it for when user returns to entities
+      // The state will be restored from localStorage
+    };
+  }, []);
+
+
+  const loadFileCountsForAllEntities = async (entitiesList: Entity[]) => {
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        console.error('User ID not found');
+        return;
+      }
+
+      console.log('Loading file counts for all entities...');
+      
+      // Get file counts for all entities in parallel
+      const fileCountPromises = entitiesList.map(async (entity) => {
+        try {
+          // Try the files endpoint first
+          let response = await fetch(`https://brmh.in/drive/files/${userId}?parentId=${entity.id}&limit=100`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          let driveResponse;
+          
+          if (response.ok) {
+            driveResponse = await response.json();
+          } else {
+            // Fallback to contents endpoint
+            response = await fetch(`https://brmh.in/drive/contents/${userId}/${entity.id}?limit=100`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (!response.ok) {
+              console.warn(`Failed to fetch file count for entity ${entity.name}`);
+              return { entityId: entity.id, fileCount: 0 };
+            }
+            
+            driveResponse = await response.json();
+          }
+          
+          // Handle different response formats
+          let driveFiles = [];
+          
+          if (Array.isArray(driveResponse)) {
+            driveFiles = driveResponse;
+          } else if (driveResponse && Array.isArray(driveResponse.items)) {
+            driveFiles = driveResponse.items;
+          } else if (driveResponse && Array.isArray(driveResponse.files)) {
+            driveFiles = driveResponse.files;
+          } else if (driveResponse && Array.isArray(driveResponse.folders)) {
+            driveFiles = driveResponse.folders;
+          }
+          
+          const fileCount = driveFiles.filter((file: DriveFile) => file.type !== 'folder').length;
+          console.log(`Entity ${entity.name} has ${fileCount} files`);
+          
+          return { entityId: entity.id, fileCount };
+        } catch (error) {
+          console.error(`Error loading file count for entity ${entity.name}:`, error);
+          return { entityId: entity.id, fileCount: 0 };
+        }
+      });
+
+      const fileCountResults = await Promise.all(fileCountPromises);
+      
+      // Update entities with correct file counts
+      setEntities(prevEntities => 
+        prevEntities.map(entity => {
+          const countResult = fileCountResults.find(result => result.entityId === entity.id);
+          if (countResult) {
+            console.log(`Updating ${entity.name} file count to ${countResult.fileCount}`);
+            return { ...entity, fileCount: countResult.fileCount };
+          }
+          return entity;
+        })
+      );
+      
+      console.log('File counts updated for all entities');
+    } catch (error) {
+      console.error('Error loading file counts for all entities:', error);
     }
   };
 
@@ -324,7 +555,7 @@ export default function EntitiesPage() {
     }
   };
 
-  const handleFileClick = (file: FileItem) => {
+  const handleFileClick = async (file: FileItem) => {
     console.log('File clicked:', file);
     console.log('File downloadUrl:', file.downloadUrl);
     console.log('File mimeType:', file.mimeType);
@@ -335,21 +566,47 @@ export default function EntitiesPage() {
       return;
     }
 
-    if (!file.downloadUrl) {
-      setError('File preview not available: no download URL');
-      return;
+    try {
+      let fileWithUrl = file;
+      
+      // If no download URL, fetch it
+      if (!file.downloadUrl) {
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          setError('User not authenticated');
+          return;
+        }
+        
+        const response = await fetch(`/api/files/download?userId=${userId}&fileId=${file.id}`);
+        if (!response.ok) {
+          throw new Error('Failed to get download URL');
+        }
+        
+        const result = await response.json();
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        
+        fileWithUrl = {
+          ...file,
+          downloadUrl: result.downloadUrl
+        };
+      }
+      
+      // Convert FileItem to the format expected by openFilePreview
+      const fileForPreview = {
+        id: fileWithUrl.id,
+        name: fileWithUrl.name,
+        downloadUrl: fileWithUrl.downloadUrl,
+        mimeType: fileWithUrl.mimeType
+      };
+      
+      // Open file preview using the same system as file section
+      openFilePreview(fileForPreview);
+    } catch (error) {
+      console.error('Failed to open file preview:', error);
+      setError('Failed to open file preview: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
-    
-    // Convert FileItem to the format expected by openFilePreview
-    const fileForPreview = {
-      id: file.id,
-      name: file.name,
-      downloadUrl: file.downloadUrl,
-      mimeType: file.mimeType
-    };
-    
-    // Open file preview using the same system as file section
-    openFilePreview(fileForPreview);
   };
 
   const handleCreateEntity = async () => {
@@ -629,6 +886,38 @@ export default function EntitiesPage() {
             </div>
           ) : (
             <div className="space-y-2">
+              {/* All Files Option */}
+              <div
+                onClick={() => handleEntitySelect({ id: 'all-files', name: 'All Files', description: 'View all files from all entities' } as Entity)}
+                className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+                  selectedEntity?.id === 'all-files'
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
+                    : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <RiFileLine 
+                      size={20} 
+                      className={selectedEntity?.id === 'all-files' ? 'text-blue-600' : 'text-gray-500'} 
+                    />
+                    <div>
+                      <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                        All Files
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                        View all files from all entities
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-xs text-gray-400">
+                      {entityFiles.length} files
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
               {filteredEntities.map((entity) => 
                 entity ? (
                 <div
@@ -661,6 +950,24 @@ export default function EntitiesPage() {
                       <span className="text-xs text-gray-400">
                         {entity.fileCount || 0} files
                       </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleEntityInSidebar(entity.id);
+                        }}
+                        className={`p-1 rounded transition-colors ${
+                          isEntityInSidebar(entity.id)
+                            ? 'text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/20'
+                            : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        }`}
+                        title={isEntityInSidebar(entity.id) ? 'Remove from sidebar' : 'Add to sidebar'}
+                      >
+                        {isEntityInSidebar(entity.id) ? (
+                          <RiSideBarFill size={14} />
+                        ) : (
+                          <RiSideBarLine size={14} />
+                        )}
+                      </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -741,6 +1048,11 @@ export default function EntitiesPage() {
                           </h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
                             {file.type === 'file' && file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'Folder'}
+                            {selectedEntity?.id === 'all-files' && 'entityName' in file && (
+                              <span className="ml-2 text-blue-600 dark:text-blue-400">
+                                • {file.entityName}
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>

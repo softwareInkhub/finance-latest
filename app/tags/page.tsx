@@ -212,22 +212,44 @@ export default function TagsPage() {
     setDeleteProgress({ current: 0, total: tagsToDelete.length });
     
     try {
-      for (let i = 0; i < tagsToDelete.length; i++) {
-        const tagId = tagsToDelete[i];
-        const res = await fetch('/api/tags', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: tagId }),
-        });
-        
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.error || `Failed to delete tag ${tagId}`);
+      // Use Promise.allSettled to delete all tags in parallel
+      const deletePromises = tagsToDelete.map(async (tagId, index) => {
+        try {
+          const res = await fetch('/api/tags', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: tagId }),
+          });
+          
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to delete tag ${tagId}`);
+          }
+          
+          // Update progress
+          setDeleteProgress({ current: index + 1, total: tagsToDelete.length });
+          
+          return { success: true, tagId };
+        } catch (error) {
+          console.error(`Error deleting tag ${tagId}:`, error);
+          return { success: false, tagId, error };
         }
-        
-        setDeleteProgress({ current: i + 1, total: tagsToDelete.length });
+      });
+      
+      // Wait for all deletions to complete
+      const results = await Promise.allSettled(deletePromises);
+      
+      // Check for any failures
+      const failures = results
+        .filter(result => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.success))
+        .map(result => result.status === 'fulfilled' ? result.value.error : result.reason);
+      
+      if (failures.length > 0) {
+        console.warn('Some tags failed to delete:', failures);
+        setError(`Failed to delete ${failures.length} out of ${tagsToDelete.length} tags`);
       }
       
+      // Refresh the tags list
       await fetchTags();
       setSelectedTags(new Set());
       
@@ -596,17 +618,29 @@ export default function TagsPage() {
         {/* Single Delete Modal */}
         {singleDeleteTag && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-700">
+            <div className={`rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border ${
+              theme === 'dark' 
+                ? 'bg-gray-800 border-gray-700' 
+                : 'bg-white border-gray-200'
+            }`}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Confirm Deletion</h3>
+                <h3 className={`text-lg font-semibold ${
+                  theme === 'dark' ? 'text-white' : 'text-gray-900'
+                }`}>Confirm Deletion</h3>
               </div>
-              <p className="text-gray-300 mb-6">
+              <p className={`mb-6 ${
+                theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
+              }`}>
                 Are you sure you want to delete the tag &quot;{singleDeleteTag.name || 'Unnamed Tag'}&quot;? This action cannot be undone.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setSingleDeleteTag(null)}
-                  className="flex-1 px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+                  className={`flex-1 px-4 py-2 border rounded-lg transition-colors ${
+                    theme === 'dark' 
+                      ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                  }`}
                 >
                   Cancel
                 </button>
@@ -625,27 +659,41 @@ export default function TagsPage() {
         {/* Progress Modal for Bulk Delete */}
         {deleting && deleteProgress.total > 0 && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border border-gray-700">
+            <div className={`rounded-xl shadow-xl p-6 w-full max-w-md mx-4 border ${
+              theme === 'dark' 
+                ? 'bg-gray-800 border-gray-700' 
+                : 'bg-white border-gray-200'
+            }`}>
               <div className="text-center">
-                <h3 className="text-lg font-semibold text-white mb-4">Deleting Tags</h3>
+                <h3 className={`text-lg font-semibold mb-4 ${
+                  theme === 'dark' ? 'text-white' : 'text-gray-900'
+                }`}>Deleting Tags</h3>
                 
                 <div className="mb-6">
-                  <div className="flex justify-between text-sm text-gray-400 mb-2">
+                  <div className={`flex justify-between text-sm mb-2 ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
                     <span>Progress</span>
                     <span>{deleteProgress.current} / {deleteProgress.total}</span>
                   </div>
-                  <div className="w-full bg-gray-700 rounded-full h-3">
+                  <div className={`w-full rounded-full h-3 ${
+                    theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'
+                  }`}>
                     <div 
                       className="bg-blue-600 h-3 rounded-full transition-all duration-300"
                       style={{ width: `${(deleteProgress.current / deleteProgress.total) * 100}%` }}
                     ></div>
                   </div>
-                  <div className="text-sm text-gray-500 mt-2">
+                  <div className={`text-sm mt-2 ${
+                    theme === 'dark' ? 'text-gray-500' : 'text-gray-600'
+                  }`}>
                     {Math.round((deleteProgress.current / deleteProgress.total) * 100)}% Complete
                   </div>
                 </div>
 
-                <div className="text-sm text-gray-400">
+                <div className={`text-sm ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                }`}>
                   Please wait while tags are being deleted...
                 </div>
               </div>

@@ -202,7 +202,48 @@ export default function EntityFilesPage({ entityId, entityName }: EntityFilesPag
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {files.map((file) => (
-            <div key={file.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow">
+            <div 
+              key={file.id} 
+              className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={async () => {
+                if (!file || !file.id || !file.name) {
+                  console.error('Invalid file data for preview:', file);
+                  return;
+                }
+
+                try {
+                  // If file doesn't have downloadUrl, fetch it first
+                  let fileWithUrl = file;
+                  if (!file.downloadUrl) {
+                    const userId = localStorage.getItem('userId');
+                    if (!userId) {
+                      console.error('User not authenticated');
+                      return;
+                    }
+
+                    const response = await fetch(`/api/files/download?userId=${userId}&fileId=${file.id}`);
+                    if (!response.ok) {
+                      throw new Error('Failed to get download URL');
+                    }
+                    
+                    const result = await response.json();
+                    if (result.error) {
+                      throw new Error(result.error);
+                    }
+                    
+                    fileWithUrl = {
+                      ...file,
+                      downloadUrl: result.downloadUrl
+                    };
+                  }
+
+                  openFilePreview(fileWithUrl);
+                } catch (error) {
+                  console.error('Failed to open file preview:', error);
+                  setError('Failed to open file preview: ' + (error instanceof Error ? error.message : 'Unknown error'));
+                }
+              }}
+            >
                <div className="flex items-start justify-between mb-3">
                  <div className="flex items-center gap-2 flex-1 min-w-0">
                    <RiFileLine className="w-5 h-5 text-blue-600 flex-shrink-0" />
@@ -223,7 +264,8 @@ export default function EntityFilesPage({ entityId, entityName }: EntityFilesPag
                  </div>
                  <div className="flex items-center gap-1">
                    <button
-                     onClick={async () => {
+                     onClick={async (e) => {
+                       e.stopPropagation(); // Prevent card click
                        if (!file || !file.id || !file.name) {
                          console.error('Invalid file data for preview:', file);
                          return;
@@ -267,7 +309,8 @@ export default function EntityFilesPage({ entityId, entityName }: EntityFilesPag
                      <RiEyeLine className="w-4 h-4" />
                    </button>
                    <button
-                     onClick={async () => {
+                     onClick={async (e) => {
+                       e.stopPropagation(); // Prevent card click
                        try {
                          let downloadUrl = file.downloadUrl;
                          
@@ -307,7 +350,10 @@ export default function EntityFilesPage({ entityId, entityName }: EntityFilesPag
                      </svg>
                    </button>
                    <button
-                     onClick={() => setShowDeleteModal({ isOpen: true, file })}
+                     onClick={(e) => {
+                       e.stopPropagation(); // Prevent card click
+                       setShowDeleteModal({ isOpen: true, file });
+                     }}
                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
                      title="Delete file"
                    >

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useTabManager } from '../hooks/useTabManager';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
 import { useEntitySync } from '../contexts/EntitySyncContext';
+import { useSidebarPreferences } from '../contexts/SidebarPreferencesContext';
 import { 
   RiDashboardLine, 
   RiBankLine, 
@@ -32,6 +33,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
   const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports, openEntityTab } = useTabManager();
   const { activeTabId, tabs } = useGlobalTabs();
   const { entities, refreshEntities } = useEntitySync();
+  const { isEntityInSidebar } = useSidebarPreferences();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -107,15 +109,17 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
     },
   ];
 
-  // Create dynamic entity menu items
-  const entityMenuItems = entities.map(entity => ({
-    name: entity.name,
-    path: `/entity/${entity.id}`,
-    icon: RiFileLine, // You can use a different icon for entities
-    description: entity.description || 'Entity files',
-    isEntity: true,
-    entityId: entity.id
-  }));
+  // Create dynamic entity menu items - only show entities that are selected for sidebar
+  const entityMenuItems = entities
+    .filter(entity => isEntityInSidebar(entity.id))
+    .map(entity => ({
+      name: entity.name,
+      path: `/entity/${entity.id}`,
+      icon: RiFileLine, // You can use a different icon for entities
+      description: entity.description || 'Entity files',
+      isEntity: true,
+      entityId: entity.id
+    }));
 
   // Combine static and dynamic menu items
   const menuItems = [...staticMenuItems, ...entityMenuItems];

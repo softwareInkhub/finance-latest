@@ -21,7 +21,7 @@ export const usePreviewTabManager = () => {
       title: `Preview: ${file.name}`,
       type: 'custom', // Use 'custom' type to avoid switching to Files section
       component: (
-        <div className="h-full">
+        <div className="h-full max-h-[85vh]">
           <ExcelPreview 
             file={file} 
             onClose={() => {
@@ -161,7 +161,7 @@ export const usePreviewTabManager = () => {
 
       // Use ExcelPreview component for full Excel-like functionality
       return (
-        <div className="h-full">
+        <div className="h-full max-h-[85vh]">
           <ExcelPreview 
             file={{
               id: file.id,
@@ -183,7 +183,7 @@ export const usePreviewTabManager = () => {
       title: `Preview: ${file.name}`,
       type: 'custom', // Use 'custom' type to avoid switching to Files section
       component: (
-        <div className="h-full">
+        <div className="h-full max-h-[85vh]">
           <CsvPreviewComponent />
         </div>
       ),

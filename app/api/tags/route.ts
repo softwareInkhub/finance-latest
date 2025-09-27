@@ -370,67 +370,74 @@ export async function DELETE(request: Request) {
     // 1. Delete the tag itself
     await brmhCrud.delete(TABLES.TAGS, { id });
 
-    // 2. OPTIMIZED: Only remove tag from transactions that actually have this tag
-    // This is much faster than scanning all transactions
+    // 2. OPTIMIZED: Move transaction cleanup to background for faster response
     if (typeof tagUserId === 'string' && tagUserId.length > 0) {
-      // Get all banks (we'll filter by userId in the transaction scan)
-      const userBanksResult = await brmhCrud.scan(TABLES.BANKS, {
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': tagUserId }
-      });
-      
-      const userBanks = userBanksResult.items || [];
-      
-      for (const bank of userBanks) {
-        const tableName = getBankTransactionTable(typeof bank.bankName === 'string' ? bank.bankName : '');
+      // Run transaction cleanup in background - don't wait for it
+      setImmediate(async () => {
         try {
-          // Find transactions that contain this tag and belong to this user
-          // Note: Some records store tags as an array of IDs (string[]), others as an array of objects [{id,name,color}]
-          // contains() only works for exact element matches and will not match when tags are objects.
-          // So we first try a targeted scan; if the table stores objects, we'll filter client-side below.
-          const transactionsWithTag = await brmhCrud.scan(tableName, {
+          console.log(`Starting background transaction cleanup for deleted tag ${id} from user ${tagUserId}`);
+          
+          // Get all banks (we'll filter by userId in the transaction scan)
+          const userBanksResult = await brmhCrud.scan(TABLES.BANKS, {
             FilterExpression: 'userId = :userId',
             ExpressionAttributeValues: { ':userId': tagUserId }
           });
           
-          const transactionsToUpdate = transactionsWithTag.items || [];
+          const userBanks = userBanksResult.items || [];
           
-          if (transactionsToUpdate.length > 0) {
-            // Update transactions in batches for better performance
-            const batchSize = 25; // DynamoDB batch limit
-            for (let i = 0; i < transactionsToUpdate.length; i += batchSize) {
-              const batch = transactionsToUpdate.slice(i, i + batchSize);
-              
-              const updatePromises = batch.map(async (tx: Record<string, unknown>) => {
-                if (!Array.isArray(tx.tags) || tx.tags.length === 0) return;
-                let changed = false;
-                let newTags: unknown[] = [];
-                // If tags are strings (IDs)
-                if (typeof tx.tags[0] === 'string') {
-                  newTags = (tx.tags as string[]).filter((tagId) => tagId !== id);
-                  changed = (newTags as string[]).length !== (tx.tags as string[]).length;
-                } else if (typeof tx.tags[0] === 'object' && tx.tags[0] !== null) {
-                  // If tags are objects
-                  newTags = (tx.tags as Array<{ id?: string }>)
-                    .filter((t) => (typeof t?.id === 'string' ? t.id !== id : true));
-                  changed = (newTags as unknown[]).length !== (tx.tags as unknown[]).length;
-                }
-                if (!changed) return; // nothing to update
-
-                await brmhCrud.update(tableName, { id: tx.id }, {
-                  tags: newTags
-                });
+          for (const bank of userBanks) {
+            const tableName = getBankTransactionTable(typeof bank.bankName === 'string' ? bank.bankName : '');
+            try {
+              // Find transactions that contain this tag and belong to this user
+              const transactionsWithTag = await brmhCrud.scan(tableName, {
+                FilterExpression: 'userId = :userId',
+                ExpressionAttributeValues: { ':userId': tagUserId }
               });
               
-              await Promise.all(updatePromises);
+              const transactionsToUpdate = transactionsWithTag.items || [];
+              
+              if (transactionsToUpdate.length > 0) {
+                // Update transactions in batches for better performance
+                const batchSize = 25; // DynamoDB batch limit
+                for (let i = 0; i < transactionsToUpdate.length; i += batchSize) {
+                  const batch = transactionsToUpdate.slice(i, i + batchSize);
+                  
+                  const updatePromises = batch.map(async (tx: Record<string, unknown>) => {
+                    if (!Array.isArray(tx.tags) || tx.tags.length === 0) return;
+                    let changed = false;
+                    let newTags: unknown[] = [];
+                    // If tags are strings (IDs)
+                    if (typeof tx.tags[0] === 'string') {
+                      newTags = (tx.tags as string[]).filter((tagId) => tagId !== id);
+                      changed = (newTags as string[]).length !== (tx.tags as string[]).length;
+                    } else if (typeof tx.tags[0] === 'object' && tx.tags[0] !== null) {
+                      // If tags are objects
+                      newTags = (tx.tags as Array<{ id?: string }>)
+                        .filter((t) => (typeof t?.id === 'string' ? t.id !== id : true));
+                      changed = (newTags as unknown[]).length !== (tx.tags as unknown[]).length;
+                    }
+                    if (!changed) return; // nothing to update
+
+                    await brmhCrud.update(tableName, { id: tx.id }, {
+                      tags: newTags
+                    });
+                  });
+                  
+                  await Promise.all(updatePromises);
+                }
+              }
+            } catch (error) {
+              // If table doesn't exist or other error, skip
+              console.log(`Skipping bank table ${tableName}:`, error);
+              continue;
             }
           }
+          
+          console.log(`Completed background transaction cleanup for deleted tag ${id}`);
         } catch (error) {
-          // If table doesn't exist or other error, skip
-          console.log(`Skipping bank table ${tableName}:`, error);
-          continue;
+          console.error('Background transaction cleanup failed:', error);
         }
-      }
+      });
     }
 
     // 3. OPTIMIZED: Remove cashflow items that reference this deleted tag (async)
