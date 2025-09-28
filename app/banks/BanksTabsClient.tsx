@@ -5,6 +5,7 @@ import StatementsPage from '../sub-pages/statements/page';
 import SuperBankPage from '../super-bank/page';
 import ErrorBoundary from '../components/ErrorBoundary';
 import CreateBankModal from '../components/Modals/CreateBankModal';
+import ConfirmDeleteModal from '../components/Modals/ConfirmDeleteModal';
 import { RiBankLine, RiCloseLine, RiEdit2Line, RiDeleteBin6Line, RiAddLine, RiAccountPinCircleLine } from 'react-icons/ri';
 import { Bank } from '../types/aws';
 import { useRouter, usePathname } from 'next/navigation';
@@ -28,6 +29,9 @@ export default function BanksTabsClient() {
   const [activeTab, setActiveTab] = useState('super-bank');
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [bankToDelete, setBankToDelete] = useState<Bank | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editBank, setEditBank] = useState<Bank | null>(null);
@@ -191,20 +195,20 @@ export default function BanksTabsClient() {
       b => b.bankName.trim().toLowerCase() === bankName.trim().toLowerCase()
     );
     if (exists) {
-      alert("A bank with this name already exists.");
+      setError("A bank with this name already exists.");
       return;
     }
     setError(null);
     try {
       const userId = localStorage.getItem('userId');
       if (!userId) {
-        alert('User not logged in');
+        setError('User not logged in');
         return;
       }
       
       // Check if user is admin
       if (user?.email !== adminEmail) {
-        alert('Only admin can create banks');
+        setError('Only admin can create banks');
         return;
       }
       
@@ -231,7 +235,7 @@ export default function BanksTabsClient() {
     try {
       // Check if user is admin
       if (user?.email !== adminEmail) {
-        alert('Only admin can edit banks');
+        setError('Only admin can edit banks');
         return;
       }
       
@@ -249,7 +253,7 @@ export default function BanksTabsClient() {
       setEditBank(null);
       setIsModalOpen(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update bank');
+      setError(err instanceof Error ? err.message : 'Failed to update bank');
     }
   };
 
@@ -303,24 +307,32 @@ export default function BanksTabsClient() {
     setIsModalOpen(true);
   };
 
-  const handleDeleteBank = async (bankId: string) => {
-    if (!confirm('Are you sure you want to delete this bank? This will also delete all associated accounts, statements, and transactions.')) {
+  const handleDeleteBank = (bankId: string) => {
+    const bank = banks.find(b => b.id === bankId);
+    if (!bank) return;
+    
+    // Check if user is admin
+    if (user?.email !== adminEmail) {
+      setError('Only admin can delete banks');
       return;
     }
+    
+    setBankToDelete(bank);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDeleteBank = async () => {
+    if (!bankToDelete) return;
+    
+    setIsDeleting(true);
     try {
       const userId = localStorage.getItem('userId');
       if (!userId) {
-        alert('User not logged in');
+        setError('User not logged in');
         return;
       }
       
-      // Check if user is admin
-      if (user?.email !== adminEmail) {
-        alert('Only admin can delete banks');
-        return;
-      }
-      
-      const response = await fetch(`/api/bank/${bankId}`, {
+      const response = await fetch(`/api/bank/${bankToDelete.id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -331,11 +343,14 @@ export default function BanksTabsClient() {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to delete bank');
       }
-      setBanks(prev => prev.filter(b => b.id !== bankId));
-      const message = 'Bank deleted successfully. All associated accounts, statements, and transactions have also been deleted.';
-      alert(message);
+      
+      setBanks(prev => prev.filter(b => b.id !== bankToDelete.id));
+      setIsDeleteModalOpen(false);
+      setBankToDelete(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete bank');
+      setError(err instanceof Error ? err.message : 'Failed to delete bank');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -343,6 +358,7 @@ export default function BanksTabsClient() {
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       <BanksSidebar 
+        banks={banks}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => {
           // Prevent rapid toggles with immediate state update
@@ -416,6 +432,8 @@ export default function BanksTabsClient() {
           setActiveTab(tabKey);
         }}
         onAddBankClick={() => setIsModalOpen(true)}
+        onEditBankClick={handleEditBank}
+        onDeleteBankClick={handleDeleteBank}
       />
       <div className="flex-1 flex flex-col">
        
@@ -469,14 +487,6 @@ export default function BanksTabsClient() {
                   </div>
                 </div>
               )}
-              
-              <CreateBankModal
-                isOpen={isModalOpen}
-                onClose={() => { setIsModalOpen(false); setEditBank(null); }}
-                onCreate={handleCreateBank}
-                editBank={editBank}
-                onUpdate={handleUpdateBank}
-              />
 
               {/* Compact Header Section */}
               <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white shadow-lg">
@@ -663,6 +673,35 @@ export default function BanksTabsClient() {
           })()}
         </div>
       </div>
+      
+      {/* Modal - Always Available */}
+      <CreateBankModal
+        isOpen={isModalOpen}
+        onClose={() => { 
+          setIsModalOpen(false); 
+          setEditBank(null);
+          setError(null);
+        }}
+        onCreate={handleCreateBank}
+        editBank={editBank}
+        onUpdate={handleUpdateBank}
+      />
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setBankToDelete(null);
+          setError(null);
+        }}
+        onConfirm={confirmDeleteBank}
+        itemName={bankToDelete?.bankName || ''}
+        itemType="bank"
+        confirmLabel="Delete Bank"
+        description="This will also delete all associated accounts, statements, and transactions. This action cannot be undone."
+        loading={isDeleting}
+      />
     </div>
   );
 } 

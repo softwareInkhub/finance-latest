@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   try {
     // Get bank-specific table name
     const tableName = getBankTransactionTable(bankName);
+    console.log(`Fetching transactions for bank: ${bankName}, table: ${tableName}, userId: ${userId}`);
     
     // First, get user's accounts to filter transactions
     const accountsResult = await brmhCrud.scan('accounts', {
@@ -26,30 +27,37 @@ export async function GET(request: Request) {
     });
     const userAccounts = accountsResult.items || [];
     const userAccountIds = new Set(userAccounts.map((account: Record<string, unknown>) => account.id));
+    console.log(`Found ${userAccounts.length} user accounts`);
 
-    // Fetch all transactions with pagination
-    const allTransactions: Record<string, unknown>[] = [];
-    let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
-    let hasMoreItems = true;
-    
-    while (hasMoreItems) {
-      const result = await brmhCrud.scan(tableName, {
-        itemPerPage: 250
-      });
-      const allBankTransactions = result.items || [];
+    // Try to fetch transactions from the bank-specific table
+    let allTransactions: Record<string, unknown>[] = [];
+    try {
+      // Fetch all transactions with pagination
+      let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
+      let hasMoreItems = true;
       
-      // Filter transactions by user's account IDs
-      const transactions = allBankTransactions.filter((transaction: Record<string, unknown>) => 
-        userAccountIds.has(transaction.accountId)
-      );
-      
-      allTransactions.push(...transactions);
-      
-      // Check if there are more items to fetch
-      lastEvaluatedKey = result.lastEvaluatedKey;
-      hasMoreItems = !!lastEvaluatedKey;
-      
-      // No artificial delay; let AWS SDK handle throttling/backoff
+      while (hasMoreItems) {
+        const result = await brmhCrud.scan(tableName, {
+          itemPerPage: 250
+        });
+        const allBankTransactions = result.items || [];
+        
+        // Filter transactions by user's account IDs
+        const transactions = allBankTransactions.filter((transaction: Record<string, unknown>) => 
+          userAccountIds.has(transaction.accountId)
+        );
+        
+        allTransactions.push(...transactions);
+        
+        // Check if there are more items to fetch
+        lastEvaluatedKey = result.lastEvaluatedKey;
+        hasMoreItems = !!lastEvaluatedKey;
+      }
+      console.log(`Found ${allTransactions.length} transactions in table ${tableName}`);
+    } catch (tableError) {
+      console.log(`Transaction table ${tableName} doesn't exist or is empty:`, tableError);
+      // If the table doesn't exist, return empty array instead of error
+      allTransactions = [];
     }
 
     // Fetch user's tags only to populate tag data

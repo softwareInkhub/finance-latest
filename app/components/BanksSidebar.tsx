@@ -1,13 +1,9 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
-import { RiBankLine, RiAccountPinCircleLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiMenuLine, RiSearchLine, RiCircleFill, RiAddLine } from 'react-icons/ri';
+import { RiBankLine, RiAccountPinCircleLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiMenuLine, RiSearchLine, RiCircleFill, RiAddLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
 import { useAuth } from '../hooks/useAuth';
-
-interface Bank {
-  id: string;
-  bankName: string;
-}
+import { Bank } from '../types/aws';
 
 interface Account {
   id: string;
@@ -15,11 +11,14 @@ interface Account {
 }
 
 interface BanksSidebarProps {
+  banks?: Bank[];
   onSuperBankClick?: () => void;
   onBankClick?: (bank: Bank) => void;
   onAccountClick?: (account: { id: string; accountHolderName: string }, bankId: string) => void;
   onBankSectionClick?: (section: string, bankId: string) => void;
   onAddBankClick?: () => void;
+  onEditBankClick?: (bank: Bank) => void;
+  onDeleteBankClick?: (bankId: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -34,15 +33,18 @@ const getBankInitials = (bankName: string): string => {
 };
 
 function BanksSidebar({ 
+  banks: propBanks,
   onSuperBankClick, 
   onBankClick, 
   onAccountClick, 
   onBankSectionClick,
   onAddBankClick,
+  onEditBankClick,
+  onDeleteBankClick,
   isCollapsed = false,
   onToggleCollapse
 }: BanksSidebarProps) {
-  const [banks, setBanks] = useState<Bank[]>([]);
+  const [localBanks, setLocalBanks] = useState<Bank[]>([]);
   const [accounts, setAccounts] = useState<{ [bankId: string]: Account[] }>({});
   const [expandedBank, setExpandedBank] = useState<string | null>(null);
   const [expandedBankSections, setExpandedBankSections] = useState<{ [bankId: string]: string[] }>({});
@@ -50,12 +52,18 @@ function BanksSidebar({
   const pathname = usePathname();
   const { user } = useAuth();
   const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  
+  // Use prop banks if provided, otherwise use local state
+  const banks = propBanks || localBanks;
 
   useEffect(() => {
-    fetch(`/api/bank`)
-      .then(res => res.json())
-      .then(data => setBanks(Array.isArray(data) ? data : []));
-  }, []);
+    // Only fetch banks if no prop banks are provided
+    if (!propBanks) {
+      fetch(`/api/bank`)
+        .then(res => res.json())
+        .then(data => setLocalBanks(Array.isArray(data) ? data : []));
+    }
+  }, [propBanks]);
 
   // Fetch accounts for a bank when expanded
   const handleExpand = useCallback((bankId: string) => {
@@ -180,40 +188,70 @@ function BanksSidebar({
             )}
             <ul className="mt-1">
               {banks.map(bank => (
-                <li key={bank.id} className="relative">
+                <li key={bank.id} className="relative group">
                   {/* Level 1: Bank Name (Bold) */}
-                  <button
-                    className={`flex items-center w-full gap-2 px-3 py-2 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-all duration-150 ${
-                      pathname.includes(`/banks/${bank.id}`) 
-                        ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500' 
-                        : 'hover:border-l-2 hover:border-blue-200 dark:hover:border-blue-600'
-                    } ${isCollapsed ? 'justify-center px-2' : ''}`}
-                    onClick={() => {
-                      handleExpand(bank.id);
-                      handleBankClick(bank);
-                    }}
-                    onMouseEnter={() => setHoveredBank(bank.id)}
-                    onMouseLeave={() => setHoveredBank(null)}
-                    title={bank.bankName}
-                  >
-                    {!isCollapsed && (
-                      <div className={`transition-transform duration-200 ${expandedBank === bank.id ? 'rotate-90' : ''}`}>
-                        <RiArrowRightSLine size={14} className="text-gray-500" />
+                  <div className={`flex items-center w-full gap-2 px-3 py-2 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-all duration-150 ${
+                    pathname.includes(`/banks/${bank.id}`) 
+                      ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500' 
+                      : 'hover:border-l-2 hover:border-blue-200 dark:hover:border-blue-600'
+                  } ${isCollapsed ? 'justify-center px-2' : ''}`}>
+                    <button
+                      className="flex items-center gap-2 flex-1"
+                      onClick={() => {
+                        handleExpand(bank.id);
+                        handleBankClick(bank);
+                      }}
+                      onMouseEnter={() => setHoveredBank(bank.id)}
+                      onMouseLeave={() => setHoveredBank(null)}
+                      title={bank.bankName}
+                    >
+                      {!isCollapsed && (
+                        <div className={`transition-transform duration-200 ${expandedBank === bank.id ? 'rotate-90' : ''}`}>
+                          <RiArrowRightSLine size={14} className="text-gray-500" />
+                        </div>
+                      )}
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 ${
+                        pathname.includes(`/banks/${bank.id}`)
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+                      }`}>
+                        {isCollapsed ? (
+                          <span className="text-xs font-semibold">{getBankInitials(bank.bankName)}</span>
+                        ) : (
+                          <RiBankLine size={16} />
+                        )}
+                      </div>
+                      {!isCollapsed && (
+                        <span className="flex-1 text-left text-sm font-semibold">{bank.bankName}</span>
+                      )}
+                    </button>
+                    
+                    {/* Admin Edit/Delete Buttons - Outside the main button */}
+                    {!isCollapsed && user?.email === adminEmail && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <button
+                          className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditBankClick?.(bank);
+                          }}
+                          title="Edit Bank"
+                        >
+                          <RiEdit2Line size={12} className="text-blue-600" />
+                        </button>
+                        <button
+                          className="p-1 hover:bg-red-100 dark:hover:bg-red-900/50 rounded transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteBankClick?.(bank.id);
+                          }}
+                          title="Delete Bank"
+                        >
+                          <RiDeleteBin6Line size={12} className="text-red-600" />
+                        </button>
                       </div>
                     )}
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 ${
-                      pathname.includes(`/banks/${bank.id}`)
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
-                    }`}>
-                      {isCollapsed ? (
-                        <span className="text-xs font-semibold">{getBankInitials(bank.bankName)}</span>
-                      ) : (
-                        <RiBankLine size={16} />
-                      )}
-                    </div>
-                    {!isCollapsed && <span className="flex-1 text-left text-sm font-semibold">{bank.bankName}</span>}
-                  </button>
+                  </div>
                   
                   {/* Hover Expand Mini Drawer */}
                   {isCollapsed && hoveredBank === bank.id && (
@@ -247,7 +285,34 @@ function BanksSidebar({
                         >
                           <RiTimeLine size={13} />
                           <span>Transactions</span>
-                  </button>
+                        </button>
+                        
+                        {/* Admin Actions */}
+                        {user?.email === adminEmail && (
+                          <>
+                            <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
+                            <button
+                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-blue-50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditBankClick?.(bank);
+                              }}
+                            >
+                              <RiEdit2Line size={13} />
+                              <span>Edit Bank</span>
+                            </button>
+                            <button
+                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-red-50 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteBankClick?.(bank.id);
+                              }}
+                            >
+                              <RiDeleteBin6Line size={13} />
+                              <span>Delete Bank</span>
+                            </button>
+                          </>
+                        )}
 
                       </div>
                     </div>
