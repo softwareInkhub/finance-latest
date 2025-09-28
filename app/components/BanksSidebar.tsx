@@ -1,7 +1,8 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
-import { RiBankLine, RiAccountPinCircleLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiMenuLine, RiSearchLine, RiCircleFill } from 'react-icons/ri';
+import { RiBankLine, RiAccountPinCircleLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiMenuLine, RiSearchLine, RiCircleFill, RiAddLine } from 'react-icons/ri';
+import { useAuth } from '../hooks/useAuth';
 
 interface Bank {
   id: string;
@@ -18,6 +19,7 @@ interface BanksSidebarProps {
   onBankClick?: (bank: Bank) => void;
   onAccountClick?: (account: { id: string; accountHolderName: string }, bankId: string) => void;
   onBankSectionClick?: (section: string, bankId: string) => void;
+  onAddBankClick?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -36,6 +38,7 @@ function BanksSidebar({
   onBankClick, 
   onAccountClick, 
   onBankSectionClick,
+  onAddBankClick,
   isCollapsed = false,
   onToggleCollapse
 }: BanksSidebarProps) {
@@ -45,14 +48,13 @@ function BanksSidebar({
   const [expandedBankSections, setExpandedBankSections] = useState<{ [bankId: string]: string[] }>({});
   const [hoveredBank, setHoveredBank] = useState<string | null>(null);
   const pathname = usePathname();
+  const { user } = useAuth();
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
   useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    if (userId) {
-      fetch(`/api/bank?userId=${userId}`)
-        .then(res => res.json())
-        .then(data => setBanks(Array.isArray(data) ? data : []));
-    }
+    fetch(`/api/bank`)
+      .then(res => res.json())
+      .then(data => setBanks(Array.isArray(data) ? data : []));
   }, []);
 
   // Fetch accounts for a bank when expanded
@@ -163,8 +165,17 @@ function BanksSidebar({
           {/* Banks Section */}
           <li className="mt-4">
             {!isCollapsed && (
-              <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border-l-2 border-gray-200 dark:border-gray-600">
-                Banks
+              <div className="flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border-l-2 border-gray-200 dark:border-gray-600">
+                <span>Banks</span>
+                {user?.email === adminEmail && (
+                  <button
+                    onClick={onAddBankClick}
+                    className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors duration-150"
+                    title="Add Bank (Admin Only)"
+                  >
+                    <RiAddLine size={14} />
+                  </button>
+                )}
               </div>
             )}
             <ul className="mt-1">

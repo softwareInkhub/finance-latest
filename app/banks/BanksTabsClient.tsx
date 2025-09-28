@@ -38,20 +38,14 @@ export default function BanksTabsClient() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
-  const adminEmail = 'nitesh.inkhub@gmail.com';
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
   useEffect(() => {
     const fetchBanks = async () => {
       try {
         setError(null);
-        const userId = localStorage.getItem('userId');
-        if (!userId) {
-          setError('User not logged in');
-          setIsFetching(false);
-          return;
-        }
         
-        const response = await fetch(`/api/bank?userId=${userId}`);
+        const response = await fetch(`/api/bank`);
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Failed to fetch banks');
@@ -208,12 +202,18 @@ export default function BanksTabsClient() {
         return;
       }
       
+      // Check if user is admin
+      if (user?.email !== adminEmail) {
+        alert('Only admin can create banks');
+        return;
+      }
+      
       const response = await fetch('/api/bank', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ bankName, tags, userId }),
+        body: JSON.stringify({ bankName, tags, userId, userEmail: user?.email }),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -229,12 +229,21 @@ export default function BanksTabsClient() {
 
   const handleUpdateBank = async (id: string, bankName: string, tags: string[]) => {
     try {
+      // Check if user is admin
+      if (user?.email !== adminEmail) {
+        alert('Only admin can edit banks');
+        return;
+      }
+      
       const response = await fetch(`/api/bank/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bankName, tags }),
+        body: JSON.stringify({ bankName, tags, userEmail: user?.email }),
       });
-      if (!response.ok) throw new Error('Failed to update bank');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update bank');
+      }
       const updatedBank = await response.json();
       setBanks(prev => prev.map(b => b.id === id ? updatedBank : b));
       setEditBank(null);
@@ -305,14 +314,23 @@ export default function BanksTabsClient() {
         return;
       }
       
+      // Check if user is admin
+      if (user?.email !== adminEmail) {
+        alert('Only admin can delete banks');
+        return;
+      }
+      
       const response = await fetch(`/api/bank/${bankId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({ userId, userEmail: user?.email }),
       });
-      if (!response.ok) throw new Error('Failed to delete bank');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete bank');
+      }
       setBanks(prev => prev.filter(b => b.id !== bankId));
       const message = 'Bank deleted successfully. All associated accounts, statements, and transactions have also been deleted.';
       alert(message);
@@ -397,6 +415,7 @@ export default function BanksTabsClient() {
           }]);
           setActiveTab(tabKey);
         }}
+        onAddBankClick={() => setIsModalOpen(true)}
       />
       <div className="flex-1 flex flex-col">
        

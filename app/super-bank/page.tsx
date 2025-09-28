@@ -13,6 +13,7 @@ import TransactionTable from '../components/TransactionTable';
 import { Transaction, TransactionRow, Tag } from '../types/transaction';
 import Modal from '../components/Modals/Modal';
 import { convertToISOFormat, parseDate, formatDateForCSV } from '../utils/dateUtils';
+import { useAuth } from '../hooks/useAuth';
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -2014,7 +2015,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
 }
 
 export default function SuperBankPage() {
-
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2115,7 +2116,6 @@ export default function SuperBankPage() {
   const [drCrFilter, setDrCrFilter] = useState<'DR' | 'CR' | ''>('');
   const [accountFilter, setAccountFilter] = useState<string>('');
 
-  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   // Drag-and-drop state for header editing
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
@@ -2464,7 +2464,7 @@ export default function SuperBankPage() {
       return;
     }
     
-    fetch(`/api/bank-header?bankName=SUPER%20BANK&userId=${userId}`)
+    fetch(`/api/bank-header?bankName=SUPER%20BANK`)
       .then(res => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
@@ -2512,7 +2512,7 @@ export default function SuperBankPage() {
         const idNameMap: { [id: string]: string } = {};
         await Promise.all(
           banks.map(async (bank) => {
-            const res = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bank.bankName)}&userId=${userId}`);
+            const res = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bank.bankName)}`);
             const data = await res.json();
             if (data && data.mapping) {
               mappings[bank.id] = { ...data, bankName: bank.bankName };
@@ -3584,17 +3584,6 @@ export default function SuperBankPage() {
 
 
 
-  useEffect(() => {
-    const userId = localStorage.getItem('userId');
-    if (userId) {
-      fetch(`/api/users?id=${userId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.email) setUserEmail(data.email);
-        })
-        .catch(() => setUserEmail(null));
-    }
-  }, []);
 
   useEffect(() => {
     if (
@@ -3628,10 +3617,18 @@ export default function SuperBankPage() {
         return;
       }
       
+      // Check if user is admin
+      const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+      if (user?.email !== adminEmail) {
+        setHeaderError('Only admin can edit Super Bank header');
+        setHeaderLoading(false);
+        return;
+      }
+      
       const res = await fetch("/api/bank-header", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankName: "SUPER BANK", bankId: null, header: headerArr, userId })
+        body: JSON.stringify({ bankName: "SUPER BANK", bankId: null, header: headerArr, userId, userEmail: user?.email })
       });
       if (!res.ok) throw new Error("Failed to save header");
       setSuperHeader(headerArr);
@@ -3973,7 +3970,7 @@ export default function SuperBankPage() {
               >
                 ×
               </button>
-              {userEmail === "nitesh.inkhub@gmail.com" && !headerEditing && (
+              {user?.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL && !headerEditing && (
                 <button
                   className="px-2 py-1 bg-blue-500 text-white rounded text-xs flex items-center"
                   onClick={() => setHeaderEditing(true)}

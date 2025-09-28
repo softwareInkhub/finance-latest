@@ -3,16 +3,32 @@ import { brmhCrud, TABLES, getBankTransactionTable } from '../../brmh-client';
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { bankName, tags } = await request.json();
+  const { bankName, tags, userEmail } = await request.json();
 
   if (!bankName) {
     return NextResponse.json({ error: 'Bank name is required' }, { status: 400 });
+  }
+
+  // Check if user is admin
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) {
+    return NextResponse.json(
+      { error: 'Admin email not configured' },
+      { status: 500 }
+    );
+  }
+  if (userEmail !== adminEmail) {
+    return NextResponse.json(
+      { error: 'Only admin can edit banks' },
+      { status: 403 }
+    );
   }
 
   const bank = {
     id,
     bankName,
     tags: Array.isArray(tags) ? tags : [],
+    updatedAt: new Date().toISOString(),
   };
 
   await brmhCrud.create(TABLES.BANKS, bank);
@@ -22,19 +38,33 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { userId } = await request.json();
+  const { userId, userEmail } = await request.json();
 
   if (!userId) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
 
+  // Check if user is admin
+  const adminEmail = process.env.ADMIN_EMAIL;
+  if (!adminEmail) {
+    return NextResponse.json(
+      { error: 'Admin email not configured' },
+      { status: 500 }
+    );
+  }
+  if (userEmail !== adminEmail) {
+    return NextResponse.json(
+      { error: 'Only admin can delete banks' },
+      { status: 403 }
+    );
+  }
+
   try {
-    // Get the bankName for this bank id (user's bank only)
+    // Get the bankName for this bank id (global bank)
     const bankResult = await brmhCrud.scan(TABLES.BANKS, {
-      FilterExpression: 'id = :id AND userId = :userId',
+      FilterExpression: 'id = :id',
       ExpressionAttributeValues: { 
-        ':id': id,
-        ':userId': userId 
+        ':id': id
       },
     });
     const bank = (bankResult.items && bankResult.items[0]) || null;

@@ -2,24 +2,15 @@ import { NextResponse } from 'next/server';
 import { brmhCrud, TABLES } from '../brmh-client';
 import { v4 as uuidv4 } from 'uuid';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get('userId');
-  
-  if (!userId) {
-    return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-  }
-  
+export async function GET() {
   try {
-    // Fetch banks for specific user only
+    // Fetch all banks (global banks for all users)
     const allBanks: Record<string, unknown>[] = [];
     let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
     let hasMoreItems = true;
     
     while (hasMoreItems) {
       const result = await brmhCrud.scan(TABLES.BANKS, { 
-        FilterExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId },
         itemPerPage: 100 
       });
       const banks = result.items || [];
@@ -47,7 +38,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { bankName, tags, userId } = await request.json();
+    const { bankName, tags, userId, userEmail } = await request.json();
 
     if (!bankName) {
       return NextResponse.json(
@@ -63,12 +54,27 @@ export async function POST(request: Request) {
       );
     }
 
+    // Check if user is admin
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (!adminEmail) {
+      return NextResponse.json(
+        { error: 'Admin email not configured' },
+        { status: 500 }
+      );
+    }
+    if (userEmail !== adminEmail) {
+      return NextResponse.json(
+        { error: 'Only admin can create banks' },
+        { status: 403 }
+      );
+    }
+
     const id = uuidv4();
     const bank = {
       id,
       bankName,
       tags: Array.isArray(tags) ? tags : [],
-      userId, // Associate bank with user
+      createdBy: userId, // Track who created the bank
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

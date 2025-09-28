@@ -7,6 +7,7 @@ import { RiAccountPinCircleLine, RiAddLine, RiEdit2Line, RiDeleteBin6Line } from
 import HeaderEditor from '../../components/HeaderEditor';
 import ConfirmDeleteModal from '../../components/Modals/ConfirmDeleteModal';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../hooks/useAuth';
 
 interface Account {
   id: string;
@@ -31,6 +32,7 @@ type Condition = {
 
 export default function AccountsClient({ bankId, onAccountClick, allTags = [] }: AccountsClientProps) {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const router = useRouter();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -228,7 +230,7 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           throw new Error('User ID not found');
         }
         
-        const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}&userId=${userId}`, {
+        const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`, {
           signal: controller.signal
         });
         
@@ -333,6 +335,11 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
 
     const fetchBankMapping = async () => {
       try {
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          throw new Error('User ID not found');
+        }
+        
         const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`, {
           signal: controller.signal
         });
@@ -513,10 +520,17 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
       return;
     }
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setHeaderError('User not logged in');
+        setHeaderLoading(false);
+        return;
+      }
+      
       const res = await fetch("/api/bank-header", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bankName, bankId, header: headerArr })
+        body: JSON.stringify({ bankName, bankId, header: headerArr, userId, userEmail: user?.email })
       });
       if (!res.ok) throw new Error("Failed to save header");
       setBankHeader(headerArr);
@@ -535,6 +549,13 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
     setMappingError(null);
     setMappingSuccess(null);
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setMappingError('User not logged in');
+        setMappingLoading(false);
+        return;
+      }
+      
       // Reverse the mapping: key = super bank header, value = original field
       const reversedMapping: { [key: string]: string } = {};
       Object.entries(mapping).forEach(([originalField, superHeader]) => {
@@ -544,7 +565,7 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
       const res = await fetch('/api/bank-header', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bankName, bankId, header: bankHeader, mapping: reversedMapping, conditions }),
+        body: JSON.stringify({ bankName, bankId, header: bankHeader, mapping: reversedMapping, conditions, userId, userEmail: user?.email }),
       });
       if (!res.ok) throw new Error('Failed to save mapping');
       console.log('Mapping and conditions saved successfully!');

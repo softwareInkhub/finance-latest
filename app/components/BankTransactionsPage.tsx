@@ -419,7 +419,7 @@ export default function BankTransactionsPage({ bankName }: BankTransactionsPageP
     if (bankName) {
       const userId = localStorage.getItem('userId');
       if (userId) {
-        fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}&userId=${userId}`)
+        fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`)
           .then(res => res.json())
           .then(data => {
             const headerOrder = Array.isArray(data.header) ? data.header : [];
