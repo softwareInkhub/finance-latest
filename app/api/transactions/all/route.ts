@@ -40,11 +40,10 @@ export async function GET(request: Request) {
     const userAccountIds = new Set(userAccounts.map((account: Record<string, unknown>) => account.id));
     
 
-    // Fetch transactions from all bank tables with pagination
-    const allTransactions: Record<string, unknown>[] = [];
-    
-    for (const bank of banks) {
-      const tableName = getBankTransactionTable(bank.bankName);
+    // Fetch transactions from all bank tables in parallel for better performance
+    const bankPromises = banks.map(async (bank: Record<string, unknown>) => {
+      const tableName = getBankTransactionTable(bank.bankName as string);
+      const bankTransactions: Record<string, unknown>[] = [];
       
       try {
         let lastEvaluatedKey: Record<string, unknown> | undefined = undefined;
@@ -53,11 +52,11 @@ export async function GET(request: Request) {
         
         console.log(`Fetching transactions from bank: ${bank.bankName} (table: ${tableName})`);
         
-        while (hasMoreItems && allTransactions.length < limit) {
+        while (hasMoreItems && bankTransactions.length < Math.min(limit, 1000)) { // Limit per bank
           const result = await brmhCrud.scan(tableName, {
             FilterExpression: userId ? 'userId = :userId' : undefined,
             ExpressionAttributeValues: userId ? { ':userId': userId } : undefined,
-            itemPerPage: Math.min(250, limit - allTransactions.length)
+            itemPerPage: 250
           });
           const allBankTransactions = result.items || [];
           
@@ -66,49 +65,48 @@ export async function GET(request: Request) {
             userAccountIds.has(transaction.accountId)
           );
           
-          // Populate tag data for each transaction
-          const transactionsWithTags = transactions.map((transaction: Record<string, unknown>) => {
-            if (Array.isArray(transaction.tags)) {
-              transaction.tags = transaction.tags
-                .map(tag => typeof tag === 'string' ? tagsMap.get(tag) : tag)
-                .filter(Boolean);
-            }
-            return transaction;
-          });
+          bankTransactions.push(...transactions);
+          bankTransactionCount += transactions.length;
           
-          allTransactions.push(...transactionsWithTags);
-          bankTransactionCount += transactionsWithTags.length;
+          console.log(`Fetched ${transactions.length} transactions from ${bank.bankName} (total from this bank: ${bankTransactionCount})`);
           
-          console.log(`Fetched ${transactionsWithTags.length} transactions from ${bank.bankName} (total from this bank: ${bankTransactionCount}, overall total: ${allTransactions.length})`);
-          
-          // Check if we've reached the limit or if there are more items to fetch
-          if (allTransactions.length >= limit) {
-            hasMoreItems = false;
-            console.log(`Reached limit of ${limit} transactions, stopping fetch`);
-          } else {
-            lastEvaluatedKey = result.lastEvaluatedKey;
-            hasMoreItems = !!lastEvaluatedKey;
-          }
-          
-          // Remove artificial delay; rely on SDK retry/backoff
+          lastEvaluatedKey = result.lastEvaluatedKey;
+          hasMoreItems = !!lastEvaluatedKey;
         }
         
         console.log(`Completed fetching from ${bank.bankName}: ${bankTransactionCount} transactions`);
+        return bankTransactions;
       } catch (error) {
-        // If a table doesn't exist yet, skip it
         console.warn(`Table ${tableName} not found, skipping:`, error);
-        continue;
+        return [];
       }
-    }
+    });
+    
+    // Wait for all banks to complete in parallel
+    const bankResults = await Promise.all(bankPromises);
+    const allTransactions = bankResults.flat();
+    
+    // Populate tag data for all transactions at once (more efficient)
+    const transactionsWithTags = allTransactions.map((transaction: Record<string, unknown>) => {
+      if (Array.isArray(transaction.tags)) {
+        transaction.tags = transaction.tags
+          .map(tag => typeof tag === 'string' ? tagsMap.get(tag) : tag)
+          .filter(Boolean);
+      }
+      return transaction;
+    });
+    
+    // Apply limit after processing all banks
+    const limitedTransactions = transactionsWithTags.slice(0, limit);
 
-    console.log(`Fetched ${allTransactions.length} total transactions from all banks`);
+    console.log(`Fetched ${limitedTransactions.length} total transactions from all banks (limited from ${allTransactions.length})`);
     
     // Return empty array if no transactions found, but don't treat as error
-    if (allTransactions.length === 0) {
+    if (limitedTransactions.length === 0) {
       console.log('No transactions found for user');
     }
     
-    return NextResponse.json(allTransactions);
+    return NextResponse.json(limitedTransactions);
   } catch (error) {
     console.error('Error fetching all transactions:', error);
     return NextResponse.json({ 
