@@ -71,17 +71,31 @@ export default function BanksTabsClient() {
     const urlParams = new URLSearchParams(window.location.search);
     const bankId = urlParams.get('bankId');
     
-    if (bankId && banks.length > 0) {
+    // Only handle URL parameters if we're not on the main /banks route
+    // This ensures Super Bank stays as default when clicking "Banks" from sidebar
+    if (bankId && banks.length > 0 && pathname !== '/banks') {
       const bank = banks.find(b => b.id === bankId);
       if (bank) {
         const tabKey = `accounts-${bank.id}`;
-        if (!tabs.some(tab => tab.key === tabKey)) {
-          setTabs([...tabs, { key: tabKey, label: bank.bankName, type: 'accounts', bankId: bank.id }]);
-        }
+        setTabs(prevTabs => {
+          // Only add tab if it doesn't already exist
+          if (!prevTabs.some(tab => tab.key === tabKey)) {
+            return [...prevTabs, { key: tabKey, label: bank.bankName, type: 'accounts', bankId: bank.id }];
+          }
+          return prevTabs;
+        });
         setActiveTab(tabKey);
       }
+    } else if (pathname === '/banks' && urlParams.toString()) {
+      // Clear URL parameters when on main banks page to ensure clean state
+      console.log('Clearing URL parameters on /banks route:', urlParams.toString());
+      router.replace('/banks', { scroll: false });
+      // Force Super Bank to be active after clearing URL
+      setTimeout(() => {
+        setActiveTab('super-bank');
+      }, 100);
     }
-  }, [banks, tabs]);
+  }, [banks, pathname, router]); // Removed 'tabs' dependency to prevent circular effect
 
   // Fetch tags and set up event listeners
   useEffect(() => {
@@ -290,14 +304,25 @@ export default function BanksTabsClient() {
 
   const handleCloseTab = (tabKey: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    
+    // Find the tab being closed to get its bankId
+    const closingTab = tabs.find(tab => tab.key === tabKey);
+    
     const newTabs = tabs.filter(tab => tab.key !== tabKey);
     if (newTabs.length === 0) {
-      setTabs([{ key: 'overview', label: 'Overview', type: 'overview' }]);
-      setActiveTab('overview');
+      setTabs([{ key: 'super-bank', label: 'Super Bank', type: 'super-bank' }]);
+      setActiveTab('super-bank');
+      // Clear URL parameters when closing last tab
+      router.replace('/banks', { scroll: false });
     } else {
-    setTabs(newTabs);
+      setTabs(newTabs);
       if (activeTab === tabKey) {
         setActiveTab(newTabs[newTabs.length - 1].key);
+      }
+      
+      // Clear URL parameters if closing a bank tab to prevent reopening
+      if (closingTab?.bankId) {
+        router.replace('/banks', { scroll: false });
       }
     }
   };
@@ -454,8 +479,10 @@ export default function BanksTabsClient() {
                 <span>{tab.label}</span>
               {tab.key !== 'overview' && (
                 <RiCloseLine 
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  size={14}
+                  className="text-gray-400 hover:text-red-500 transition-colors ml-1 p-0.5 rounded hover:bg-gray-100"
                   onClick={(e) => handleCloseTab(tab.key, e)}
+                  title="Close tab"
                 />
               )}
             </button>

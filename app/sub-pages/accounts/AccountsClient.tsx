@@ -193,8 +193,8 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           console.debug('Bank data request aborted - component unmounted or new request started');
           return; // Exit early for AbortError
         }
-        console.error('Error fetching bank data:', err);
         if (isMounted) {
+          console.error('Error fetching bank data:', err);
           setBankName("");
         }
       }
@@ -309,8 +309,8 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           console.debug('Super bank header request aborted');
           return; // Exit early for AbortError
         }
-        console.error('Error fetching super bank header:', err);
         if (isMounted) {
+          console.error('Error fetching super bank header:', err);
           setSuperHeaders([]);
         }
       }
