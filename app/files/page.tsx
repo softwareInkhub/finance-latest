@@ -2337,6 +2337,8 @@ function EditFileModal({ isOpen, file, onClose, onSave }: { isOpen: boolean; fil
 
   const [banks, setBanks] = useState<{ id: string; bankName: string }[]>([]);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
 
     setNewName(file?.fileName || '');
@@ -2412,9 +2414,29 @@ function EditFileModal({ isOpen, file, onClose, onSave }: { isOpen: boolean; fil
 
         <div className="flex justify-end gap-2">
 
-          <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" onClick={onClose}>Cancel</button>
+          <button 
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200" 
+            onClick={onClose}
+            disabled={isSaving}
+          >
+            Cancel
+          </button>
 
-          <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" onClick={() => onSave(newName, newBankId, newFileType)}>Save</button>
+          <button 
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" 
+            onClick={async () => {
+              setIsSaving(true);
+              try {
+                await onSave(newName, newBankId, newFileType);
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+            disabled={isSaving}
+          >
+            {isSaving && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+            {isSaving ? 'Saving...' : 'Save'}
+          </button>
 
         </div>
 
@@ -4471,7 +4493,7 @@ const FilesPage: React.FC = () => {
 
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  const [banks, setBanks] = useState<{ id: string; fileName: string; versions: unknown[] }[]>([]);
+  const [banks, setBanks] = useState<{ id: string; bankName: string }[]>([]);
   const { openFilePreview } = usePreviewTabManager();
 
   const [files, setFiles] = useState<FileData[]>([]);
@@ -4535,8 +4557,7 @@ const FilesPage: React.FC = () => {
           .filter((b: Record<string, unknown>) => b.id && b.bankName) // Filter out invalid entries
           .map((b: Record<string, unknown>) => ({ 
             id: b.id as string, 
-            fileName: b.bankName as string, 
-            versions: [] 
+            bankName: b.bankName as string
           })) : [];
         
         console.log('Processed banks:', processedBanks);
@@ -4679,22 +4700,7 @@ const FilesPage: React.FC = () => {
     }
 
     try {
-      // 1. Fetch all banks
-      const banksRes = await fetch(`/api/bank?userId=${userId}`);
-      const banksData = await banksRes.json();
-
-      // 2. For each bank, fetch all accounts for the user
-      for (const bank of banksData) {
-        const accountsRes = await fetch(`/api/account?bankId=${(bank as Record<string, unknown>).id}&userId=${userId}`);
-        const accounts = await accountsRes.json();
-
-        // Note: accounts are fetched but not currently used in this function
-        if (Array.isArray(accounts)) {
-          // Accounts fetched but not stored as they're not used
-        }
-      }
-
-      // 3. Fetch all files from BRMH Drive (includes both bank statements and standalone files)
+      // Fetch all files from BRMH Drive (includes both bank statements and standalone files)
       let allStatements: Record<string, unknown>[] = [];
 
       try {
@@ -5105,13 +5111,12 @@ const FilesPage: React.FC = () => {
 
     if (!editFile) return;
 
-    setEditModalOpen(false);
-
-    setEditFile(null);
-
     const userId = localStorage.getItem('userId') || '';
 
     try {
+      // Find the actual bank name from the bank ID
+      const selectedBank = banks.find(bank => bank.id === newBankId);
+      const actualBankName = selectedBank ? selectedBank.bankName : '';
 
       await fetch('/api/statement/update', {
 
@@ -5127,7 +5132,7 @@ const FilesPage: React.FC = () => {
 
           fileName: newName,
 
-          bankName: newBankId,
+          bankName: actualBankName, // Send actual bank name, not ID
 
           fileType: newFileType,
 
@@ -5135,12 +5140,14 @@ const FilesPage: React.FC = () => {
 
       });
 
-      refreshFiles();
+      // Close modal and refresh files
+      setEditModalOpen(false);
+      setEditFile(null);
+      await refreshFiles();
 
-    } catch {
-
+    } catch (error) {
+      console.error('Error updating file:', error);
       // Optionally show error toast
-
     }
 
   };
@@ -5736,7 +5743,7 @@ const FilesPage: React.FC = () => {
 
         <div className="p-8">
 
-          <h2 className="text-xl font-bold mb-4 text-blue-800">{bank.fileName} Files</h2>
+          <h2 className="text-xl font-bold mb-4 text-blue-800">{bank.bankName} Files</h2>
 
           <div className="flex flex-wrap gap-8">
 
@@ -5832,9 +5839,13 @@ const FilesPage: React.FC = () => {
       <FilesSidebar
 
         files={(() => {
-          const filteredBanks = (banks || []).filter(bank => bank && bank.id && bank.fileName);
-          console.log('FilesSidebar files prop:', filteredBanks);
-          return filteredBanks;
+          const filteredBanks = (banks || []).filter(bank => bank && bank.id && bank.bankName);
+          const bankItems = filteredBanks.map(bank => ({
+            id: bank.id,
+            fileName: bank.bankName
+          }));
+          console.log('FilesSidebar files prop:', bankItems);
+          return bankItems;
         })()}
 
         selectedFileId={selectedFileId}

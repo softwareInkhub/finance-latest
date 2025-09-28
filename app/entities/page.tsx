@@ -16,7 +16,8 @@ import {
   RiErrorWarningLine,
   RiCloseLine,
   RiSideBarLine,
-  RiSideBarFill
+  RiSideBarFill,
+  RiEdit2Line
 } from 'react-icons/ri';
 
 interface Entity {
@@ -94,6 +95,9 @@ export default function EntitiesPage() {
   const [newEntityName, setNewEntityName] = useState('');
   const [newEntityDescription, setNewEntityDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState<{ isOpen: boolean; file?: FileItem }>({ isOpen: false });
+  const [editingFileName, setEditingFileName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Refs to prevent duplicate API calls and debounce
   const loadingRef = useRef(false);
@@ -833,6 +837,64 @@ export default function EntitiesPage() {
     }
   };
 
+  const handleEditSave = async () => {
+    if (!showEditModal.file || !editingFileName.trim()) return;
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+
+      // Call BRMH Drive API to rename the file
+      const response = await fetch(`https://brmh.in/drive/rename/${userId}/${showEditModal.file.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          newName: editingFileName.trim()
+        }),
+      });
+
+      // Check if response is HTML (error page) instead of JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const htmlText = await response.text();
+        console.error('BRMH Drive API returned HTML instead of JSON:', htmlText.substring(0, 200));
+        throw new Error('BRMH Drive API returned an error page. Please check the API endpoint.');
+      }
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to rename file in BRMH Drive';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // If we can't parse error as JSON, use status text
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const renameResult = await response.json();
+      console.log('BRMH Drive Rename Result:', renameResult);
+
+      // Refresh files after rename
+      await loadEntityFiles(selectedEntity?.id || 'all-files');
+      setShowEditModal({ isOpen: false });
+      setEditingFileName('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to rename file');
+      console.error('Error renaming file:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const filteredEntities = (entities || []).filter(entity =>
     entity && entity.id && entity.name && entity.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (entity && entity.id && entity.description && entity.description.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -1072,6 +1134,17 @@ export default function EntitiesPage() {
                             }}
                           >
                             <RiDownloadLine size={14} />
+                          </button>
+                           <button
+                             className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/20 rounded text-blue-500 hover:text-blue-700"
+                             title="Edit file name"
+                             onClick={(e) => {
+                               e.stopPropagation(); // Prevent file click when editing
+                               setShowEditModal({ isOpen: true, file });
+                               setEditingFileName(file.name);
+                             }}
+                          >
+                            <RiEdit2Line size={14} />
                           </button>
                            <button
                              className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded text-red-500 hover:text-red-700"
@@ -1459,6 +1532,64 @@ export default function EntitiesPage() {
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
                 {deletingEntity ? 'Deleting...' : 'Delete Entity'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit File Modal */}
+      {showEditModal.isOpen && showEditModal.file && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96 max-w-[90vw]">
+            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">Edit File Name</h2>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                File Name
+              </label>
+              <input
+                type="text"
+                value={editingFileName}
+                onChange={(e) => setEditingFileName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter new file name"
+                autoFocus
+              />
+            </div>
+            
+            {error && (
+              <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditModal({ isOpen: false });
+                  setEditingFileName('');
+                  setError(null);
+                }}
+                disabled={isSaving}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={isSaving || !editingFileName.trim()}
+                className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                  isSaving || !editingFileName.trim()
+                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {isSaving && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                )}
+                {isSaving ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>

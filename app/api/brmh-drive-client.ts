@@ -194,15 +194,58 @@ class BRMHDriveClient {
 
   // Rename file
   async renameFile(userId: string, fileId: string, newName: string) {
-    // Use the actual BRMH Drive API
-    const endpoint = `/drive/file/${userId}/${fileId}`;
-    return this.makeRequest(endpoint, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ newName }),
+    // Try multiple approaches for file renaming
+    
+    // Approach 1: Use the correct BRMH Drive rename endpoint
+    let endpoint = `/drive/rename/${userId}/${fileId}`;
+    console.log('BRMH Drive rename file request (approach 1):', {
+      endpoint,
+      userId,
+      fileId,
+      newName,
+      fullUrl: `${this.baseUrl}${endpoint}`
     });
+    
+    try {
+      const result = await this.makeRequest(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ newName }),
+      });
+      
+      console.log('BRMH Drive rename file response (approach 1):', result);
+      return result;
+    } catch (error) {
+      console.warn('BRMH Drive rename endpoint failed, trying approach 2:', error instanceof Error ? error.message : String(error));
+      
+      // Approach 2: Try using the general file endpoint with PUT method
+      endpoint = `/drive/file/${userId}/${fileId}`;
+      console.log('BRMH Drive rename file request (approach 2):', {
+        endpoint,
+        userId,
+        fileId,
+        newName,
+        fullUrl: `${this.baseUrl}${endpoint}`
+      });
+      
+      try {
+        const result = await this.makeRequest(endpoint, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: newName }),
+        });
+        
+        console.log('BRMH Drive rename file response (approach 2):', result);
+        return result;
+      } catch (error2) {
+        console.error('BRMH Drive rename file failed with both approaches:', error2 instanceof Error ? error2.message : String(error2));
+        throw error2;
+      }
+    }
   }
 
   // Rename folder
