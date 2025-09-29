@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { RiBankLine, RiAccountPinCircleLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiMenuLine, RiSearchLine, RiCircleFill, RiAddLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
 import { useAuth } from '../hooks/useAuth';
 import { Bank } from '../types/aws';
@@ -50,11 +50,15 @@ function BanksSidebar({
   const [expandedBankSections, setExpandedBankSections] = useState<{ [bankId: string]: string[] }>({});
   const [hoveredBank, setHoveredBank] = useState<string | null>(null);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
   
   // Use prop banks if provided, otherwise use local state
   const banks = propBanks || localBanks;
+
+  // Currently selected bank from URL param, e.g. /banks?bankId=xyz
+  const selectedBankId = searchParams?.get('bankId') || null;
 
   useEffect(() => {
     // Only fetch banks if no prop banks are provided
@@ -110,6 +114,18 @@ function BanksSidebar({
   const isSectionExpanded = useCallback((bankId: string, section: string) => {
     return (expandedBankSections[bankId] || []).includes(section);
   }, [expandedBankSections]);
+
+  // Auto-expand and preload accounts for the selected bank from URL
+  useEffect(() => {
+    if (!selectedBankId) return;
+    setExpandedBank(selectedBankId);
+    const userId = typeof window !== "undefined" ? localStorage.getItem('userId') : null;
+    if (!accounts[selectedBankId] && userId) {
+      fetch(`/api/account?bankId=${selectedBankId}&userId=${userId}`)
+        .then(res => res.json())
+        .then(data => setAccounts(prev => ({ ...prev, [selectedBankId]: Array.isArray(data) ? data : [] })));
+    }
+  }, [selectedBankId, accounts]);
 
   return (
     <aside className={`${isCollapsed ? 'w-16' : 'w-64'} min-h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200 ease-out relative`}>
@@ -191,8 +207,8 @@ function BanksSidebar({
                 <li key={bank.id} className="relative group">
                   {/* Level 1: Bank Name (Bold) */}
                   <div className={`flex items-center w-full gap-2 px-3 py-2 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-all duration-150 ${
-                    pathname.includes(`/banks/${bank.id}`) 
-                      ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500' 
+                    (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`))
+                      ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500'
                       : 'hover:border-l-2 hover:border-blue-200 dark:hover:border-blue-600'
                   } ${isCollapsed ? 'justify-center px-2' : ''}`}>
                     <button
@@ -211,7 +227,7 @@ function BanksSidebar({
                         </div>
                       )}
                       <div className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 ${
-                        pathname.includes(`/banks/${bank.id}`)
+                        (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`))
                           ? 'bg-blue-600 text-white'
                           : 'text-gray-600 dark:text-gray-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
                       }`}>

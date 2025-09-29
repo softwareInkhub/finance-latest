@@ -1,5 +1,6 @@
 'use client';
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import { brmhCrud } from '../api/brmh-client';
 
 interface SidebarPreferencesContextType {
   sidebarEntities: string[]; // Array of entity IDs that should appear in sidebar
@@ -17,30 +18,48 @@ interface SidebarPreferencesProviderProps {
 export const SidebarPreferencesProvider: React.FC<SidebarPreferencesProviderProps> = ({ children }) => {
   const [sidebarEntities, setSidebarEntitiesState] = useState<string[]>([]);
 
-  // Load preferences from localStorage on mount
+  // Load preferences from backend (authoritative) on mount; fallback to localStorage
   useEffect(() => {
     const userId = localStorage.getItem('userId');
-    if (userId) {
-      const saved = localStorage.getItem(`sidebarEntities_${userId}`);
-      if (saved && saved !== 'undefined' && saved !== 'null') {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            setSidebarEntitiesState(parsed);
+    if (!userId) return;
+
+    const load = async () => {
+      try {
+        const result = await brmhCrud.get('fintech-entety', {
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: { ':userId': userId }
+        });
+        type EntityMeta = { id: string; showInSidebar?: boolean };
+        const items = (result.items || []) as EntityMeta[];
+        const enabled = items
+          .filter((it) => Boolean(it.showInSidebar))
+          .map((it) => String(it.id));
+        setSidebarEntitiesState(enabled);
+        localStorage.setItem(`sidebarEntities_${userId}`, JSON.stringify(enabled));
+      } catch {
+        // Fallback to localStorage
+        const saved = localStorage.getItem(`sidebarEntities_${userId}`);
+        if (saved && saved !== 'undefined' && saved !== 'null') {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) {
+              setSidebarEntitiesState(parsed);
+            }
+          } catch (err) {
+            console.error('Failed to parse sidebar preferences:', err);
+            localStorage.removeItem(`sidebarEntities_${userId}`);
           }
-        } catch (error) {
-          console.error('Failed to parse sidebar preferences:', error);
-          // Clear invalid data
-          localStorage.removeItem(`sidebarEntities_${userId}`);
         }
       }
-    }
+    };
+
+    load();
   }, []);
 
   // Save preferences to localStorage whenever they change (backup)
   useEffect(() => {
     const userId = localStorage.getItem('userId');
-    if (userId && sidebarEntities.length > 0) {
+    if (userId) {
       localStorage.setItem(`sidebarEntities_${userId}`, JSON.stringify(sidebarEntities));
     }
   }, [sidebarEntities]);

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 // import { useEntitySync } from '../contexts/EntitySyncContext';
 // import { useFileSync } from '../contexts/FileSyncContext';
 import { useSidebarPreferences } from '../contexts/SidebarPreferencesContext';
+import { brmhCrud } from '../api/brmh-client';
 import { usePreviewTabManager } from '../hooks/usePreviewTabManager';
 import { 
   RiAddLine, 
@@ -17,7 +18,8 @@ import {
   RiCloseLine,
   RiSideBarLine,
   RiSideBarFill,
-  RiEdit2Line
+  RiEdit2Line,
+  RiMenuLine
 } from 'react-icons/ri';
 
 interface Entity {
@@ -98,6 +100,13 @@ export default function EntitiesPage() {
   const [showEditModal, setShowEditModal] = useState<{ isOpen: boolean; file?: FileItem }>({ isOpen: false });
   const [editingFileName, setEditingFileName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('entitiesSidebarCollapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
 
   // Refs to prevent duplicate API calls and debounce
   const loadingRef = useRef(false);
@@ -108,7 +117,8 @@ export default function EntitiesPage() {
   // const { entities: contextEntities, refreshEntities } = useEntitySync();
   // const { entityFiles: contextEntityFiles, refreshEntityFiles } = useFileSync();
   const { openFilePreview } = usePreviewTabManager();
-  const { toggleEntityInSidebar, isEntityInSidebar } = useSidebarPreferences();
+  const { sidebarEntities, setSidebarEntities } = useSidebarPreferences();
+  const [sidebarFlags, setSidebarFlags] = useState<Record<string, boolean>>({});
 
   // Note: We're using direct BRMH API calls instead of context
   // The context is kept for potential future use
@@ -197,7 +207,27 @@ export default function EntitiesPage() {
       console.log('Final entities:', entities);
 
       setEntities(entities);
-      
+
+      // Load remote sidebar flags for this user
+      try {
+        const meta = await brmhCrud.get('fintech-entety', {
+          FilterExpression: 'userId = :userId',
+          ExpressionAttributeValues: { ':userId': userId }
+        });
+        type EntityMeta = { id: string; showInSidebar?: boolean };
+        const items = (meta.items || []) as EntityMeta[];
+        const map: Record<string, boolean> = {};
+        items.forEach((it) => {
+          if (it && it.id) map[it.id] = Boolean(it.showInSidebar);
+        });
+        setSidebarFlags(map);
+        // Push flags into global sidebar context so main sidebar updates immediately
+        const enabledIds = Object.keys(map).filter(id => map[id]);
+        if (enabledIds.length > 0) setSidebarEntities(enabledIds);
+      } catch {
+        console.warn('Failed to load sidebar flags');
+      }
+
       // Load file counts for all entities
       await loadFileCountsForAllEntities(entities);
       
@@ -209,7 +239,7 @@ export default function EntitiesPage() {
       loadingRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [setSidebarEntities]);
 
   const loadAllEntityFiles = useCallback(async () => {
     try {
@@ -457,6 +487,13 @@ export default function EntitiesPage() {
     };
   }, []);
 
+  // Persist sidebar collapsed preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('entitiesSidebarCollapsed', String(isSidebarCollapsed));
+    }
+  }, [isSidebarCollapsed]);
+
 
   const loadFileCountsForAllEntities = async (entitiesList: Entity[]) => {
     try {
@@ -675,6 +712,21 @@ export default function EntitiesPage() {
         fileCount: 0,
         folderCount: 0
       }]);
+
+      // Save metadata to fintech-entety table
+      try {
+        await brmhCrud.create('fintech-entety', {
+          id: createdFolder.folderId || createdFolder.id,
+          userId,
+          name: newEntityName.trim(),
+          description: newEntityDescription.trim(),
+          createdAt: createdFolder.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          showInSidebar: false
+        });
+      } catch (metaErr) {
+        console.warn('Failed to save entity metadata to fintech-entety:', metaErr);
+      }
       
       setNewEntityName('');
       setNewEntityDescription('');
@@ -747,6 +799,13 @@ export default function EntitiesPage() {
         setEntityFiles([]);
       }
       setError(null);
+
+      // Delete metadata from fintech-entety table (best-effort)
+      try {
+        await brmhCrud.delete('fintech-entety', { id: entity.id });
+      } catch (metaDelErr) {
+        console.warn('Failed to delete entity metadata from fintech-entety:', metaDelErr);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete entity');
       console.error('Error deleting entity:', err);
@@ -907,37 +966,46 @@ export default function EntitiesPage() {
   return (
     <div className="h-full flex bg-gray-50 dark:bg-gray-900">
       {/* Left Sidebar - Entities List */}
-      <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
+      <div className={`${isSidebarCollapsed ? 'w-16' : 'w-80'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200 ease-out`}>
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              Entities
-            </h2>
+        <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
             <button
-              onClick={() => setShowCreateModal(true)}
-              className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              title="Create New Entity"
+              onClick={() => setIsSidebarCollapsed(prev => !prev)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+              title={isSidebarCollapsed ? 'Expand' : 'Collapse'}
             >
-              <RiAddLine size={16} />
+              <RiMenuLine size={18} className="text-gray-600 dark:text-gray-300" />
             </button>
+            {!isSidebarCollapsed && (
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mr-2">Entities</h2>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                title="Create New Entity"
+              >
+                <RiAddLine size={16} />
+              </button>
+              </div>
+            )}
           </div>
-          
-          {/* Search */}
-          <div className="relative">
-            <RiSearchLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
-            <input
-              type="text"
-              placeholder="Search entities..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+          {!isSidebarCollapsed && (
+            <div className="relative mt-3">
+              <RiSearchLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+              <input
+                type="text"
+                placeholder="Search entities..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          )}
         </div>
 
         {/* Entities List */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-2">
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -948,102 +1016,140 @@ export default function EntitiesPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {/* All Files Option */}
-              <div
-                onClick={() => handleEntitySelect({ id: 'all-files', name: 'All Files', description: 'View all files from all entities' } as Entity)}
-                className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
-                  selectedEntity?.id === 'all-files'
-                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
-                    : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <RiFileLine 
-                      size={20} 
-                      className={selectedEntity?.id === 'all-files' ? 'text-blue-600' : 'text-gray-500'} 
-                    />
-                    <div>
-                      <h3 className="font-medium text-gray-900 dark:text-gray-100">
-                        All Files
-                      </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                        View all files from all entities
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <span className="text-xs text-gray-400">
-                      {entityFiles.length} files
-                    </span>
-                  </div>
+              {/* Collapsed mode: compact icons */}
+              {isSidebarCollapsed ? (
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    className={`w-12 h-12 rounded-lg flex items-center justify-center border transition-colors ${selectedEntity?.id === 'all-files' ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-gray-300'}`}
+                    title="All Files"
+                    onClick={() => handleEntitySelect({ id: 'all-files', name: 'All Files', description: 'View all files from all entities' } as Entity)}
+                  >
+                    <RiFileLine size={18} className={selectedEntity?.id === 'all-files' ? 'text-blue-600' : 'text-gray-600'} />
+                  </button>
+                  <div className="h-px w-8 bg-gray-200 my-1" />
+                  {filteredEntities.map((entity) => entity ? (
+                    <button
+                      key={entity.id}
+                      className={`w-12 h-12 rounded-lg flex items-center justify-center border transition-colors ${selectedEntity?.id === entity.id ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200 hover:border-gray-300'}`}
+                      title={entity.name}
+                      onClick={() => handleEntitySelect(entity)}
+                    >
+                      <RiFolderLine size={18} className={selectedEntity?.id === entity.id ? 'text-blue-600' : 'text-gray-600'} />
+                    </button>
+                  ) : null)}
                 </div>
-              </div>
-              
-              {filteredEntities.map((entity) => 
-                entity ? (
-                <div
-                  key={entity.id}
-                  onClick={() => handleEntitySelect(entity)}
-                  className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
-                    selectedEntity?.id === entity.id
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
-                      : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <RiFolderLine 
-                        size={20} 
-                        className={selectedEntity?.id === entity.id ? 'text-blue-600' : 'text-gray-500'} 
-                      />
-                      <div>
-                        <h3 className="font-medium text-gray-900 dark:text-gray-100">
-                          {entity.name}
-                        </h3>
-                        {entity.description && (
+              ) : (
+                <>
+                  {/* All Files Option */}
+                  <div
+                    onClick={() => handleEntitySelect({ id: 'all-files', name: 'All Files', description: 'View all files from all entities' } as Entity)}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+                      selectedEntity?.id === 'all-files'
+                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
+                        : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <RiFileLine 
+                          size={20} 
+                          className={selectedEntity?.id === 'all-files' ? 'text-blue-600' : 'text-gray-500'} 
+                        />
+                        <div>
+                          <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                            All Files
+                          </h3>
                           <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                            {entity.description}
+                            View all files from all entities
                           </p>
-                        )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-xs text-gray-400">
+                          {entityFiles.length} files
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <span className="text-xs text-gray-400">
-                        {entity.fileCount || 0} files
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleEntityInSidebar(entity.id);
-                        }}
-                        className={`p-1 rounded transition-colors ${
-                          isEntityInSidebar(entity.id)
-                            ? 'text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/20'
-                            : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600'
-                        }`}
-                        title={isEntityInSidebar(entity.id) ? 'Remove from sidebar' : 'Add to sidebar'}
-                      >
-                        {isEntityInSidebar(entity.id) ? (
-                          <RiSideBarFill size={14} />
-                        ) : (
-                          <RiSideBarLine size={14} />
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowDeleteModal({ isOpen: true, entity });
-                        }}
-                        className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded text-red-500 hover:text-red-700"
-                        title="Delete Entity"
-                      >
-                        <RiDeleteBin6Line size={14} />
-                      </button>
-                    </div>
                   </div>
-                </div>
-                ) : null
+                  
+                  {filteredEntities.map((entity) => 
+                    entity ? (
+                    <div
+                      key={entity.id}
+                      onClick={() => handleEntitySelect(entity)}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+                        selectedEntity?.id === entity.id
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
+                          : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <RiFolderLine 
+                            size={20} 
+                            className={selectedEntity?.id === entity.id ? 'text-blue-600' : 'text-gray-500'} 
+                          />
+                          <div>
+                            <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                              {entity.name}
+                            </h3>
+                            {entity.description && (
+                              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                {entity.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <span className="text-xs text-gray-400">
+                            {entity.fileCount || 0} files
+                          </span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const newVal = !Boolean(sidebarFlags[entity.id]);
+                              setSidebarFlags(prev => ({ ...prev, [entity.id]: newVal }));
+                              try {
+                                await brmhCrud.update('fintech-entety', { id: entity.id }, { showInSidebar: newVal });
+                                // Update global sidebar entities so main sidebar reflects immediately
+                                const nextIds = newVal
+                                  ? Array.from(new Set([...(sidebarEntities || []), entity.id]))
+                                  : (sidebarEntities || []).filter(id => id !== entity.id);
+                                setSidebarEntities(nextIds);
+                              } catch (err) {
+                                console.warn('Failed to persist showInSidebar, reverting', err);
+                                setSidebarFlags(prev => ({ ...prev, [entity.id]: !newVal }));
+                              }
+                            }}
+                            className={`p-1 rounded transition-colors ${
+                              sidebarFlags[entity.id]
+                                ? 'text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/20'
+                                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600'
+                            }`}
+                            title={sidebarFlags[entity.id] ? 'Remove from sidebar' : 'Add to sidebar'}
+                          >
+                            {sidebarFlags[entity.id] ? (
+                              <RiSideBarFill size={14} />
+                            ) : (
+                              <RiSideBarLine size={14} />
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowDeleteModal({ isOpen: true, entity });
+                            }}
+                            className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded text-red-500 hover:text-red-700"
+                            title="Delete Entity"
+                          >
+                            <RiDeleteBin6Line size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    ) : null
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1128,9 +1234,27 @@ export default function EntitiesPage() {
                              title="Download"
                              onClick={(e) => {
                                e.stopPropagation(); // Prevent file click when downloading
-                              if (file.downloadUrl && file.downloadUrl !== '#') {
-                                window.open(file.downloadUrl, '_blank');
-                              }
+                              (async () => {
+                                try {
+                                  let url: string = file.downloadUrl ?? '';
+                                  if (!url) return;
+                                  if (url.startsWith('/api/files/download')) {
+                                    const res = await fetch(url);
+                                    if (res.ok) {
+                                      const data = await res.json();
+                                      url = (data.downloadUrl as string) || (data.url as string) || url;
+                                    }
+                                  }
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = file.name;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                } catch (err) {
+                                  console.error('Failed to download file:', err);
+                                }
+                              })();
                             }}
                           >
                             <RiDownloadLine size={14} />
@@ -1461,7 +1585,7 @@ export default function EntitiesPage() {
                   <button
                     onClick={handleUploadFiles}
                     disabled={selectedFiles.length === 0 || uploading}
-                    className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-medium rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:transform-none disabled:shadow-none"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-medium rounded-md transition-colors"
                   >
                     {uploading ? (
                       <div className="flex items-center space-x-2">

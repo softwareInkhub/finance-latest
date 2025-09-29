@@ -1,5 +1,6 @@
 'use client';
 import React, { useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
 import ExcelPreview from '../components/ExcelPreview';
 // FilePreview is defined in files/page.tsx, we'll create a simple CSV preview component
@@ -84,34 +85,15 @@ export const usePreviewTabManager = () => {
             }
 
             const csvText = await csvResponse.text();
-            
-            // Parse CSV using Papa Parse (if available) or simple parsing
-            const lines = csvText.split('\n').filter(line => line.trim());
-            const parsedData = lines.map(line => {
-              // Simple CSV parsing - split by comma and handle quotes
-              const result = [];
-              let current = '';
-              let inQuotes = false;
-              
-              for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"') {
-                  inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                  result.push(current.trim());
-                  current = '';
-                } else {
-                  current += char;
-                }
-              }
-              result.push(current.trim());
-              return result;
-            });
 
-            // Convert CSV data to Excel-like format
-            const sheetName = 'Sheet1';
-            const sheets = { [sheetName]: parsedData };
-            const headers = { [sheetName]: parsedData.length > 0 ? parsedData[0].map(String) : [] };
+            // Robust CSV parsing using XLSX (auto-detects delimiter, handles quotes)
+            const workbook = XLSX.read(csvText, { type: 'string' });
+            const sheetName = workbook.SheetNames[0] || 'Sheet1';
+            const worksheet = workbook.Sheets[sheetName];
+            const dataArray = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as unknown[][];
+
+            const sheets = { [sheetName]: Array.isArray(dataArray) ? dataArray : [] };
+            const headers = { [sheetName]: dataArray.length > 0 ? dataArray[0].map(String) : [] };
 
             setExcelData({
               sheetNames: [sheetName],

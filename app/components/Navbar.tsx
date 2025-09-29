@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { 
   RiMenuLine, 
   RiNotification3Line, 
@@ -17,12 +17,36 @@ interface NavbarProps {
 
 export default function Navbar({ onMobileMenuToggle, title, brandTitle, brandIcon }: NavbarProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
     logout();
     setShowProfileMenu(false);
   };
+
+  // Close dropdown on outside click or Escape key
+  useEffect(() => {
+    if (!showProfileMenu) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (profileRef.current && target && !profileRef.current.contains(target)) {
+        setShowProfileMenu(false);
+      }
+    };
+
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowProfileMenu(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [showProfileMenu]);
 
   return (
     <nav className="h-16 flex items-center px-4 md:px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm transition-all duration-300">
@@ -64,7 +88,7 @@ export default function Navbar({ onMobileMenuToggle, title, brandTitle, brandIco
         </button>
         
         {/* User Profile */}
-        <div className="relative flex items-center gap-2">
+        <div ref={profileRef} className="relative flex items-center gap-2">
           {/* User Email - Hidden on mobile */}
           {user?.email && (
             <span className="text-sm text-gray-700 dark:text-gray-300 font-medium truncate max-w-[120px] hidden md:block" title={user.email}>

@@ -272,18 +272,18 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
   const currentHeaders = useMemo(() => excelData?.headers[activeSheet] || [], [excelData?.headers, activeSheet]);
   const dataRows = currentSheetData.slice(1, previewRows + 1); // Skip header row
 
-  // Auto-fit columns when headers change
+  // Auto-fit columns when headers change (use pixel widths for readability)
   useEffect(() => {
     if (currentHeaders.length > 0 && Object.keys(columnWidths).length === 0) {
       // Auto-fit columns on first load
       setTimeout(() => {
-        // Inline the fitAllColumns logic to avoid dependency issues
-        const equalWidth = 100 / currentHeaders.length;
+        // Use fixed pixel sizing so many columns stay readable with horizontal scroll
+        const baseWidth = currentHeaders.length > 15 ? 100 : 140;
         
         const newWidths: { [key: string]: number } = {};
         currentHeaders.forEach((_, index) => {
           const key = `${activeSheet}-${index}`;
-          newWidths[key] = equalWidth;
+          newWidths[key] = baseWidth;
         });
         
         setColumnWidths(newWidths);
@@ -293,25 +293,18 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
 
   const getColumnWidth = useCallback((columnIndex: number): number => {
     const key = `${activeSheet}-${columnIndex}`;
-    // Always use percentage-based widths for responsive behavior
     if (columnWidths[key]) {
       return columnWidths[key];
     }
-    // For files with many columns, use smaller percentage
-    if (currentHeaders.length > 15) {
-      return Math.max(3, 100 / currentHeaders.length); // Minimum 3% per column
-    }
-    // For fewer columns, use equal distribution
-    return 100 / currentHeaders.length;
+    // Default pixel widths
+    return currentHeaders.length > 15 ? 100 : 140;
   }, [columnWidths, activeSheet, currentHeaders.length]);
 
   const getTotalTableWidth = useCallback((): number => {
     if (!currentHeaders.length) return 100;
-    const rowNumberWidth = 48; // Width of row number column
-    const totalColumnWidth = currentHeaders.reduce((sum, _, index) => {
-      return sum + getColumnWidth(index);
-    }, 0);
-    return rowNumberWidth + totalColumnWidth;
+    const rowNumberWidth = 48; // px
+    const totalColumnWidth = currentHeaders.reduce((sum, _, index) => sum + getColumnWidth(index), 0);
+    return Math.round(rowNumberWidth + totalColumnWidth);
   }, [currentHeaders, getColumnWidth]);
 
   const handleMouseDown = (e: React.MouseEvent, columnIndex: number) => {
@@ -328,16 +321,10 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
     const handleMouseMove = (e: MouseEvent) => {
       const deltaX = e.clientX - startX;
       
-      // Always use percentage-based resizing for responsive behavior
-      const container = document.querySelector('.overflow-auto.max-h-\\[60vh\\]');
-      const containerWidth = container ? container.clientWidth : window.innerWidth;
-      const deltaPercent = (deltaX / containerWidth) * 100;
-      
-      // Set different limits based on number of columns
-      const minPercent = currentHeaders.length > 15 ? 2 : 5; // Smaller min for many columns
-      const maxPercent = currentHeaders.length > 15 ? 20 : 50; // Smaller max for many columns
-      
-      const newWidth = Math.max(minPercent, Math.min(maxPercent, startWidth + deltaPercent));
+      // Pixel-based resizing for predictable behavior
+      const minPx = currentHeaders.length > 15 ? 60 : 80;
+      const maxPx = currentHeaders.length > 15 ? 220 : 320;
+      const newWidth = Math.max(minPx, Math.min(maxPx, startWidth + deltaX));
       
       const key = `${activeSheet}-${columnIndex}`;
       setColumnWidths(prev => ({
@@ -358,14 +345,26 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  const downloadExcel = () => {
-    if (file.downloadUrl) {
+  const downloadExcel = async () => {
+    try {
+      let url: string = file.downloadUrl ?? '';
+      if (!url) return;
+      // Resolve API indirection to actual pre-signed URL
+      if (url.startsWith('/api/files/download')) {
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          url = (data.downloadUrl as string) || (data.url as string) || url;
+        }
+      }
       const link = document.createElement('a');
-      link.href = file.downloadUrl;
+      link.href = url;
       link.download = file.name;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    } catch (e) {
+      console.error('Failed to download file:', e);
     }
   };
 
@@ -376,13 +375,13 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
   const fitAllColumns = () => {
     if (!currentHeaders.length) return;
     
-    // Always use equal percentage distribution for responsive behavior
-    const equalWidth = 100 / currentHeaders.length;
+    // Set uniform pixel widths; enable horizontal scroll when many columns
+    const baseWidth = currentHeaders.length > 15 ? 100 : 140;
     
     const newWidths: { [key: string]: number } = {};
     currentHeaders.forEach((_, index) => {
       const key = `${activeSheet}-${index}`;
-      newWidths[key] = equalWidth;
+      newWidths[key] = baseWidth;
     });
     
     setColumnWidths(newWidths);
@@ -428,7 +427,7 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
 
 
   return (
-    <div className="h-full max-h-[80vh] flex flex-col">
+    <div className="h-full max-h-[85vh] w-full max-w-[86vw] flex flex-col">
       <style jsx>{`
         .scrollbar-thin {
           scrollbar-width: thin;
@@ -548,9 +547,9 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
       <div className="flex-1 overflow-auto bg-white dark:bg-gray-900 max-h-[60vh]">
         {currentHeaders.length > 0 ? (
           <div className="overflow-auto max-h-[60vh]" style={{ overflowX: 'auto', overflowY: 'auto' }}>
-            <table className="border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 w-full" style={{ 
+            <table className="border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900" style={{ 
               tableLayout: 'fixed', 
-              width: '100%' 
+              width: `${getTotalTableWidth()}px` 
             }}>
               <thead className="sticky top-0 z-10">
                 <tr>
@@ -575,9 +574,9 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
                         borderColor: '#d1d5db',
                         fontSize: '10px',
                         fontWeight: '600',
-                        width: `${getColumnWidth(index)}%`,
+                        width: `${getColumnWidth(index)}px`,
                         minWidth: '60px',
-                        maxWidth: '300px'
+                        maxWidth: '400px'
                       }}
                     >
                       <div className="truncate" title={header || `Column ${index + 1}`}>
@@ -626,9 +625,9 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
                           borderColor: '#d1d5db',
                           fontSize: '11px',
                           lineHeight: '1.3',
-                          width: `${getColumnWidth(colIndex)}%`,
+                          width: `${getColumnWidth(colIndex)}px`,
                           minWidth: '60px',
-                          maxWidth: '300px'
+                          maxWidth: '400px'
                         }}
                       >
                         <div className="truncate" title={formatCellValue(row[colIndex])}>
