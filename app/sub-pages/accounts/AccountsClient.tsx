@@ -386,6 +386,65 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
     };
   }, [bankId, bankName]);
 
+  // Reload mapping data when modal opens
+  useEffect(() => {
+    if (showMapping && bankId && bankName) {
+      const controller = new AbortController();
+      let isMounted = true;
+
+      const fetchBankMapping = async () => {
+        try {
+          const userId = localStorage.getItem('userId');
+          if (!userId) {
+            throw new Error('User ID not found');
+          }
+          
+          const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`, {
+            signal: controller.signal
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          
+          if (isMounted) {
+            if (data && data.mapping) {
+              setMapping(data.mapping);
+            } else {
+              setMapping({});
+            }
+            if (data && data.conditions && Array.isArray(data.conditions)) {
+              setConditions(data.conditions);
+            } else {
+              setConditions([]);
+            }
+          }
+        } catch (err) {
+          if (isMounted && isAbortError(err)) {
+            console.debug('Bank mapping request aborted');
+            return;
+          }
+          console.error('Error fetching bank mapping:', err);
+          if (isMounted) {
+            setMapping({});
+            setConditions([]);
+          }
+        }
+      };
+
+      fetchBankMapping();
+
+      return () => {
+        isMounted = false;
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
+      };
+    }
+  }, [showMapping, bankId, bankName]);
+
   const handleAddAccount = () => {
     setSelectedAccount(null);
     setIsEditing(false);
