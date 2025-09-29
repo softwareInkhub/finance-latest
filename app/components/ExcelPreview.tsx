@@ -544,12 +544,12 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
       )}
 
       {/* Data Table */}
-      <div className="flex-1 overflow-auto bg-white dark:bg-gray-900 max-h-[60vh]">
+      <div className="flex-1 overflow-auto bg-white dark:bg-gray-900 max-h-[80vh]">
         {currentHeaders.length > 0 ? (
-          <div className="overflow-auto max-h-[60vh]" style={{ overflowX: 'auto', overflowY: 'auto' }}>
+          <div className="max-h-full">
             <table className="border-collapse border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900" style={{ 
               tableLayout: 'fixed', 
-              width: `${getTotalTableWidth()}px` 
+              width: `max(100%, ${getTotalTableWidth()}px)` 
             }}>
               <thead className="sticky top-0 z-10">
                 <tr>
