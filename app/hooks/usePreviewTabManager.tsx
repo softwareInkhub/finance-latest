@@ -155,6 +155,8 @@ export const usePreviewTabManager = () => {
             }}
             // Pass the parsed CSV data directly to ExcelPreview
             excelData={excelData}
+            // Enable slicing for CSV files
+            enableSlicing={true}
           />
         </div>
       );

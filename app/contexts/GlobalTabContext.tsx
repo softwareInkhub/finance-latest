@@ -128,22 +128,24 @@ export const GlobalTabProvider: React.FC<GlobalTabProviderProps> = ({ children }
     });
   }, []);
 
-  // Initialize with Dashboard tab on first load
+  // Initialize with Dashboard tab only when landing on "/" or "/dashboard"
   useEffect(() => {
-    if (!isInitialized && tabs.length === 0) {
-      setIsInitialized(true);
-      // Import DashboardPage dynamically to avoid circular dependencies
-      import('../dashboard/page').then(({ default: DashboardPage }) => {
-        const dashboardTab: GlobalTab = {
-          id: 'dashboard',
-          title: 'Dashboard',
-          type: 'dashboard',
-          component: <DashboardPage />,
-          closable: false
-        };
-        addTab(dashboardTab);
-      });
-    }
+    if (isInitialized || tabs.length > 0) return;
+    const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+    const top = (path || '/').split('?')[0].split('#')[0].split('/').filter(Boolean)[0] || '';
+    const shouldOpenDashboard = top === '' || top === 'dashboard' || top === 'login-signup';
+    setIsInitialized(true);
+    if (!shouldOpenDashboard) return;
+    import('../dashboard/page').then(({ default: DashboardPage }) => {
+      const dashboardTab: GlobalTab = {
+        id: 'dashboard',
+        title: 'Dashboard',
+        type: 'dashboard',
+        component: <DashboardPage />,
+        closable: false
+      };
+      addTab(dashboardTab);
+    });
   }, [isInitialized, tabs.length, addTab]);
 
   const value: GlobalTabContextType = {

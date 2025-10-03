@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
 import { 
   RiCloseLine, 
@@ -15,6 +16,7 @@ interface GlobalTabBarProps {
 }
 
 export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) => {
+  const router = useRouter();
   const { 
     tabs, 
     activeTabId, 
@@ -46,6 +48,23 @@ export const GlobalTabBar: React.FC<GlobalTabBarProps> = ({ className = '' }) =>
 
   const handleTabClick = (tabId: string) => {
     setActiveTab(tabId);
+    
+    // Update URL to match the active tab
+    const tab = tabs.find(t => t.id === tabId);
+    if (tab) {
+      const pathMap: { [key: string]: string } = {
+        'dashboard': '/dashboard',
+        'entities': '/entities',
+        'banks': '/banks',
+        'tags': '/tags',
+        'files': '/files',
+        'reports': '/reports',
+        'transactions': '/transactions'
+      };
+      
+      const path = pathMap[tab.type] || '/dashboard';
+      router.replace(path, { scroll: false });
+    }
   };
 
   const handleCloseClick = (e: React.MouseEvent, tabId: string) => {

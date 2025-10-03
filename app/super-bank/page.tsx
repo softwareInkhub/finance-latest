@@ -2017,7 +2017,7 @@ function SuperBankReportModal({ isOpen, onClose, transactions, bankIdNameMap, ta
 export default function SuperBankPage() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading true
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add refresh trigger
   const [hasMoreTransactions, setHasMoreTransactions] = useState(true);
@@ -4359,7 +4359,7 @@ export default function SuperBankPage() {
             }}
             onSelectAll={handleSelectAll}
             selectAll={selectAll}
-            loading={false} // Don't show loading spinner in table - show streaming data instead
+            loading={loading} // Show loading state while fetching data
             error={error}
             onRemoveTag={handleRemoveTag}
             onReorderHeaders={handleReorderHeaders}

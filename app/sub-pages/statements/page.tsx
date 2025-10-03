@@ -41,6 +41,7 @@ function StatementsContent() {
   const [tab] = useState<'transactions'>('transactions');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(true); // Start with loading true
+  const [waitingForParams, setWaitingForParams] = useState(true); // Wait for URL params
   const [transactionsError, setTransactionsError] = useState<string | null>(null);
   const [bankName, setBankName] = useState("");
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -78,6 +79,15 @@ function StatementsContent() {
       });
     }
   }, [bankId]);
+
+  // Wait for URL parameters to be available
+  useEffect(() => {
+    if (bankId && accountId) {
+      setWaitingForParams(false);
+    } else {
+      setWaitingForParams(true);
+    }
+  }, [bankId, accountId]);
 
   useEffect(() => {
     if (tab === 'transactions' && accountId && bankName) {
@@ -153,9 +163,12 @@ function StatementsContent() {
       console.log('⚠️ No accountId provided, clearing transactions');
       setTransactions([]);
       setLoadingTransactions(false);
-      setTransactionsError('No account selected');
+      // Only show error if we're not waiting for params
+      if (!waitingForParams) {
+        setTransactionsError('No account selected');
+      }
     }
-  }, [tab, accountId, bankName]);
+  }, [tab, accountId, bankName, waitingForParams]);
 
   useEffect(() => {
     const userId = localStorage.getItem('userId');
@@ -685,20 +698,21 @@ function StatementsContent() {
     <div className="min-h-screen overflow-y-auto py-2 sm:py-4 lg:py-6 px-2 sm:px-4 lg:px-6 space-y-2 sm:space-y-3 lg:space-y-4">
       <Toaster position="top-center" />
      
-      <div className="w-full max-w-7xl mx-auto space-y-2 sm:space-y-3 lg:space-y-4">
-        {/* File Migration Banner removed */}
-        
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4 mb-1">
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-lg sm:text-xl lg:text-2xl shadow">
-              <RiFileList3Line />
-            </div>
-            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Transactions</h1>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4">
+       <div className="w-full max-w-7xl mx-auto space-y-2 sm:space-y-3 lg:space-y-4">
+         {/* File Migration Banner removed */}
+         
+         {/* Transactions Heading - Moved up */}
+         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4 mb-1">
+           <div className="flex items-center gap-1">
+             <div className="bg-blue-100 p-2 rounded-full text-blue-500 text-lg sm:text-xl lg:text-2xl shadow">
+               <RiFileList3Line />
+             </div>
+             <h1 className="text-lg sm:text-xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">Transactions</h1>
+           </div>
+           <div className="flex items-center gap-2 sm:gap-4">
 
-          </div>
-        </div>
+           </div>
+         </div>
 
 
 
@@ -972,7 +986,7 @@ function StatementsContent() {
                 }}
                 onSelectAll={handleSelectAll}
                 selectAll={selectAll}
-                loading={loadingTransactions}
+                loading={loadingTransactions || waitingForParams}
                 error={transactionsError}
                 onReorderHeaders={handleReorderHeaders}
                   onRemoveTag={handleRemoveTag}

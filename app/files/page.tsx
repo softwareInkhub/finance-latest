@@ -2659,6 +2659,7 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
   // Serial number generation state
   const [originalData, setOriginalData] = useState<string[][]>([]);
   const [serialNumbersGenerated, setSerialNumbersGenerated] = useState(false);
+  const [skipDuplicateCheck, setSkipDuplicateCheck] = useState(false);
 
 
 
@@ -3760,131 +3761,88 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
   // Save handler
 
   const handleSave = async () => {
-
     setSaving(true);
-
     setSaveError(null);
-
     setSaveSuccess(false);
-
     setSaveCancelled(false);
-
-    setDuplicateChecked(false); // Reset before saving
-
+    setDuplicateChecked(false);
     setIsBatchSaving(true);
 
     try {
-
       // Only include selected rows
-
       const selectedData = [previewData[0], ...previewData.slice(1).filter((_, i) => selectedRows.has(i + 1))];
-
-      const header = selectedData[0];
-
       const rows = selectedData.slice(1);
 
-      const batchSize = 25;
-
       setSaveTotal(rows.length);
-
       setSaveProgress(0);
 
-      for (let i = 0; i < rows.length; i += batchSize) {
+      // Prepare CSV data
+      const csv = Papa.unparse(selectedData);
 
-        // Check if save was cancelled
-        if (saveCancelled) {
-          break;
-        }
+      const payload = {
+        csv,
+        statementId: file.id || '',
+        startRow: 1,
+        endRow: rows.length,
+        bankId: file.bankId || '',
+        accountId: file.accountId || '',
+        fileName: file.fileName || '',
+        userId: localStorage.getItem('userId') || '',
+        bankName: file.bankName || '',
+        accountName: file.accountName || '',
+        accountNumber: file.accountNumber || '',
+        duplicateCheckFields: selectedFields.map(f => f.split('-')[0]),
+        s3FileUrl: file.s3FileUrl || '',
+        skipDuplicateCheck: skipDuplicateCheck
+      };
 
-        const batchRows = rows.slice(i, i + batchSize);
+      // Use the fast API endpoint
+      const res = await fetch('/api/transaction/slice/fast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-        const batchData = [header, ...batchRows];
+      const result = await res.json();
 
-        const csv = Papa.unparse(batchData);
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || 'Failed to save transactions');
+      }
 
-        const payload = {
-
-          csv,
-
-          statementId: file.id || '',
-
-          startRow: 1, // Not used in backend for slice
-
-          endRow: batchData.length - 1,
-
-          bankId: file.bankId || '',
-
-          accountId: file.accountId || '',
-
-          fileName: file.fileName || '',
-
-          userId: localStorage.getItem('userId') || '',
-
-          bankName: file.bankName || '',
-
-          accountName: file.accountName || '',
-
-          accountNumber: file.accountNumber || '',
-
-          duplicateCheckFields: selectedFields.map(f => f.split('-')[0]),
-
-          s3FileUrl: file.s3FileUrl || '',
-
-        };
-
-        const res = await fetch('/api/transaction/slice', {
-
-          method: 'POST',
-
-          headers: { 'Content-Type': 'application/json' },
-
-          body: JSON.stringify(payload)
-
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setSaveProgress(prev => {
+          const newProgress = Math.min(prev + Math.ceil(rows.length / 20), rows.length);
+          if (newProgress >= rows.length) {
+            clearInterval(progressInterval);
+            return rows.length;
+          }
+          return newProgress;
         });
+      }, 100);
 
-        const result = await res.json();
-
-        if (!res.ok || !result.success) {
-
-          throw new Error(result.error || 'Failed to save transactions');
-
-        }
-
-        setSaveProgress(prev => prev + batchRows.length);
-
-        if (i + batchSize < rows.length) {
-
-          await new Promise(res => setTimeout(res, 1000));
-
-        }
-
-      }
-
-      if (!saveCancelled) {
+      // Wait for actual completion
+      setTimeout(() => {
+        clearInterval(progressInterval);
+        setSaveProgress(rows.length);
         setSaveSuccess(true);
-      }
+        setSaveError(null);
+      }, Math.max(500, rows.length * 10)); // Minimum 500ms, 10ms per row
 
     } catch (err: unknown) {
-
       const errorMessage = err instanceof Error ? err.message : 'Failed to save transactions';
-
       setSaveError(errorMessage);
-
     } finally {
-
       setSaving(false);
-
       setIsBatchSaving(false);
-
     }
-
   };
 
 
 
   return (
-
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-blue-100 dark:border-gray-700 p-4 mt-4 w-[70vw] h-[73vh] overflow-y-auto">
+    <div className="w-[70vw]">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-blue-100 dark:border-gray-700 p-4 mt-4 h-[73vh] overflow-y-auto">
 
       {/* Duplicate check field selection UI */}
 
@@ -3901,8 +3859,27 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
           Select fields to check for duplicate transactions
 
         </h3>
-
         
+        <div className="flex items-center justify-end mb-3">
+          <label className="flex items-center space-x-2 text-sm">
+            <input
+              type="checkbox"
+              checked={skipDuplicateCheck}
+              onChange={(e) => setSkipDuplicateCheck(e.target.checked)}
+              className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+            />
+            <span className="text-red-800 dark:text-red-200 font-medium">Skip duplicate check (faster)</span>
+          </label>
+        </div>
+
+        {skipDuplicateCheck && (
+          <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+            <p className="text-yellow-800 dark:text-yellow-200 text-sm">
+              ⚡ <strong>Fast Mode:</strong> Duplicate checking is disabled for maximum speed. 
+              This will save transactions much faster but may create duplicates if the same data is uploaded multiple times.
+            </p>
+          </div>
+        )}
         
         <div className="grid grid-cols-10 gap-2 mb-4 " >
 
@@ -4280,31 +4257,6 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
       </div>
 
-      {duplicateChecked && duplicateRows.size > 0 && (
-
-        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-red-700 dark:text-red-300 text-sm">
-
-          <div className="flex items-center gap-2">
-            <span className="text-lg">⚠️</span>
-            <span className="font-medium">{duplicateRows.size} duplicate row(s) found - highlighted in light red and will be skipped</span>
-          </div>
-
-        </div>
-
-      )}
-
-      {duplicateChecked && duplicateRows.size === 0 && (
-
-        <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg text-green-700 dark:text-green-300 text-sm font-semibold">
-
-          <div className="flex items-center gap-2">
-            <span className="text-lg">✅</span>
-            <span>No duplicate rows found</span>
-          </div>
-
-        </div>
-
-      )}
 
       {/* Progress bar UI below the table */}
 
@@ -4471,6 +4423,27 @@ function SlicePreviewComponent({ sliceData, file }: { sliceData: string[][]; fil
 
       )}
 
+      </div>
+
+      {/* Duplicate message outside the scrollable container */}
+      {duplicateChecked && duplicateRows.size > 0 && (
+        <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-red-700 dark:text-red-300 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <span className="font-medium">{duplicateRows.size} duplicate row(s) found - highlighted in light red and will be skipped</span>
+          </div>
+        </div>
+      )}
+
+      {duplicateChecked && duplicateRows.size === 0 && (
+        <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg text-green-700 dark:text-green-300 text-sm font-semibold">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">✅</span>
+            <span>No duplicate rows found</span>
+          </div>
+        </div>
+      )}
+
     </div>
 
   );
@@ -4497,6 +4470,13 @@ const FilesPage: React.FC = () => {
   const { openFilePreview } = usePreviewTabManager();
 
   const [files, setFiles] = useState<FileData[]>([]);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('filesSidebarWidth');
+      return saved ? parseInt(saved, 10) : 256;
+    }
+    return 256;
+  });
 
 
 
@@ -4637,6 +4617,13 @@ const FilesPage: React.FC = () => {
     fetchAllUserFiles();
 
   }, []);
+
+  // Persist sidebar width
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('filesSidebarWidth', String(sidebarWidth));
+    }
+  }, [sidebarWidth]);
 
 
 
@@ -5837,7 +5824,6 @@ const FilesPage: React.FC = () => {
     <div className="flex min-h-screen bg-gray-50">
 
       <FilesSidebar
-
         files={(() => {
           const filteredBanks = (banks || []).filter(bank => bank && bank.id && bank.bankName);
           const bankItems = filteredBanks.map(bank => ({
@@ -5847,8 +5833,9 @@ const FilesPage: React.FC = () => {
           console.log('FilesSidebar files prop:', bankItems);
           return bankItems;
         })()}
-
         selectedFileId={selectedFileId}
+        width={sidebarWidth}
+        onWidthChange={setSidebarWidth}
 
         onFileClick={(bank) => {
           // Convert BankItem to FileData-like object for handleFileClick

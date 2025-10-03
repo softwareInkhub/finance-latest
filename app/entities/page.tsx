@@ -14,7 +14,6 @@ import {
   RiUploadLine,
   RiDownloadLine,
   RiSearchLine,
-  RiErrorWarningLine,
   RiCloseLine,
   RiSideBarLine,
   RiSideBarFill,
@@ -107,6 +106,16 @@ export default function EntitiesPage() {
     }
     return false;
   });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('entitiesSidebarWidth');
+      return saved ? parseInt(saved, 10) : 320;
+    }
+    return 320;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [startWidth, setStartWidth] = useState(0);
 
   // Refs to prevent duplicate API calls and debounce
   const loadingRef = useRef(false);
@@ -494,6 +503,60 @@ export default function EntitiesPage() {
     }
   }, [isSidebarCollapsed]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('entitiesSidebarWidth', String(sidebarWidth));
+    }
+  }, [sidebarWidth]);
+
+  // Drag to resize handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setStartX(e.clientX);
+    setStartWidth(sidebarWidth);
+    setIsResizing(true);
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    
+    // Calculate the difference from the start position
+    const deltaX = e.clientX - startX;
+    const newWidth = startWidth + deltaX;
+    
+    const minWidth = 200;
+    const maxWidth = 600;
+    
+    // Only update if within bounds
+    if (newWidth >= minWidth && newWidth <= maxWidth) {
+      setSidebarWidth(newWidth);
+    }
+  }, [isResizing, startX, startWidth]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   const loadFileCountsForAllEntities = async (entitiesList: Entity[]) => {
     try {
@@ -814,8 +877,13 @@ export default function EntitiesPage() {
     }
   };
 
-  const handleUploadFiles = async () => {
-    if (selectedFiles.length === 0 || !selectedEntity) return;
+  const handleUploadFiles = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    if (selectedFiles.length === 0 || !selectedEntity || !newEntityName) {
+      setError('Please enter a file name and select a file.');
+      return;
+    }
 
     const userId = localStorage.getItem('userId');
     if (!userId) {
@@ -888,6 +956,7 @@ export default function EntitiesPage() {
       await loadEntityFiles(selectedEntity.id);
       setShowUploadModal(false);
       setSelectedFiles([]);
+      setNewEntityName('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload files');
       console.error('Error uploading files:', err);
@@ -966,17 +1035,32 @@ export default function EntitiesPage() {
   return (
     <div className="h-full flex bg-gray-50 dark:bg-gray-900">
       {/* Left Sidebar - Entities List */}
-      <div className={`${isSidebarCollapsed ? 'w-16' : 'w-80'} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200 ease-out`}>
+      <div 
+        data-sidebar="entities"
+        className={`${isSidebarCollapsed ? 'w-16' : ''} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col ${!isResizing ? 'transition-all duration-200 ease-out' : ''} relative`}
+        style={{ width: isSidebarCollapsed ? '64px' : `${sidebarWidth}px` }}
+      >
+        {/* Collapse Button at Edge - Center */}
+        <button
+          onClick={() => setIsSidebarCollapsed(prev => !prev)}
+          className="absolute -right-4 top-1/2 -translate-y-1/2 z-30 p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-md hover:shadow-lg transition-all duration-200 hover:scale-105"
+          title={isSidebarCollapsed ? 'Expand' : 'Collapse'}
+        >
+          <RiMenuLine size={14} className="text-gray-600 dark:text-gray-300" />
+        </button>
+
+        {/* Resize Handle */}
+        {!isSidebarCollapsed && (
+          <div
+            className="absolute right-0 top-0 w-2 h-full cursor-col-resize hover:bg-blue-500 hover:opacity-30 transition-all duration-200 z-20"
+            onMouseDown={handleMouseDown}
+            title="Drag to resize sidebar"
+          />
+        )}
+
         {/* Header */}
         <div className="p-2 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => setIsSidebarCollapsed(prev => !prev)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-              title={isSidebarCollapsed ? 'Expand' : 'Collapse'}
-            >
-              <RiMenuLine size={18} className="text-gray-600 dark:text-gray-300" />
-            </button>
             {!isSidebarCollapsed && (
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mr-2">Entities</h2>
@@ -1005,7 +1089,7 @@ export default function EntitiesPage() {
         </div>
 
         {/* Entities List */}
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="flex-1 overflow-y-auto p-2 pr-4">
           {loading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -1059,7 +1143,7 @@ export default function EntitiesPage() {
                           <h3 className="font-medium text-gray-900 dark:text-gray-100">
                             All Files
                           </h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 break-words leading-tight">
                             View all files from all entities
                           </p>
                         </div>
@@ -1404,204 +1488,54 @@ export default function EntitiesPage() {
 
       {/* Upload Modal */}
       {showUploadModal && selectedEntity && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-4 text-white">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-white/20 rounded-lg">
-                    <RiUploadLine size={24} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold">Upload Files</h3>
-                    <p className="text-blue-100 text-sm">to {selectedEntity.name}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md relative">
+            <button className="absolute top-3 right-3 text-gray-400 hover:text-red-500" onClick={() => setShowUploadModal(false)}>
+              <RiCloseLine size={24} />
+            </button>
+
+            <h2 className="text-xl font-bold mb-4 text-blue-800">Upload File to {selectedEntity.name}</h2>
+
+            <form onSubmit={handleUploadFiles} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold mb-1">File Name</label>
+                <input 
+                  type="text" 
+                  className="w-full border rounded px-3 py-2" 
+                  value={newEntityName} 
+                  onChange={e => setNewEntityName(e.target.value)} 
+                  required 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-1">Select File</label>
+                <input 
+                  type="file" 
+                  className="w-full border rounded px-3 py-2" 
+                  onChange={e => {
+                    const files = e.target.files;
+                    if (files && files.length > 0) {
+                      setSelectedFiles(Array.from(files));
+                      setError(null);
+                    }
+                  }} 
+                  required 
+                />
+              </div>
+
+              {error && <div className="text-red-600 text-sm font-semibold">{error}</div>}
+
+              <div className="flex justify-end">
+                <button 
+                  type="submit" 
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-lg shadow transition-all" 
+                  disabled={uploading}
                 >
-                  <RiCloseLine size={20} />
+                  {uploading ? 'Uploading...' : 'Upload'}
                 </button>
               </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left Side - Upload Area */}
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Select Files</h4>
-                  
-                  {/* Upload Area */}
-                  <div className="relative">
-                    <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center transition-all duration-300 hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 group">
-                      <div className="space-y-4">
-                        {/* Upload Icon */}
-                        <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/30 dark:to-purple-900/30 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                          <RiUploadLine size={28} className="text-blue-500 dark:text-blue-400" />
-                        </div>
-                        
-                        {/* Text Content */}
-                        <div className="space-y-2">
-                          <h5 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                            Drop files here
-                          </h5>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            or click to browse
-                          </p>
-                        </div>
-
-                        {/* File Types Info */}
-                        <div className="flex flex-wrap justify-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-                          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">PDF</span>
-                          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">Excel</span>
-                          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">Word</span>
-                          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">Images</span>
-                          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-full">CSV</span>
-                        </div>
-
-                        {/* Upload Button */}
-                        <div className="pt-2">
-                          <input
-                            type="file"
-                            multiple
-                            className="hidden"
-                            id="file-upload"
-                            onChange={(e) => {
-                              const files = e.target.files;
-                              if (files && files.length > 0) {
-                                setSelectedFiles(Array.from(files));
-                                setError(null);
-                              }
-                            }}
-                          />
-                          <label
-                            htmlFor="file-upload"
-                            className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-lg cursor-pointer transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                          >
-                            <RiUploadLine size={16} className="mr-2" />
-                            Choose Files
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Side - File Preview */}
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Selected Files</h4>
-                  
-                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 max-h-64 overflow-y-auto">
-                    {selectedFiles.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <RiFileLine size={32} className="mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No files selected</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {selectedFiles.map((file, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                                <RiFileLine size={16} className="text-blue-600 dark:text-blue-400" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                  {file.name}
-                                </p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => {
-                                setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-                              }}
-                              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                            >
-                              <RiCloseLine size={16} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload Summary */}
-                  {selectedFiles.length > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                          Ready to Upload
-                        </span>
-                      </div>
-                      <p className="text-xs text-blue-700 dark:text-blue-300">
-                        {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} • 
-                        {(selectedFiles.reduce((total, file) => total + file.size, 0) / 1024 / 1024).toFixed(2)} MB total
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Error Display */}
-              {error && (
-                <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-shrink-0">
-                      <RiErrorWarningLine size={20} className="text-red-500" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-red-800 dark:text-red-200">Upload Failed</h4>
-                      <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Footer */}
-              <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {selectedFiles.length > 0 && (
-                    <span>{selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected</span>
-                  )}
-                </div>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => {
-                      setShowUploadModal(false);
-                      setSelectedFiles([]);
-                      setError(null);
-                    }}
-                    className="px-6 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleUploadFiles}
-                    disabled={selectedFiles.length === 0 || uploading}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm font-medium rounded-md transition-colors"
-                  >
-                    {uploading ? (
-                      <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span>Uploading...</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <RiUploadLine size={16} />
-                        <span>Upload {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''}</span>
-                      </div>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
+            </form>
           </div>
         </div>
       )}

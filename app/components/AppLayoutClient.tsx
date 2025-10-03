@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import { RiBankLine, RiPriceTag3Line, RiFileList3Line, RiBarChartLine } from 'react-icons/ri';
@@ -11,6 +11,7 @@ import { EntitySyncProvider } from '../contexts/EntitySyncContext';
 import { FileSyncProvider } from '../contexts/FileSyncContext';
 import { SidebarPreferencesProvider } from '../contexts/SidebarPreferencesContext';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
+import { useTabManager } from '../hooks/useTabManager';
 
 export default function AppLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,6 +19,7 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { tabs, activeTabId } = useGlobalTabs();
+  const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports } = useTabManager();
   const getSectionSubtitle = (path: string): string => {
     // Map top-level routes to a friendly heading
     const segments = (path || '/').split('?')[0].split('#')[0].split('/').filter(Boolean);
@@ -25,6 +27,8 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
     switch (top) {
       case 'dashboard':
         return 'Home';
+      case 'entities':
+        return 'Manage entities, files and folders';
       case 'banks':
       case 'super-bank':
         return 'All Transactions Dashboard';
@@ -44,6 +48,8 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   const getBrandTitle = (path: string): string => {
     const top = (path || '/').split('?')[0].split('#')[0].split('/').filter(Boolean)[0] || '';
     switch (top) {
+      case 'entities':
+        return 'Entities';
       case 'banks':
       case 'super-bank':
         return 'Super Bank';
@@ -61,6 +67,8 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   const getBrandIcon = (path: string): React.ReactNode | null => {
     const top = (path || '/').split('?')[0].split('#')[0].split('/').filter(Boolean)[0] || '';
     switch (top) {
+      case 'entities':
+        return <RiFileList3Line className="w-4 h-4" />;
       case 'banks':
       case 'super-bank':
         return <RiBankLine className="w-4 h-4" />;
@@ -74,6 +82,37 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
         return null;
     }
   };
+
+  // Sync initial and direct URL navigations to open the correct tab
+  useEffect(() => {
+    const top = (pathname || '/').split('?')[0].split('#')[0].split('/').filter(Boolean)[0] || 'dashboard';
+    switch (top) {
+      case 'dashboard':
+        openDashboard();
+        break;
+      case 'entities':
+        openEntities();
+        break;
+      case 'banks':
+      case 'super-bank':
+        openBanks();
+        break;
+      case 'tags':
+        openTags();
+        break;
+      case 'files':
+        openFiles();
+        break;
+      case 'reports':
+        openReports();
+        break;
+      default:
+        // Fallback to dashboard for unknown top-level routes
+        openDashboard();
+        break;
+    }
+  // We intentionally depend only on pathname so this runs on direct URL hits and when it changes
+  }, [pathname, openDashboard, openEntities, openBanks, openTags, openFiles, openReports]);
   
   return (
     <AuthWrapper>

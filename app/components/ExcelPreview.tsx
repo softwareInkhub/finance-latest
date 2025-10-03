@@ -1,7 +1,10 @@
 'use client';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { RiFileExcelLine, RiTableLine, RiDownloadLine, RiCloseLine } from 'react-icons/ri';
+import * as Papa from 'papaparse';
+import { RiFileExcelLine, RiTableLine, RiDownloadLine, RiCloseLine, RiScissorsLine, RiSaveLine } from 'react-icons/ri';
+import { useGlobalTabs } from '../contexts/GlobalTabContext';
+import Modal from './Modals/Modal';
 
 interface ExcelData {
   sheetNames: string[];
@@ -17,9 +20,10 @@ interface ExcelPreviewProps {
   };
   onClose: () => void;
   excelData?: ExcelData; // Optional pre-loaded data for CSV files
+  enableSlicing?: boolean; // Enable slicing functionality for CSV files
 }
 
-export default function ExcelPreview({ file, onClose, excelData: preloadedData }: ExcelPreviewProps) {
+export default function ExcelPreview({ file, onClose, excelData: preloadedData, enableSlicing = false }: ExcelPreviewProps) {
   const [excelData, setExcelData] = useState<ExcelData | null>(preloadedData || null);
   const [activeSheet, setActiveSheet] = useState<string>('');
   const [loading, setLoading] = useState(!preloadedData);
@@ -27,6 +31,16 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
   const [previewRows, setPreviewRows] = useState<number>(10000); // High limit to show most files completely
   const [columnWidths, setColumnWidths] = useState<{ [key: string]: number }>({});
   const [isResizing, setIsResizing] = useState<number | null>(null);
+  
+  const { addTab, setActiveTab } = useGlobalTabs();
+  
+  // Slicing state
+  const [showSlicing, setShowSlicing] = useState(false);
+  const [headerRow, setHeaderRow] = useState<number | null>(null);
+  const [startRow, setStartRow] = useState<number | null>(null);
+  const [endRow, setEndRow] = useState<number | null>(null);
+  const [selectionStep, setSelectionStep] = useState<'header' | 'transactions'>('header');
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
 
   const loadExcelData = useCallback(async () => {
     // Skip loading if we already have preloaded data
@@ -387,6 +401,411 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
     setColumnWidths(newWidths);
   };
 
+  // Slicing functions
+  const isCsvFile = file.name.toLowerCase().endsWith('.csv');
+  const shouldShowSlicing = enableSlicing && isCsvFile;
+
+  const handleSlice = () => {
+    if (headerRow !== null && startRow !== null && endRow !== null) {
+      const sliced = [currentSheetData[headerRow], ...currentSheetData.slice(startRow, endRow + 1)].map(row => 
+        row.map(cell => String(cell))
+      );
+      
+      // Open new tab with slice preview
+      const tabId = `slice-preview-${Date.now()}`;
+      const tabTitle = `Slice Preview: ${file.name} (${sliced.length - 1} transactions)`;
+      
+      console.log('Creating slice preview tab:', { tabId, tabTitle, sliceDataLength: sliced.length });
+      
+      try {
+        // Open the new tab with slice preview
+        addTab({
+          id: tabId,
+          title: tabTitle,
+          type: 'custom',
+          component: <SlicePreviewComponent 
+            data={sliced} 
+            fileName={file.name} 
+            onSave={handleSaveSliceFromPreview}
+          />,
+          data: { 
+            sliceData: sliced, 
+            fileName: file.name, 
+            transactionCount: sliced.length - 1,
+            source: 'entities',
+            isPreview: true
+          }
+        });
+        
+        console.log('Slice preview tab added successfully, switching to:', tabId);
+        
+        // Switch to the new tab
+        setActiveTab(tabId);
+        
+        console.log('Active tab set to slice preview:', tabId);
+        
+        // Reset slicing state in current tab
+        setHeaderRow(null);
+        setStartRow(null);
+        setEndRow(null);
+        setSelectionStep('header');
+      } catch (tabError) {
+        console.error('Error creating slice preview tab:', tabError);
+        alert('Failed to open slice preview. Please try again.');
+      }
+    }
+  };
+
+  // Create a component for displaying sliced transactions preview (before saving)
+  const SlicePreviewComponent = React.memo(({ data, fileName, onSave }: { 
+    data: string[][], 
+    fileName: string, 
+    onSave: (data: string[][]) => Promise<void> 
+  }) => {
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [previewData, setPreviewData] = useState<string[][]>(data);
+    
+    // Delimit state and logic
+    const [delimitDialogOpen, setDelimitDialogOpen] = useState(false);
+    const [delimitColIdx, setDelimitColIdx] = useState<number | null>(null);
+    const [delimiter, setDelimiter] = useState<string>(' ');
+    const [newColNames, setNewColNames] = useState<string[]>(['Date', 'Time']);
+    const [delimitPreview, setDelimitPreview] = useState<string[][] | null>(null);
+    const [delimitError, setDelimitError] = useState<string | null>(null);
+
+    // Update previewData when data changes
+    useEffect(() => {
+      setPreviewData(data);
+    }, [data]);
+
+    const handleSave = async () => {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        await onSave(previewData);
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : 'Failed to save');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    // Delimit handlers
+    const handleDelimitPreview = () => {
+      setDelimitError(null);
+
+      if (delimitColIdx === null || !delimiter) {
+        setDelimitError('Select a column and delimiter.');
+        return;
+      }
+
+      const header = previewData[0];
+      const rows = previewData.slice(1);
+
+      const newRows = rows.map(row => {
+        const cell = row[delimitColIdx] || '';
+        let parts: string[];
+
+        if (delimiter === '\\s+' || (delimiter.startsWith('/') && delimiter.endsWith('/'))) {
+          let regex: RegExp;
+          if (delimiter === '\\s+') {
+            regex = /\s+/;
+          } else {
+            regex = new RegExp(delimiter.slice(1, -1));
+          }
+          parts = cell.split(regex);
+        } else {
+          parts = cell.split(delimiter);
+        }
+
+        const newParts = newColNames.map((_, i) => parts[i] || '');
+        const newRow = [...row];
+        newRow.splice(delimitColIdx, 1, ...newParts);
+        return newRow;
+      });
+
+      const newHeader = [...header];
+      newHeader.splice(delimitColIdx, 1, ...newColNames);
+
+      setDelimitPreview([newHeader, ...newRows]);
+    };
+
+    const handleDelimitSave = () => {
+      if (!delimitPreview) return;
+
+      setPreviewData(delimitPreview);
+      setDelimitDialogOpen(false);
+      setDelimitPreview(null);
+      setDelimitColIdx(null);
+      setNewColNames(['Date', 'Time']);
+      setDelimiter(' ');
+    };
+
+    return (
+      <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+        <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                Slice Preview
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                {data.length - 1} transactions from {fileName}
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setDelimitDialogOpen(true)}
+                disabled={previewData.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                title="Split a column into multiple columns (e.g., date/time)"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Delimit
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                <RiSaveLine className="w-4 h-4" />
+                {saving ? 'Saving...' : 'Save Transactions'}
+              </button>
+            </div>
+          </div>
+          
+          {saveError && (
+            <div className="mt-3 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-400 rounded-lg text-sm">
+              {saveError}
+            </div>
+          )}
+        </div>
+        
+        <div className="flex-1 overflow-auto p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
+                  <tr>
+                    {previewData[0]?.map((header, idx) => (
+                      <th key={idx} className="border border-gray-200 dark:border-gray-600 px-3 py-2 font-bold bg-blue-50 dark:bg-gray-800 text-blue-900 dark:text-gray-200 whitespace-nowrap text-left">
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewData.slice(1).map((row, i) => (
+                    <tr key={i} className="hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                      {row.map((cell, j) => (
+                        <td key={j} className="border border-gray-200 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        {/* Delimit Dialog */}
+        {delimitDialogOpen && (
+          <Modal isOpen={delimitDialogOpen} onClose={() => setDelimitDialogOpen(false)} title="Delimit Column" maxWidthClass="max-w-sm">
+            <div className="mb-2">
+              <label className="block mb-1 font-medium text-sm">Select column to delimit:</label>
+              <select
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={delimitColIdx ?? ''}
+                onChange={e => setDelimitColIdx(Number(e.target.value))}
+              >
+                <option value="" disabled>Select column</option>
+                {previewData[0]?.map((header, idx) => (
+                  <option key={idx} value={idx}>{header}</option>
+                ))}
+              </select>
+              
+              <label className="block mb-1 font-medium text-sm">Delimiter:</label>
+              <input
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={delimiter}
+                onChange={e => setDelimiter(e.target.value)}
+                placeholder="e.g. space, /, -"
+              />
+              
+              <label className="block mb-1 font-medium text-sm">New column names (comma-separated):</label>
+              <input
+                className="w-full border rounded px-2 py-1 mb-2"
+                value={newColNames.join(', ')}
+                onChange={e => setNewColNames(e.target.value.split(',').map(s => s.trim()))}
+                placeholder="e.g. Date, Time"
+              />
+              
+              <button
+                className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                onClick={handleDelimitPreview}
+                type="button"
+              >Preview</button>
+              {delimitError && <div className="text-red-600 mt-1 text-xs">{delimitError}</div>}
+            </div>
+            
+            {delimitPreview && (
+              <div className="overflow-x-auto max-h-40 border rounded mb-2">
+                <table className="min-w-full border text-xs">
+                  <tbody>
+                    {delimitPreview.slice(0, 6).map((row, i) => (
+                      <tr key={i}>{row.map((cell, j) => <td key={j} className="border px-2 py-1">{cell}</td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs"
+                onClick={handleDelimitSave}
+                disabled={!delimitPreview}
+              >Save</button>
+              <button
+                className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 text-xs"
+                onClick={() => setDelimitDialogOpen(false)}
+              >Cancel</button>
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  });
+  SlicePreviewComponent.displayName = 'SlicePreviewComponent';
+
+  // Create a component for displaying saved sliced transactions
+  const SlicedTransactionsComponent = React.memo(({ data, fileName }: { data: string[][], fileName: string }) => (
+    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
+      <div className="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Sliced Transactions
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              {data.length - 1} transactions from {fileName}
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full text-sm font-medium">
+              ✅ Saved Successfully
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex-1 overflow-auto p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
+                <tr>
+                  {data[0]?.map((header, idx) => (
+                    <th key={idx} className="border border-gray-200 dark:border-gray-600 px-3 py-2 font-bold bg-blue-50 dark:bg-gray-800 text-blue-900 dark:text-gray-200 whitespace-nowrap text-left">
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.slice(1).map((row, i) => (
+                  <tr key={i} className="hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                    {row.map((cell, j) => (
+                      <td key={j} className="border border-gray-200 dark:border-gray-600 px-3 py-2 text-gray-900 dark:text-gray-100">
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  ));
+  SlicedTransactionsComponent.displayName = 'SlicedTransactionsComponent';
+
+  // Function to save slice from the preview tab
+  const handleSaveSliceFromPreview = async (data: string[][]) => {
+    try {
+      // Prepare CSV string from sliceData
+      const csv = Papa.unparse(data);
+
+      // Prepare payload for /api/transaction/slice
+      const payload = {
+        csvData: csv,
+        fileName: file.name,
+        userId: localStorage.getItem('userId'),
+        skipDuplicateCheck: true // Default to true for faster processing
+      };
+
+      const res = await fetch('/api/transaction/slice/fast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to save slice');
+      }
+
+      const result = await res.json();
+      console.log('Slice saved successfully:', result);
+      
+      // Create a new tab with the saved sliced transactions
+      const tabId = `slice-saved-${Date.now()}`;
+      const tabTitle = `Sliced: ${file.name} (${data.length - 1} transactions)`;
+      
+      console.log('Creating saved slice tab:', { tabId, tabTitle, sliceDataLength: data.length });
+      
+      // Open the new tab with saved transactions
+      addTab({
+        id: tabId,
+        title: tabTitle,
+        type: 'custom',
+        component: <SlicedTransactionsComponent data={data} fileName={file.name} />,
+        data: { 
+          sliceData: data, 
+          fileName: file.name, 
+          transactionCount: data.length - 1,
+          source: 'entities',
+          isSaved: true
+        }
+      });
+      
+      console.log('Saved slice tab added successfully, switching to:', tabId);
+      
+      // Switch to the new tab
+      setActiveTab(tabId);
+      
+      console.log('Active tab set to saved slice:', tabId);
+      
+      // Reset slicing state in original tab
+      setShowSlicing(false);
+      setHeaderRow(null);
+      setStartRow(null);
+      setEndRow(null);
+      setSelectionStep('header');
+      
+    } catch (err) {
+      console.error('Error saving slice from preview:', err);
+      throw err; // Re-throw to be handled by the preview component
+    }
+  };
+
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -483,6 +902,20 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {shouldShowSlicing && (
+            <button
+              onClick={() => setShowSlicing(!showSlicing)}
+              className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors ${
+                showSlicing 
+                  ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                  : 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-800'
+              }`}
+              title="Slice data for transaction processing"
+            >
+              <RiScissorsLine className="w-4 h-4" />
+              {showSlicing ? 'Hide Slicing' : 'Slice Data'}
+            </button>
+          )}
           <button
             onClick={fitAllColumns}
             className="flex items-center gap-2 px-3 py-2 text-sm bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
@@ -543,6 +976,52 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
         </div>
       )}
 
+      {/* Slicing Controls */}
+      {shouldShowSlicing && showSlicing && (
+        <div className="border-b-2 border-orange-300 dark:border-orange-600 bg-orange-50 dark:bg-orange-900/20 p-4">
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            <h3 className="text-lg font-semibold text-orange-800 dark:text-orange-200">Slice Data for Processing</h3>
+            
+            {/* Range Selection Summary */}
+            {headerRow !== null && startRow !== null && endRow !== null && (
+              <div className="mb-3 p-3 bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-600 rounded-lg">
+                <div className="flex items-center gap-2 text-sm font-semibold text-blue-800 dark:text-blue-200">
+                  <span className="text-lg">📊</span>
+                  <span>Selected Range: {endRow - startRow + 1} transactions (Rows {startRow + 1} to {endRow + 1})</span>
+                  <span className="px-2 py-1 bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-full text-xs">
+                    Header: Row {headerRow + 1}
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            <button
+              onClick={handleSlice}
+              disabled={headerRow === null || startRow === null || endRow === null}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              <RiScissorsLine className="w-4 h-4 inline mr-2" />
+              Slice
+            </button>
+            
+            {(headerRow !== null || startRow !== null || endRow !== null) && (
+              <button
+                onClick={() => {
+                  setHeaderRow(null);
+                  setStartRow(null);
+                  setEndRow(null);
+                  setSelectionStep('header');
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Reset Selection
+              </button>
+            )}
+          </div>
+          
+        </div>
+      )}
+
       {/* Data Table */}
       <div className="flex-1 overflow-auto bg-white dark:bg-gray-900 max-h-[80vh]">
         {currentHeaders.length > 0 ? (
@@ -597,46 +1076,112 @@ export default function ExcelPreview({ file, onClose, excelData: preloadedData }
                 </tr>
               </thead>
               <tbody>
-                {dataRows.map((row, rowIndex) => (
-                  <tr 
-                    key={rowIndex} 
-                    className="hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                    style={{ 
-                      backgroundColor: rowIndex % 2 === 0 ? '#ffffff' : '#fafafa'
-                    }}
-                  >
-                    {/* Row number */}
-                    <td
-                      className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 w-12"
+                {dataRows.map((row, rowIndex) => {
+                  const actualRowIndex = rowIndex + 1; // +1 because we skip header row
+                  const isHeader = headerRow === actualRowIndex;
+                  const isInSlice = startRow !== null && endRow !== null && actualRowIndex >= startRow && actualRowIndex <= endRow;
+                  const isStart = startRow !== null && actualRowIndex === startRow;
+                  const isEnd = endRow !== null && actualRowIndex === endRow;
+                  
+                  return (
+                    <tr 
+                      key={rowIndex} 
+                      className={`transition-colors ${
+                        isHeader ? 'bg-purple-100 dark:bg-purple-900/30' :
+                        isInSlice ? 'bg-green-100 dark:bg-green-900/30' :
+                        'hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                      }`}
                       style={{ 
-                        backgroundColor: '#f9fafb',
-                        borderColor: '#d1d5db',
-                        fontSize: '10px',
-                        fontWeight: '500'
+                        backgroundColor: isHeader ? '#f3e8ff' : isInSlice ? '#dcfce7' : (rowIndex % 2 === 0 ? '#ffffff' : '#fafafa')
                       }}
+                      onMouseEnter={() => setHoveredRow(actualRowIndex)}
+                      onMouseLeave={() => setHoveredRow(null)}
                     >
-                      {rowIndex + 2}
-                    </td>
-                    {currentHeaders.map((_, colIndex) => (
+                      {/* Row number */}
                       <td
-                        key={colIndex}
-                        className={`border border-gray-300 dark:border-gray-600 px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm text-gray-900 dark:text-gray-100 ${getCellAlignment(row[colIndex])}`}
+                        className="border border-gray-300 dark:border-gray-600 px-2 py-2 text-center text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 w-12 relative"
                         style={{ 
+                          backgroundColor: '#f9fafb',
                           borderColor: '#d1d5db',
-                          fontSize: '11px',
-                          lineHeight: '1.3',
-                          width: `${getColumnWidth(colIndex)}px`,
-                          minWidth: '60px',
-                          maxWidth: '400px'
+                          fontSize: '10px',
+                          fontWeight: '500'
                         }}
                       >
-                        <div className="truncate" title={formatCellValue(row[colIndex])}>
-                          {formatCellValue(row[colIndex])}
-                        </div>
+                        {actualRowIndex + 1}
+                        
+                        {/* Header selection button */}
+                        {shouldShowSlicing && showSlicing && selectionStep === 'header' && hoveredRow === actualRowIndex && (
+                          <button
+                            className="absolute left-full ml-2 px-2 py-1 bg-purple-500 text-white rounded text-xs whitespace-nowrap z-10"
+                            onClick={() => {
+                              setHeaderRow(actualRowIndex);
+                              setSelectionStep('transactions');
+                            }}
+                          >
+                            Select Header
+                          </button>
+                        )}
+                        
+                        {/* Start selection button */}
+                        {shouldShowSlicing && showSlicing && selectionStep === 'transactions' && startRow === null && actualRowIndex > (headerRow || 0) && hoveredRow === actualRowIndex && (
+                          <button
+                            className="absolute left-full ml-2 px-2 py-1 bg-green-500 text-white rounded text-xs whitespace-nowrap z-10"
+                            onClick={() => setStartRow(actualRowIndex)}
+                          >
+                            Start
+                          </button>
+                        )}
+                        
+                        {/* End selection button */}
+                        {shouldShowSlicing && showSlicing && selectionStep === 'transactions' && startRow !== null && endRow === null && actualRowIndex > startRow && hoveredRow === actualRowIndex && (
+                          <button
+                            className="absolute left-full ml-2 px-2 py-1 bg-yellow-500 text-white rounded text-xs whitespace-nowrap z-10"
+                            onClick={() => setEndRow(actualRowIndex)}
+                          >
+                            End
+                          </button>
+                        )}
+                        
+                        {/* Selection badges */}
+                        {shouldShowSlicing && showSlicing && isHeader && (
+                          <span className="absolute left-full ml-2 px-3 py-1 bg-purple-600 text-white rounded-full text-xs font-bold shadow-lg animate-pulse whitespace-nowrap z-10">
+                            📋 Header
+                          </span>
+                        )}
+                        
+                        {shouldShowSlicing && showSlicing && isStart && (
+                          <span className="absolute left-full ml-2 px-3 py-1 bg-green-600 text-white rounded-full text-xs font-bold shadow-lg animate-pulse whitespace-nowrap z-10">
+                            ▶️ Start
+                          </span>
+                        )}
+                        
+                        {shouldShowSlicing && showSlicing && isEnd && (
+                          <span className="absolute left-full ml-2 px-3 py-1 bg-yellow-600 text-white rounded-full text-xs font-bold shadow-lg animate-pulse whitespace-nowrap z-10">
+                            ⏹️ End
+                          </span>
+                        )}
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                      {currentHeaders.map((_, colIndex) => (
+                        <td
+                          key={colIndex}
+                          className={`border border-gray-300 dark:border-gray-600 px-2 sm:px-3 py-1 sm:py-2 text-xs sm:text-sm text-gray-900 dark:text-gray-100 ${getCellAlignment(row[colIndex])}`}
+                          style={{ 
+                            borderColor: '#d1d5db',
+                            fontSize: '11px',
+                            lineHeight: '1.3',
+                            width: `${getColumnWidth(colIndex)}px`,
+                            minWidth: '60px',
+                            maxWidth: '400px'
+                          }}
+                        >
+                          <div className="truncate" title={formatCellValue(row[colIndex])}>
+                            {formatCellValue(row[colIndex])}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

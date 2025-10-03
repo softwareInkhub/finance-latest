@@ -37,6 +37,13 @@ export default function BanksTabsClient() {
   const [editBank, setEditBank] = useState<Bank | null>(null);
   const [allTags, setAllTags] = useState<Array<{ id: string; name: string; color?: string }>>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('banksSidebarWidth');
+      return saved ? parseInt(saved, 10) : 320;
+    }
+    return 320;
+  });
   const [bankStats, setBankStats] = useState<{ [bankId: string]: { accounts: number; transactions: number } }>({});
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const router = useRouter();
@@ -65,6 +72,13 @@ export default function BanksTabsClient() {
     };
     fetchBanks();
   }, []);
+
+  // Persist sidebar width
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('banksSidebarWidth', String(sidebarWidth));
+    }
+  }, [sidebarWidth]);
 
   // Handle URL parameters to prevent page refresh
   useEffect(() => {
@@ -384,11 +398,14 @@ export default function BanksTabsClient() {
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       <BanksSidebar 
         banks={banks}
+        activeTabType={tabs.find(t => t.key === activeTab)?.type}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => {
           // Prevent rapid toggles with immediate state update
           setIsSidebarCollapsed(prev => !prev);
         }}
+        width={sidebarWidth}
+        onWidthChange={setSidebarWidth}
         onSuperBankClick={() => {
           const tabKey = 'super-bank';
           if (tabs.some(tab => tab.key === tabKey)) {
@@ -474,7 +491,17 @@ export default function BanksTabsClient() {
                     ? 'border-blue-600 text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setActiveTab(tab.key);
+                // Update URL to match the active tab
+                if (tab.type === 'statements' && tab.bankId && tab.accountId) {
+                  router.replace(`${pathname}?bankId=${tab.bankId}&accountId=${tab.accountId}`, { scroll: false });
+                } else if (tab.type === 'accounts' && tab.bankId) {
+                  router.replace(`${pathname}?bankId=${tab.bankId}`, { scroll: false });
+                } else if (tab.type === 'super-bank') {
+                  router.replace('/banks', { scroll: false });
+                }
+              }}
             >
                 <span>{tab.label}</span>
               {tab.key !== 'overview' && (
@@ -665,9 +692,9 @@ export default function BanksTabsClient() {
                 </ErrorBoundary>
               );
             }
-            if (tab?.type === 'statements' && tab.bankId) {
+            if (tab?.type === 'statements' && tab.bankId && tab.accountId) {
               return (
-                <ErrorBoundary>
+                <ErrorBoundary key={`statements-${tab.bankId}-${tab.accountId}`}>
                   <StatementsPage />
                 </ErrorBoundary>
               );

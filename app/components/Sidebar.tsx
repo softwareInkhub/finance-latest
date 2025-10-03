@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTabManager } from '../hooks/useTabManager';
 import { useGlobalTabs } from '../contexts/GlobalTabContext';
 import { useEntitySync } from '../contexts/EntitySyncContext';
@@ -30,6 +31,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const router = useRouter();
   const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports, openEntityTab } = useTabManager();
   const { activeTabId, tabs } = useGlobalTabs();
   const { entities, refreshEntities } = useEntitySync();
@@ -265,12 +267,12 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                     } else {
                       // Handle static menu items
                       const actions: { [key: string]: () => void } = {
-                        '/dashboard': openDashboard,
-                        '/entities': openEntities,
-                        '/banks': openBanks,
-                        '/tags': openTags,
-                        '/files': openFiles,
-                        '/reports': openReports,
+                        '/dashboard': () => { openDashboard(); router.replace('/dashboard', { scroll: false }); },
+                        '/entities': () => { openEntities(); router.replace('/entities', { scroll: false }); },
+                        '/banks': () => { openBanks(); router.replace('/banks', { scroll: false }); },
+                        '/tags': () => { openTags(); router.replace('/tags', { scroll: false }); },
+                        '/files': () => { openFiles(); router.replace('/files', { scroll: false }); },
+                        '/reports': () => { openReports(); router.replace('/reports', { scroll: false }); },
                       };
                       handleItemClick(actions[item.path] || (() => {}));
                     }

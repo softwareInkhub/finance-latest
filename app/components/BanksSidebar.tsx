@@ -1,9 +1,10 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { RiBankLine, RiAccountPinCircleLine, RiArrowRightSLine, RiFileList3Line, RiTimeLine, RiMenuLine, RiSearchLine, RiCircleFill, RiAddLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
+import { RiBankLine, RiAccountPinCircleLine, RiArrowRightSLine, RiArrowDownSLine, RiFileList3Line, RiTimeLine, RiSearchLine, RiCircleFill, RiAddLine, RiEdit2Line, RiDeleteBin6Line } from 'react-icons/ri';
 import { useAuth } from '../hooks/useAuth';
 import { Bank } from '../types/aws';
+import ChildSidebar from './ChildSidebar';
 
 interface Account {
   id: string;
@@ -21,6 +22,10 @@ interface BanksSidebarProps {
   onDeleteBankClick?: (bankId: string) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  width?: number;
+  onWidthChange?: (width: number) => void;
+  // When rendered inside /banks, the URL stays /banks, so use the active tab type for highlighting
+  activeTabType?: 'overview' | 'accounts' | 'statements' | 'super-bank' | 'files' | 'transactions' | string;
 }
 
 // Helper function to get bank initials
@@ -42,13 +47,15 @@ function BanksSidebar({
   onEditBankClick,
   onDeleteBankClick,
   isCollapsed = false,
-  onToggleCollapse
+  onToggleCollapse,
+  width = 320,
+  onWidthChange,
+  activeTabType
 }: BanksSidebarProps) {
   const [localBanks, setLocalBanks] = useState<Bank[]>([]);
   const [accounts, setAccounts] = useState<{ [bankId: string]: Account[] }>({});
   const [expandedBank, setExpandedBank] = useState<string | null>(null);
   const [expandedBankSections, setExpandedBankSections] = useState<{ [bankId: string]: string[] }>({});
-  const [hoveredBank, setHoveredBank] = useState<string | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -71,14 +78,24 @@ function BanksSidebar({
 
   // Fetch accounts for a bank when expanded
   const handleExpand = useCallback((bankId: string) => {
+    const isCurrentlyExpanded = expandedBank === bankId;
     setExpandedBank(prev => prev === bankId ? null : bankId);
+    
+    // If expanding the bank, also expand the accounts section
+    if (!isCurrentlyExpanded) {
+      setExpandedBankSections(prev => ({
+        ...prev,
+        [bankId]: [...(prev[bankId] || []), 'accounts']
+      }));
+    }
+    
     const userId = typeof window !== "undefined" ? localStorage.getItem('userId') : null;
     if (!accounts[bankId] && userId) {
       fetch(`/api/account?bankId=${bankId}&userId=${userId}`)
         .then(res => res.json())
         .then(data => setAccounts(prev => ({ ...prev, [bankId]: Array.isArray(data) ? data : [] })));
     }
-  }, [accounts]);
+  }, [accounts, expandedBank]);
 
   const handleBankClick = useCallback((bank: Bank) => {
     if (onBankClick) {
@@ -87,6 +104,7 @@ function BanksSidebar({
   }, [onBankClick]);
 
   const handleBankSectionClick = useCallback((section: string, bankId: string) => {
+    // Toggle section expansion
     setExpandedBankSections(prev => {
       const currentSections = prev[bankId] || [];
       const isExpanded = currentSections.includes(section);
@@ -105,7 +123,7 @@ function BanksSidebar({
         };
       }
     });
-
+    
     if (onBankSectionClick) {
       onBankSectionClick(section, bankId);
     }
@@ -128,35 +146,26 @@ function BanksSidebar({
   }, [selectedBankId, accounts]);
 
   return (
-    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} min-h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-200 ease-out relative`}>
-      {/* Toggle Button */}
-      <div className="flex justify-end items-center p-2 border-b border-gray-100 dark:border-gray-700">
-        <button
-          onClick={onToggleCollapse}
-          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-150"
-          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        >
-          {isCollapsed ? (
-            <RiMenuLine className="text-gray-600 dark:text-gray-300" size={18} />
-          ) : (
-            <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-              <span className="text-xs">&lt;</span>
-              <RiMenuLine className="text-gray-600 dark:text-gray-300" size={14} />
-            </div>
-          )}
-        </button>
-      </div>
-
+    <ChildSidebar
+      title="Banks"
+      subtitle="Bank management"
+      isCollapsed={isCollapsed}
+      onToggleCollapse={onToggleCollapse || (() => {})}
+      width={width}
+      onWidthChange={onWidthChange || (() => {})}
+      minWidth={200}
+      maxWidth={500}
+    >
       {/* Search Bar */}
       {!isCollapsed && (
-        <div className="p-3 border-b border-gray-100 dark:border-gray-700">
+        <div className="mb-3">
           <div className="relative">
             <RiSearchLine className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" size={16} />
-          <input
-            type="text"
+            <input
+              type="text"
               placeholder="Search banks..."
               className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-          />
+            />
           </div>
         </div>
       )}
@@ -168,7 +177,7 @@ function BanksSidebar({
           <li>
             <button
               className={`flex items-center gap-2 px-3 py-2 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/50 w-full text-left transition-all duration-150 ${
-                typeof window !== 'undefined' && window.location.pathname === '/super-bank' 
+                (typeof window !== 'undefined' && window.location.pathname === '/super-bank') || activeTabType === 'super-bank'
                   ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500' 
                   : 'hover:border-l-2 hover:border-blue-200 dark:hover:border-blue-600'
               } ${isCollapsed ? 'justify-center px-2' : ''}`}
@@ -176,7 +185,7 @@ function BanksSidebar({
               title="Super Bank"
             >
               <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${
-                typeof window !== 'undefined' && window.location.pathname === '/super-bank'
+                (typeof window !== 'undefined' && window.location.pathname === '/super-bank') || activeTabType === 'super-bank'
                   ? 'bg-blue-600 text-white'
                   : 'text-gray-600 dark:text-gray-400'
               }`}>
@@ -189,236 +198,142 @@ function BanksSidebar({
           {/* Banks Section */}
           <li className="mt-4">
             {!isCollapsed && (
-              <div className="flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border-l-2 border-gray-200 dark:border-gray-600">
-                <span>Banks</span>
-                {user?.email === adminEmail && (
+              <div className="flex items-center justify-between px-3 py-2">
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Banks</h3>
+                {user?.email === adminEmail && onAddBankClick && (
                   <button
                     onClick={onAddBankClick}
-                    className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors duration-150"
-                    title="Add Bank (Admin Only)"
+                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                    title="Add Bank"
                   >
-                    <RiAddLine size={14} />
+                    <RiAddLine size={14} className="text-gray-500 dark:text-gray-400" />
                   </button>
                 )}
               </div>
             )}
+
             <ul className="mt-1">
               {banks.map(bank => (
                 <li key={bank.id} className="relative group">
-                  {/* Level 1: Bank Name (Bold) */}
                   <div className={`flex items-center w-full gap-2 px-3 py-2 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-all duration-150 ${
-                    (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`))
+                    (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`)) && activeTabType !== 'super-bank'
                       ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500'
                       : 'hover:border-l-2 hover:border-blue-200 dark:hover:border-blue-600'
                   } ${isCollapsed ? 'justify-center px-2' : ''}`}>
                     <button
-                      className="flex items-center gap-2 flex-1"
-                      onClick={() => {
-                        handleExpand(bank.id);
-                        handleBankClick(bank);
-                      }}
-                      onMouseEnter={() => setHoveredBank(bank.id)}
-                      onMouseLeave={() => setHoveredBank(null)}
-                      title={bank.bankName}
+                      onClick={() => handleBankClick(bank)}
+                      className="flex items-center gap-2 flex-1 text-left"
                     >
-                      {!isCollapsed && (
-                        <div className={`transition-transform duration-200 ${expandedBank === bank.id ? 'rotate-90' : ''}`}>
-                          <RiArrowRightSLine size={14} className="text-gray-500" />
-                        </div>
-                      )}
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-150 ${
-                        (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`))
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${
+                        (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`)) && activeTabType !== 'super-bank'
                           ? 'bg-blue-600 text-white'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+                          : 'text-gray-600 dark:text-gray-400'
                       }`}>
                         {isCollapsed ? (
-                          <span className="text-xs font-semibold">{getBankInitials(bank.bankName)}</span>
+                          <span className="text-xs font-semibold">
+                            {getBankInitials(bank.bankName)}
+                          </span>
                         ) : (
                           <RiBankLine size={16} />
                         )}
                       </div>
                       {!isCollapsed && (
-                        <span className="flex-1 text-left text-sm font-semibold">{bank.bankName}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{bank.bankName}</div>
+                        </div>
                       )}
                     </button>
-                    
-                    {/* Admin Edit/Delete Buttons - Outside the main button */}
+
+                    {/* Action Buttons */}
                     {!isCollapsed && user?.email === adminEmail && (
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                        <button
-                          className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEditBankClick?.(bank);
-                          }}
-                          title="Edit Bank"
-                        >
-                          <RiEdit2Line size={12} className="text-blue-600" />
-                        </button>
-                        <button
-                          className="p-1 hover:bg-red-100 dark:hover:bg-red-900/50 rounded transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteBankClick?.(bank.id);
-                          }}
-                          title="Delete Bank"
-                        >
-                          <RiDeleteBin6Line size={12} className="text-red-600" />
-                        </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {onEditBankClick && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditBankClick(bank);
+                            }}
+                            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                            title="Edit Bank"
+                          >
+                            <RiEdit2Line size={12} className="text-gray-500 dark:text-gray-400" />
+                          </button>
+                        )}
+                        {onDeleteBankClick && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteBankClick(bank.id);
+                            }}
+                            className="p-1 hover:bg-red-100 dark:hover:bg-red-900/50 rounded transition-colors"
+                            title="Delete Bank"
+                          >
+                            <RiDeleteBin6Line size={12} className="text-red-500" />
+                          </button>
+                        )}
                       </div>
                     )}
-                  </div>
-                  
-                  {/* Hover Expand Mini Drawer */}
-                  {isCollapsed && hoveredBank === bank.id && (
-                    <div className="absolute left-full top-0 ml-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 min-w-48 py-2">
-                      <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-                        <div className="flex items-center gap-2">
-                          <RiBankLine size={16} className="text-gray-600 dark:text-gray-400" />
-                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{bank.bankName}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Quick Actions */}
-                      <div className="px-3 py-1">
-                        <button
-                          className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-blue-50 dark:hover:bg-blue-900/50 text-gray-700 dark:text-gray-300"
-                          onClick={() => handleBankSectionClick('accounts', bank.id)}
-                        >
-                          <RiAccountPinCircleLine size={13} />
-                          <span>Accounts</span>
-                        </button>
-                        <button
-                          className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-blue-50 dark:hover:bg-blue-900/50 text-gray-700 dark:text-gray-300"
-                          onClick={() => handleBankSectionClick('files', bank.id)}
-                        >
-                          <RiFileList3Line size={13} />
-                          <span>Files</span>
-                        </button>
-                        <button
-                          className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-blue-50 dark:hover:bg-blue-900/50 text-gray-700 dark:text-gray-300"
-                          onClick={() => handleBankSectionClick('transactions', bank.id)}
-                        >
-                          <RiTimeLine size={13} />
-                          <span>Transactions</span>
-                        </button>
-                        
-                        {/* Admin Actions */}
-                        {user?.email === adminEmail && (
-                          <>
-                            <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
-                            <button
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-blue-50 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onEditBankClick?.(bank);
-                              }}
-                            >
-                              <RiEdit2Line size={13} />
-                              <span>Edit Bank</span>
-                            </button>
-                            <button
-                              className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-red-50 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteBankClick?.(bank.id);
-                              }}
-                            >
-                              <RiDeleteBin6Line size={13} />
-                              <span>Delete Bank</span>
-                            </button>
-                          </>
-                        )}
 
+                    {/* Expand/Collapse Button */}
+                    {!isCollapsed && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleExpand(bank.id);
+                        }}
+                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+                        title={expandedBank === bank.id ? "Collapse" : "Expand"}
+                      >
+                        {expandedBank === bank.id ? (
+                          <RiArrowDownSLine size={14} className="text-gray-500 dark:text-gray-400" />
+                        ) : (
+                          <RiArrowRightSLine size={14} className="text-gray-500 dark:text-gray-400" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+
+                  {/* Expanded Bank Content */}
+                  {expandedBank === bank.id && !isCollapsed && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {/* Bank Sections */}
+                      <div className="space-y-1">
+                        {['accounts', 'files', 'transactions'].map(section => (
+                          <div key={section}>
+                            <button
+                              onClick={() => handleBankSectionClick(section, bank.id)}
+                              className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 w-full text-left transition-colors ${
+                                isSectionExpanded(bank.id, section)
+                                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                  : 'text-gray-600 dark:text-gray-400'
+                              }`}
+                            >
+                              {section === 'accounts' && <RiAccountPinCircleLine size={12} />}
+                              {section === 'files' && <RiFileList3Line size={12} />}
+                              {section === 'transactions' && <RiTimeLine size={12} />}
+                              <span className="capitalize">{section}</span>
+                            </button>
+                            
+                            {/* Show accounts under the Accounts section */}
+                            {section === 'accounts' && isSectionExpanded(bank.id, 'accounts') && accounts[bank.id] && accounts[bank.id].length > 0 && (
+                              <div className="ml-4 mt-1 space-y-1">
+                                {accounts[bank.id].map(account => (
+                                  <button
+                                    key={account.id}
+                                    onClick={() => onAccountClick?.(account, bank.id)}
+                                    className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 w-full text-left transition-colors text-gray-600 dark:text-gray-400"
+                                  >
+                                    <RiCircleFill size={8} className="text-gray-400" />
+                                    <span className="truncate">{account.accountHolderName}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  )}
-                  
-                  {!isCollapsed && expandedBank === bank.id && (
-                    <ul className="relative ml-3 mt-1 space-y-0.5">
-                      {/* Visual connector line */}
-                      <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-600"></div>
-                      
-                      {/* Level 2: Bank Sections (Normal weight) */}
-                      <li>
-                        <button
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs w-full text-left transition-all duration-150 relative ${
-                            pathname.includes(`/banks/${bank.id}/accounts`) 
-                              ? 'text-blue-700 dark:text-blue-300 font-medium bg-blue-50 dark:bg-blue-900/50' 
-                              : 'text-gray-700 dark:text-gray-300 font-normal'
-                          }`}
-                          onClick={() => handleBankSectionClick('accounts', bank.id)}
-                        >
-                          <div className={`transition-transform duration-200 ${isSectionExpanded(bank.id, 'accounts') ? 'rotate-90' : ''}`}>
-                            <RiArrowRightSLine size={12} />
-                          </div>
-                          <RiAccountPinCircleLine size={13} /> 
-                          <span>Accounts</span>
-                        </button>
-                        
-                        {/* Level 3: Account Items (Lighter gray, smaller font) */}
-                        {isSectionExpanded(bank.id, 'accounts') && accounts[bank.id] && (
-                          <ul className="relative ml-6 mt-1 space-y-0.5">
-                            {/* Visual connector line for accounts */}
-                            <div className="absolute left-2 top-0 bottom-0 w-px bg-gray-200 dark:bg-gray-600"></div>
-                            
-                            {accounts[bank.id].length === 0 && (
-                              <li className="text-xs text-gray-400 dark:text-gray-500 italic ml-4 py-1">No accounts</li>
-                            )}
-                            {accounts[bank.id].map(account => (
-                              <li key={account.id}>
-                                <button
-                                  className={`flex items-center gap-2 px-2 py-1 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs w-full text-left transition-all duration-150 relative ${
-                                    pathname.includes(`/accounts/${account.id}`) 
-                                      ? 'text-blue-700 dark:text-blue-300 font-medium bg-blue-50 dark:bg-blue-900/50' 
-                                      : 'text-gray-500 dark:text-gray-400 font-normal'
-                                  }`}
-                                  onClick={() => onAccountClick && onAccountClick(account, bank.id)}
-                                >
-                                  <RiCircleFill size={8} className="text-gray-400 dark:text-gray-500" /> 
-                                  <span className="truncate">{account.accountHolderName}</span>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-
-                      {/* Files Section */}
-                      <li>
-                        <button
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs w-full text-left transition-all duration-150 relative ${
-                            pathname.includes(`/banks/${bank.id}/files`) 
-                              ? 'text-blue-700 dark:text-blue-300 font-medium bg-blue-50 dark:bg-blue-900/50' 
-                              : 'text-gray-700 dark:text-gray-300 font-normal'
-                          }`}
-                          onClick={() => handleBankSectionClick('files', bank.id)}
-                        >
-                          <div className={`transition-transform duration-200 ${isSectionExpanded(bank.id, 'files') ? 'rotate-90' : ''}`}>
-                            <RiArrowRightSLine size={12} />
-                          </div>
-                          <RiFileList3Line size={13} /> 
-                          <span>Files</span>
-                        </button>
-                      </li>
-
-                      {/* Transaction Section */}
-                      <li>
-                        <button
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs w-full text-left transition-all duration-150 relative ${
-                            pathname.includes(`/banks/${bank.id}/transactions`) 
-                              ? 'text-blue-700 dark:text-blue-300 font-medium bg-blue-50 dark:bg-blue-900/50' 
-                              : 'text-gray-700 dark:text-gray-300 font-normal'
-                          }`}
-                          onClick={() => handleBankSectionClick('transactions', bank.id)}
-                        >
-                          <RiTimeLine size={13} /> 
-                          <span>Transactions</span>
-                        </button>
-                      </li>
-
-
-                    </ul>
                   )}
                 </li>
               ))}
@@ -426,15 +341,8 @@ function BanksSidebar({
           </li>
         </ul>
       </nav>
-    </aside>
+    </ChildSidebar>
   );
 }
 
 export default React.memo(BanksSidebar);
-
-
-
-
-
-
-
