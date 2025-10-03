@@ -5732,61 +5732,25 @@ const FilesPage: React.FC = () => {
 
           <h2 className="text-xl font-bold mb-4 text-blue-800">{bank.bankName} Files</h2>
 
-          <div className="flex flex-wrap gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
 
-            {bankFiles.length === 0 && <div className="text-gray-500">No files for this bank.</div>}
+            {bankFiles.length === 0 && <div className="text-gray-500 col-span-full">No files for this bank.</div>}
 
-            {bankFiles.map(file => (
+            {bankFiles.map((file, index) => (
 
-              <div
+              <FileCard
 
-                key={file.id}
+                key={`filecard-${file.id}-${index}`}
 
-                className="bg-white rounded-xl shadow-md p-3 flex flex-col items-center justify-center border border-blue-100 mb-3 w-48 relative group cursor-pointer"
+                file={file}
 
-                onClick={() => handleFileClick(file)}
+                onFileClick={handleFileClick}
 
-              >
+                onEdit={handleEditFile}
 
-                <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                onDelete={handleDeleteFile}
 
-                  <button className="text-blue-600 hover:text-blue-800 p-1" title="Edit" onClick={() => handleEditFile(file)}>
-
-                    <FiEdit2 size={18} />
-
-                  </button>
-
-                  <button className="text-red-600 hover:text-red-800 p-1" title="Delete" onClick={() => handleDeleteFile(file)}>
-
-                    <FiTrash2 size={18} />
-
-                  </button>
-
-                </div>
-
-                <span className="inline-block bg-blue-50 p-3 rounded-full mb-3">
-
-                  <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#EEF2FF"/><path d="M7 7.75A.75.75 0 0 1 7.75 7h8.5a.75.75 0 0 1 .75.75v8.5a.75.75 0 0 1-.75.75h-8.5a.75.75 0 0 1-.75-.75v-8.5ZM9 10.5h6M9 13.5h6" stroke="#6366F1" strokeWidth="1.5" strokeLinecap="round"/></svg>
-
-                </span>
-
-                <span className="text-lg font-semibold text-blue-900 text-center">{file.fileName}</span>
-
-                <div className="text-xs text-gray-500 text-center w-full mt-1">
-
-                  <div><span className="font-semibold">Bank:</span> {file.bankName || '-'}</div>
-
-                  <div><span className="font-semibold">Type:</span> {file.fileType || '-'}</div>
-
-                  {/* Uncomment if you have a bankType field: */}
-
-                  {/* <div><span className="font-semibold">Bank Type:</span> {file.bankType || '-'}</div> */}
-
-                </div>
-
-                <span className="text-xs text-gray-400 mt-1">Uploaded: {String((file as unknown as Record<string, unknown>).uploaded ?? '')}</span>
-
-              </div>
+              />
 
             ))}
 

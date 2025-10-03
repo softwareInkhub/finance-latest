@@ -62,14 +62,14 @@ export default function FilesSidebar({
           <button 
             className={`flex items-center gap-2 px-3 py-2 rounded-lg w-full text-left transition-all duration-200 ${
               selectedFileId === 'all' 
-                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' 
+                ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-semibold border-l-2 border-purple-500' 
                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
             }`}
             onClick={() => onFileClick({ id: 'all', fileName: 'All Files' })}
             title={collapsed ? "All Files" : ""}
           >
             <div className={`w-2 h-2 rounded-full ${
-              selectedFileId === 'all' ? 'bg-white' : 'bg-gray-500 dark:bg-gray-400'
+              selectedFileId === 'all' ? 'bg-purple-600' : 'bg-gray-500 dark:bg-gray-400'
             }`}></div>
             {!collapsed && (
               <div>
@@ -103,14 +103,14 @@ export default function FilesSidebar({
                   key={bank.id}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg w-full text-left transition-all duration-200 ${
                     selectedFileId === bank.id 
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg' 
+                      ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-semibold border-l-2 border-purple-500' 
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                   }`}
                   onClick={() => onFileClick(bank)}
                   title={collapsed ? bank.fileName : ""}
                 >
                   <div className={`w-2 h-2 rounded-full ${
-                    selectedFileId === bank.id ? 'bg-white' : 'bg-gray-500 dark:bg-gray-400'
+                    selectedFileId === bank.id ? 'bg-purple-600' : 'bg-gray-500 dark:bg-gray-400'
                   }`}></div>
                   {!collapsed && (
                     <div className="flex-1 min-w-0">

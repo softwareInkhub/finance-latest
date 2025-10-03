@@ -590,21 +590,10 @@ export default function ReportsPage() {
 
   // Tags fetching functionality
   const isFetchingTagsRef = useRef(false);
-  const tagsCacheRef = useRef<{ timestamp: number; data: Tag[] } | null>(null);
-  const TAGS_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   const fetchTags = useCallback(async () => {
     try {
       if (isFetchingTagsRef.current) return;
-      
-      // Check cache first
-      const now = Date.now();
-      const cached = tagsCacheRef.current;
-      if (cached && (now - cached.timestamp) < TAGS_CACHE_DURATION) {
-        console.log('Using cached tags');
-        setAllTags(cached.data);
-        return;
-      }
       
       isFetchingTagsRef.current = true;
       const userId = localStorage.getItem('userId');
@@ -617,8 +606,6 @@ export default function ReportsPage() {
       const response = await fetch(`/api/tags?userId=${userId}`);
       if (response.ok) {
         const tags = await response.json();
-        // Cache the result
-        tagsCacheRef.current = { timestamp: now, data: tags };
         setAllTags(tags);
         console.log(`Loaded ${tags.length} tags`);
       }
@@ -627,7 +614,7 @@ export default function ReportsPage() {
     } finally {
       isFetchingTagsRef.current = false;
     }
-  }, [TAGS_CACHE_DURATION]);
+  }, []);
 
   // Load tags on component mount and set up event listeners
   useEffect(() => {
@@ -800,7 +787,7 @@ export default function ReportsPage() {
     const handleTagUpdated = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.log('Tag updated event received in Reports:', customEvent.detail);
-      // Refresh tags data to update tag information and recompute summaries
+      // Fetch fresh tags and recompute summaries
       fetchTags();
       recomputeAndLoadTagsSummary();
     };
@@ -1928,10 +1915,12 @@ export default function ReportsPage() {
 
 
 
-  const openSubItemAddTagsModal = () => {
+  const openSubItemAddTagsModal = async () => {
     setShowSubItemTagsModal(true);
     setShowSubItemOptionModal(false);
-    fetchTags();
+    // Fetch fresh tags and recompute balances
+    await fetchTags();
+    await recomputeAndLoadTagsSummary();
   };
 
   const openDeleteModal = (sectionId: string, groupId: string, itemId?: string, subItemId?: string) => {
@@ -2070,9 +2059,9 @@ export default function ReportsPage() {
     setShowGroupOptionModal(false);
     
     try {
-      // Only fetch tags - don't recompute summary unless explicitly needed
-      // The summary will be computed when a tag is actually selected
+      // Fetch fresh tags and recompute balances
       await fetchTags();
+      await recomputeAndLoadTagsSummary();
     } finally {
       setIsTagsModalLoading(false);
     }
@@ -2092,10 +2081,44 @@ export default function ReportsPage() {
     });
   };
 
-  // Filter tags based on search query
-  const filteredTags = allTags.filter(tag =>
-    tag.name && tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase())
-  );
+  // Filter tags based on search query and balance (positive for inflows, negative for outflows)
+  const filteredTags = allTags.filter(tag => {
+    // First check search query
+    if (!tag.name || !tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase())) {
+      return false;
+    }
+    
+    // Get tag balance from summary
+    const rec = tagsSummaryMap.get(tag.name.toLowerCase());
+    const balance = rec?.balance || 0;
+    
+    // Determine which section we're adding to
+    let targetSectionId: string | null = null;
+    
+    if (pendingAdd?.sectionId) {
+      // Regular item addition
+      targetSectionId = pendingAdd.sectionId;
+    } else if (pendingAddGroupSection) {
+      // Adding via Group -> Add by Tags flow
+      targetSectionId = pendingAddGroupSection;
+    } else if (pendingSubItemAdd?.sectionId) {
+      // Sub-item addition
+      targetSectionId = pendingSubItemAdd.sectionId;
+    } else if (pendingSubSubItemAdd?.sectionId) {
+      // Sub-sub-item addition
+      targetSectionId = pendingSubSubItemAdd.sectionId;
+    }
+    
+    // Filter based on which section we're adding to
+    if (targetSectionId === '1') { // INFLOWS section
+      return balance > 0; // Only show tags with positive balance
+    } else if (targetSectionId === '2') { // OUTFLOWS section
+      return balance < 0; // Only show tags with negative balance
+    }
+    
+    // For other sections or if no pending add, show all tags
+    return true;
+  });
 
   // Function to check if a tag already exists anywhere in the cashflow data
   const isTagAlreadyAdded = (tagName: string): boolean => {
@@ -2542,10 +2565,12 @@ export default function ReportsPage() {
     setShowSubSubItemOptionModal(false);
   };
 
-  const openSubSubItemAddTagsModal = () => {
+  const openSubSubItemAddTagsModal = async () => {
     setShowSubSubItemTagsModal(true);
     setShowSubSubItemOptionModal(false);
-    fetchTags();
+    // Fetch fresh tags and recompute balances
+    await fetchTags();
+    await recomputeAndLoadTagsSummary();
   };
 
   const handleAddSubSubItem = () => {
@@ -3929,6 +3954,22 @@ export default function ReportsPage() {
                  <div className="space-y-4 flex-1 overflow-y-auto">
                    <p className="text-gray-600 mb-4">Choose a tag to create a new item:</p>
                    
+                  {/* Balance Filter Info */}
+                  {(pendingAdd?.sectionId === '1' || pendingAddGroupSection === '1') && (
+                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                       <p className="text-sm text-green-700">
+                         <span className="font-semibold">💚 INFLOWS:</span> Only showing tags with positive balance (income/sales)
+                       </p>
+                     </div>
+                   )}
+                  {(pendingAdd?.sectionId === '2' || pendingAddGroupSection === '2') && (
+                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                       <p className="text-sm text-red-700">
+                         <span className="font-semibold">💸 OUTFLOWS:</span> Only showing tags with negative balance (expenses/costs)
+                       </p>
+                     </div>
+                   )}
+                   
                    {/* Loading State */}
                    {isTagsModalLoading && (
                      <div className="flex items-center justify-center py-8">
@@ -4188,6 +4229,22 @@ export default function ReportsPage() {
 
                          <div className="space-y-4 flex-1 overflow-y-auto">
                <p className="text-gray-600 mb-4">Choose a tag to create a new sub-item:</p>
+               
+               {/* Balance Filter Info */}
+               {pendingSubItemAdd?.sectionId === '1' && (
+                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                   <p className="text-sm text-green-700">
+                     <span className="font-semibold">💚 INFLOWS:</span> Only showing tags with positive balance (income/sales)
+                   </p>
+                 </div>
+               )}
+               {pendingSubItemAdd?.sectionId === '2' && (
+                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                   <p className="text-sm text-red-700">
+                     <span className="font-semibold">💸 OUTFLOWS:</span> Only showing tags with negative balance (expenses/costs)
+                   </p>
+                 </div>
+               )}
                
                {/* Search Bar */}
                <div className="relative">
@@ -4454,6 +4511,22 @@ export default function ReportsPage() {
 
             <div className="space-y-4 flex-1 overflow-y-auto">
               <p className="text-gray-600 mb-4">Choose a tag to create a new sub-sub-item:</p>
+              
+              {/* Balance Filter Info */}
+              {pendingSubSubItemAdd?.sectionId === '1' && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-green-700">
+                    <span className="font-semibold">💚 INFLOWS:</span> Only showing tags with positive balance (income/sales)
+                  </p>
+                </div>
+              )}
+              {pendingSubSubItemAdd?.sectionId === '2' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm text-red-700">
+                    <span className="font-semibold">💸 OUTFLOWS:</span> Only showing tags with negative balance (expenses/costs)
+                  </p>
+                </div>
+              )}
               
               {/* Search Bar */}
               <div className="relative">

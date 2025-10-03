@@ -176,17 +176,17 @@ function BanksSidebar({
           {/* Super Bank */}
           <li>
             <button
-              className={`flex items-center gap-2 px-3 py-2 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/50 w-full text-left transition-all duration-150 ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/50 w-full text-left transition-all duration-150 ${
                 (typeof window !== 'undefined' && window.location.pathname === '/super-bank') || activeTabType === 'super-bank'
-                  ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500' 
-                  : 'hover:border-l-2 hover:border-blue-200 dark:hover:border-blue-600'
+                  ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-semibold border-l-2 border-purple-500' 
+                  : 'hover:border-l-2 hover:border-purple-200 dark:hover:border-purple-600'
               } ${isCollapsed ? 'justify-center px-2' : ''}`}
               onClick={onSuperBankClick}
               title="Super Bank"
             >
               <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${
                 (typeof window !== 'undefined' && window.location.pathname === '/super-bank') || activeTabType === 'super-bank'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-purple-600 text-white'
                   : 'text-gray-600 dark:text-gray-400'
               }`}>
                 <RiBankLine size={16} />
@@ -215,10 +215,10 @@ function BanksSidebar({
             <ul className="mt-1">
               {banks.map(bank => (
                 <li key={bank.id} className="relative group">
-                  <div className={`flex items-center w-full gap-2 px-3 py-2 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-all duration-150 ${
+                  <div className={`flex items-center w-full gap-2 px-3 py-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/50 transition-all duration-150 ${
                     (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`)) && activeTabType !== 'super-bank'
-                      ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-semibold border-l-2 border-blue-500'
-                      : 'hover:border-l-2 hover:border-blue-200 dark:hover:border-blue-600'
+                      ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-semibold border-l-2 border-purple-500'
+                      : 'hover:border-l-2 hover:border-purple-200 dark:hover:border-purple-600'
                   } ${isCollapsed ? 'justify-center px-2' : ''}`}>
                     <button
                       onClick={() => handleBankClick(bank)}
@@ -226,7 +226,7 @@ function BanksSidebar({
                     >
                       <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${
                         (selectedBankId === bank.id || pathname.includes(`/banks/${bank.id}`)) && activeTabType !== 'super-bank'
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-purple-600 text-white'
                           : 'text-gray-600 dark:text-gray-400'
                       }`}>
                         {isCollapsed ? (
@@ -303,9 +303,9 @@ function BanksSidebar({
                           <div key={section}>
                             <button
                               onClick={() => handleBankSectionClick(section, bank.id)}
-                              className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 w-full text-left transition-colors ${
+                              className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:bg-purple-50 dark:hover:bg-purple-700/50 w-full text-left transition-colors ${
                                 isSectionExpanded(bank.id, section)
-                                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                  ? 'bg-purple-100 dark:bg-purple-700 text-purple-900 dark:text-purple-100'
                                   : 'text-gray-600 dark:text-gray-400'
                               }`}
                             >
@@ -322,7 +322,7 @@ function BanksSidebar({
                                   <button
                                     key={account.id}
                                     onClick={() => onAccountClick?.(account, bank.id)}
-                                    className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50 w-full text-left transition-colors text-gray-600 dark:text-gray-400"
+                                    className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-md hover:bg-purple-50 dark:hover:bg-purple-700/50 w-full text-left transition-colors text-gray-600 dark:text-gray-400"
                                   >
                                     <RiCircleFill size={8} className="text-gray-400" />
                                     <span className="truncate">{account.accountHolderName}</span>

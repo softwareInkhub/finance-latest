@@ -13,6 +13,8 @@ interface TransactionFilterBarProps {
   onRefresh?: () => void;
   refreshDisabled?: boolean;
   onOpenHeader?: () => void;
+  onDownloadTransactions?: () => void;
+  downloadTransactionsDisabled?: boolean;
   searchField?: string;
   onSearchFieldChange?: (v: string) => void;
   searchFieldOptions?: string[];
@@ -35,6 +37,8 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
   onRefresh,
   refreshDisabled,
   onOpenHeader,
+  onDownloadTransactions,
+  downloadTransactionsDisabled,
   searchField,
   onSearchFieldChange,
   searchFieldOptions,
@@ -638,6 +642,19 @@ const TransactionFilterBar: React.FC<TransactionFilterBarProps> = ({
         <FiDownload size={14} />
         <span>Report</span>
       </button>
+
+      {onDownloadTransactions && (
+        <button
+          className="px-3 py-0.5 rounded bg-purple-600 hover:bg-purple-700 shadow-lg flex items-center justify-center text-white text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed gap-1"
+          onClick={onDownloadTransactions}
+          disabled={downloadTransactionsDisabled}
+          title="Download transactions with or without tags"
+          style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}
+        >
+          <FiDownload size={14} />
+          <span>Download</span>
+        </button>
+      )}
     </div>
   </div>
 );

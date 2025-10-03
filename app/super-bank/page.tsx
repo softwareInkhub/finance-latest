@@ -2122,6 +2122,7 @@ export default function SuperBankPage() {
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const [reportOpen, setReportOpen] = useState(false);
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
   const [bankIdNameMap, setBankIdNameMap] = useState<{ [id: string]: string }>({});
   const [transactionsWithAccountInfo, setTransactionsWithAccountInfo] = useState<(Transaction & { AmountRaw?: number; 'Dr./Cr.'?: string })[]>([]);
@@ -3581,6 +3582,56 @@ export default function SuperBankPage() {
     }
   };
 
+  const handleDownloadTransactions = (includeTags: boolean) => {
+    const csvData = [];
+    
+    // Add header
+    const headers = ['#', 'Date', 'Reference No.', 'Description', 'Amount', 'Dr./Cr.', 'Bank Name', 'Account Number'];
+    if (includeTags) {
+      headers.splice(2, 0, 'Tags'); // Insert Tags after Date
+    }
+    csvData.push(headers);
+    
+    // Add data rows
+    filteredRows.forEach((row, index) => {
+      const rowData = [
+        index + 1,
+        row.Date || '',
+        row['Reference No.'] || '',
+        row.Description || '',
+        row.Amount || '',
+        row['Dr./Cr.'] || '',
+        row.bankName || '',
+        row.accountNumber || ''
+      ];
+      
+      if (includeTags) {
+        const tags = Array.isArray(row.tags) ? row.tags.map((tag: Tag) => tag.name).join(', ') : '';
+        rowData.splice(2, 0, tags); // Insert tags after Date
+      }
+      
+      csvData.push(rowData);
+    });
+    
+    // Convert to CSV string
+    const csvContent = csvData.map(row => 
+      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `super-bank-transactions-${includeTags ? 'with-tags' : 'without-tags'}-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setDownloadModalOpen(false);
+  };
+
 
 
 
@@ -3703,6 +3754,10 @@ export default function SuperBankPage() {
     const tag = await res.json();
     setAllTags(prev => [...prev, tag]);
     setSelectedTagId(tag.id);
+    // Notify other pages (e.g., Reports) that a tag was created so they can refresh instantly
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tagUpdated', { detail: { action: 'created', tag } }));
+    }
     setTimeout(() => handleAddTag(), 0);
     return tag.id;
   };
@@ -4142,6 +4197,8 @@ export default function SuperBankPage() {
            onRefresh={() => setRefreshTrigger(prev => prev + 1)}
            refreshDisabled={loading}
            onOpenHeader={() => setShowHeaderSection(true)}
+           onDownloadTransactions={() => setDownloadModalOpen(true)}
+           downloadTransactionsDisabled={loading}
            searchField={searchField}
            onSearchFieldChange={setSearchField}
            searchFieldOptions={['all', ...superHeader.filter(header => !['Bank Name', 'Date', 'Dr./Cr.', 'Amount'].includes(header))]}
@@ -4414,6 +4471,53 @@ export default function SuperBankPage() {
         bankIdNameMap={bankIdNameMap}
         tagFilters={tagFilters}
       />
+
+      {/* Download Modal */}
+      <Modal isOpen={downloadModalOpen} onClose={() => setDownloadModalOpen(false)} title="Download Transactions">
+        <div className="p-6">
+          <div className="mb-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Choose Download Option</h3>
+            <p className="text-gray-600">Select whether to include tags in the downloaded file:</p>
+          </div>
+          
+          <div className="space-y-4">
+            <button
+              onClick={() => handleDownloadTransactions(true)}
+              className="w-full p-4 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+                <div>
+                  <div className="font-semibold text-blue-800">With Tags</div>
+                  <div className="text-sm text-blue-600">Download transactions including all tag information</div>
+                </div>
+              </div>
+            </button>
+            
+            <button
+              onClick={() => handleDownloadTransactions(false)}
+              className="w-full p-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 bg-gray-500 rounded-full"></div>
+                <div>
+                  <div className="font-semibold text-gray-800">Without Tags</div>
+                  <div className="text-sm text-gray-600">Download transactions without tag information</div>
+                </div>
+              </div>
+            </button>
+          </div>
+          
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => setDownloadModalOpen(false)}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Confirm single tag removal modal */}
       {confirmRemoveModal.open && (

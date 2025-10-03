@@ -2976,6 +2976,9 @@ export default function SuperBankPage() {
     const tag = await res.json();
     setAllTags(prev => [...prev, tag]);
     setSelectedTagId(tag.id);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tagUpdated', { detail: { action: 'created', tag } }));
+    }
     setTimeout(() => handleAddTag(), 0);
     return tag.id;
   };
