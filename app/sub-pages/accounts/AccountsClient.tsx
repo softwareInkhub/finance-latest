@@ -392,11 +392,16 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
       const controller = new AbortController();
       let isMounted = true;
 
-      const fetchBankMapping = async () => {
+      const fetchBankMapping = async (retryCount = 0) => {
         try {
           const userId = localStorage.getItem('userId');
           if (!userId) {
             throw new Error('User ID not found');
+          }
+          
+          // Add a small delay to ensure data is persisted
+          if (retryCount === 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
           
           const response = await fetch(`/api/bank-header?bankName=${encodeURIComponent(bankName)}`, {
@@ -410,15 +415,23 @@ export default function AccountsClient({ bankId, onAccountClick, allTags = [] }:
           const data = await response.json();
           
           if (isMounted) {
-            if (data && data.mapping) {
+            if (data && data.mapping && typeof data.mapping === 'object') {
               setMapping(data.mapping);
             } else {
-              setMapping({});
+              // Don't reset mapping if data exists but mapping is null/undefined
+              // Only reset if there's no data at all
+              if (!data) {
+                setMapping({});
+              }
             }
             if (data && data.conditions && Array.isArray(data.conditions)) {
               setConditions(data.conditions);
             } else {
-              setConditions([]);
+              // Don't reset conditions if data exists but conditions is null/undefined
+              // Only reset if there's no data at all
+              if (!data) {
+                setConditions([]);
+              }
             }
           }
         } catch (err) {

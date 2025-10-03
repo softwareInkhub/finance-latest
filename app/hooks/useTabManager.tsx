@@ -9,7 +9,8 @@ import {
   RiAccountPinCircleLine,
   RiFileListLine,
   RiSettingsLine,
-  RiFolderLine
+  RiFolderLine,
+  RiGitMergeLine
 } from 'react-icons/ri';
 
 // Import your real page components
@@ -21,6 +22,7 @@ import TagsPage from '../tags/page';
 import TransactionsPage from '../transactions/page';
 import EntityFilesPage from '../components/EntityFilesPage';
 import EntitiesPage from '../entities/page';
+import FileMatchingPage from '../file-matching/page';
 
 export const useTabManager = () => {
   const { addTab, setActiveTab, closeTab } = useGlobalTabs();
@@ -45,6 +47,8 @@ export const useTabManager = () => {
         return <RiAccountPinCircleLine className="w-4 h-4" />;
       case 'statements':
         return <RiFileTextLine className="w-4 h-4" />;
+      case 'file-matching':
+        return <RiGitMergeLine className="w-4 h-4" />;
       default:
         return <RiSettingsLine className="w-4 h-4" />;
     }
@@ -119,6 +123,15 @@ export const useTabManager = () => {
       title: 'Tags',
       type: 'tags',
       component: <TagsPage />
+    });
+  }, [openTab]);
+
+  const openFileMatching = useCallback(() => {
+    openTab({
+      id: 'file-matching',
+      title: 'File Matching',
+      type: 'file-matching',
+      component: <FileMatchingPage />
     });
   }, [openTab]);
 
@@ -224,6 +237,7 @@ export const useTabManager = () => {
     openFiles,
     openBanks,
     openTags,
+    openFileMatching,
     openAccounts,
     openStatements,
     openBankTab,

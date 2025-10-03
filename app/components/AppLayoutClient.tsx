@@ -19,7 +19,7 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { tabs, activeTabId } = useGlobalTabs();
-  const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports } = useTabManager();
+  const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports, openFileMatching } = useTabManager();
   const getSectionSubtitle = (path: string): string => {
     // Map top-level routes to a friendly heading
     const segments = (path || '/').split('?')[0].split('#')[0].split('/').filter(Boolean);
@@ -38,6 +38,8 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
         return 'Organize with tags';
       case 'reports':
         return 'Financial reports and stats';
+      case 'file-matching':
+        return 'Compare and match CSV files';
       case 'login-signup':
         return '';
       default:
@@ -59,6 +61,8 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
         return 'Files';
       case 'reports':
         return 'Reports';
+      case 'file-matching':
+        return 'File Matching';
       default:
         return 'Brmh Fintech';
     }
@@ -106,13 +110,16 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
       case 'reports':
         openReports();
         break;
+      case 'file-matching':
+        openFileMatching();
+        break;
       default:
         // Fallback to dashboard for unknown top-level routes
         openDashboard();
         break;
     }
   // We intentionally depend only on pathname so this runs on direct URL hits and when it changes
-  }, [pathname, openDashboard, openEntities, openBanks, openTags, openFiles, openReports]);
+  }, [pathname, openDashboard, openEntities, openBanks, openTags, openFiles, openReports, openFileMatching]);
   
   return (
     <AuthWrapper>

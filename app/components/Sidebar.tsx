@@ -15,7 +15,8 @@ import {
   RiFileLine,
   RiBarChartLine,
   RiCloseLine,
-  RiFolderLine
+  RiFolderLine,
+  RiGitMergeLine
 } from 'react-icons/ri';
 
 
@@ -32,7 +33,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const router = useRouter();
-  const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports, openEntityTab } = useTabManager();
+  const { openDashboard, openEntities, openBanks, openTags, openFiles, openReports, openFileMatching, openEntityTab } = useTabManager();
   const { activeTabId, tabs } = useGlobalTabs();
   const { entities, refreshEntities } = useEntitySync();
   const { isEntityInSidebar } = useSidebarPreferences();
@@ -106,6 +107,14 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
       path: '/reports', 
       icon: RiBarChartLine,
       description: 'Financial reports and statements',
+      isEntity: false,
+      entityId: undefined
+    },
+    { 
+      name: 'File Matching', 
+      path: '/file-matching', 
+      icon: RiGitMergeLine,
+      description: 'Compare and match CSV files',
       isEntity: false,
       entityId: undefined
     },
@@ -236,7 +245,8 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                 '/banks': 'banks',
                 '/tags': 'tags',
                 '/files': 'files',
-                '/reports': 'reports'
+                '/reports': 'reports',
+                '/file-matching': 'file-matching'
               };
               
               // Check if this item matches the active tab type
@@ -273,6 +283,7 @@ export default function Sidebar({ onItemClick, onToggleCollapse, isMobileOpen = 
                         '/tags': () => { openTags(); router.replace('/tags', { scroll: false }); },
                         '/files': () => { openFiles(); router.replace('/files', { scroll: false }); },
                         '/reports': () => { openReports(); router.replace('/reports', { scroll: false }); },
+                        '/file-matching': () => { openFileMatching(); router.replace('/file-matching', { scroll: false }); },
                       };
                       handleItemClick(actions[item.path] || (() => {}));
                     }

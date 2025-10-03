@@ -53,13 +53,29 @@ export async function POST(request: Request) {
       );
     }
     
+    // Check if bank header already exists
+    const existingData = await brmhCrud.scan(TABLE_NAME, {
+      FilterExpression: 'id = :id',
+      ExpressionAttributeValues: { 
+        ':id': bankName
+      },
+      itemPerPage: 1
+    });
+    
+    const existingItem = existingData.items?.[0];
+    
+    // Preserve existing mapping and conditions if not provided in request
+    const finalMapping = mapping !== undefined ? mapping : (existingItem?.mapping || null);
+    const finalConditions = conditions !== undefined ? conditions : (existingItem?.conditions || null);
+    const finalTag = tag !== undefined ? tag : (existingItem?.tag || null);
+    
     await brmhCrud.create(TABLE_NAME, { 
       id: bankName, 
       bankId: bankId || null, 
       header, 
-      tag: tag || null, 
-      mapping: mapping || null, 
-      conditions: conditions || null,
+      tag: finalTag, 
+      mapping: finalMapping, 
+      conditions: finalConditions,
       createdBy: userId 
     });
     return NextResponse.json({ success: true });
